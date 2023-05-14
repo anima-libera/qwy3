@@ -276,19 +276,11 @@ fn main() {
 			camera.position.z = f32::sin(ts * 5.0) * 3.0;
 
 			let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
-			let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some("Camera Buffer"),
-				contents: bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
-				usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-			});
-			let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-				layout: &camera_bind_group_layout,
-				entries: &[wgpu::BindGroupEntry {
-					binding: 0,
-					resource: camera_matrix_buffer.as_entire_binding(),
-				}],
-				label: Some("Camera Bind Group"),
-			});
+			queue.write_buffer(
+				&camera_matrix_buffer,
+				0,
+				bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
+			);
 
 			let window_texture = window_surface.get_current_texture().unwrap();
 			let view = window_texture
