@@ -6,6 +6,44 @@ use winit::{
 	window::WindowBuilder,
 };
 
+struct CameraPerspective {
+	position: cgmath::Point3<f32>,
+	target: cgmath::Point3<f32>,
+	up_direction: cgmath::Vector3<f32>,
+	aspect_ratio: f32,
+	field_of_view_y: f32,
+	near_plane: f32,
+	far_plane: f32,
+}
+
+impl CameraPerspective {
+	fn wgpu_matrix_pod(&self) -> Matrix4x4 {
+		let view_matrix = cgmath::Matrix4::look_at_rh(self.position, self.target, self.up_direction);
+		let projection_matrix = cgmath::perspective(
+			cgmath::Rad(self.field_of_view_y),
+			self.aspect_ratio,
+			self.near_plane,
+			self.far_plane,
+		);
+
+		#[rustfmt::skip]
+		pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+			1.0, 0.0, 0.0, 0.0,
+			0.0, 1.0, 0.0, 0.0,
+			0.0, 0.0, 0.5, 0.0,
+			0.0, 0.0, 0.5, 1.0,
+		);
+		let wgpu_matrix = OPENGL_TO_WGPU_MATRIX * projection_matrix * view_matrix;
+		Matrix4x4 { values: wgpu_matrix.into() }
+	}
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Matrix4x4 {
+	values: [[f32; 4]; 4],
+}
+
 fn main() {
 	env_logger::init();
 	let event_loop = EventLoop::new();
@@ -64,8 +102,6 @@ fn main() {
 			.unwrap()
 	});
 
-	let size = window.inner_size();
-
 	let surface_caps = window_surface.get_capabilities(&adapter);
 	let surface_format = surface_caps
 		.formats
@@ -76,6 +112,7 @@ fn main() {
 	assert!(surface_caps
 		.present_modes
 		.contains(&wgpu::PresentMode::Fifo));
+	let size = window.inner_size();
 	let mut config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format: surface_format,
@@ -87,16 +124,6 @@ fn main() {
 	};
 	window_surface.configure(&device, &config);
 
-	struct CameraPerspective {
-		position: cgmath::Point3<f32>,
-		target: cgmath::Point3<f32>,
-		up_direction: cgmath::Vector3<f32>,
-		aspect_ratio: f32,
-		field_of_view_y: f32,
-		near_plane: f32,
-		far_plane: f32,
-	}
-
 	let mut camera = CameraPerspective {
 		position: (0.0, 2.0, 0.0).into(),
 		target: (0.0, 0.0, 0.0).into(),
@@ -106,44 +133,12 @@ fn main() {
 		near_plane: 0.001,
 		far_plane: 10.0,
 	};
-
-	impl CameraPerspective {
-		fn wgpu_matrix_pod(&self) -> Matrix4x4 {
-			let view_matrix =
-				cgmath::Matrix4::look_at_rh(self.position, self.target, self.up_direction);
-			let projection_matrix = cgmath::perspective(
-				cgmath::Rad(self.field_of_view_y),
-				self.aspect_ratio,
-				self.near_plane,
-				self.far_plane,
-			);
-
-			#[rustfmt::skip]
-			pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-				1.0, 0.0, 0.0, 0.0,
-				0.0, 1.0, 0.0, 0.0,
-				0.0, 0.0, 0.5, 0.0,
-				0.0, 0.0, 0.5, 1.0,
-			);
-			let wgpu_matrix = OPENGL_TO_WGPU_MATRIX * projection_matrix * view_matrix;
-			Matrix4x4 { values: wgpu_matrix.into() }
-		}
-	}
-
-	#[repr(C)]
-	#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-	struct Matrix4x4 {
-		values: [[f32; 4]; 4],
-	}
-
 	let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
-
 	let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Camera Buffer"),
 		contents: bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 	});
-
 	let camera_bind_group_layout =
 		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			entries: &[wgpu::BindGroupLayoutEntry {
@@ -202,6 +197,7 @@ fn main() {
 			}
 		}
 	}
+	#[derive(Clone, Copy, PartialEq, Eq)]
 	struct OrientedAxis {
 		axis: NonOrientedAxis,
 		orientation: AxisOrientation,
@@ -238,11 +234,17 @@ fn main() {
 		}
 	}
 
-	fn generate_face(vertices: &mut Vec<Vertex>, face_orientation: OrientedAxis) {
-		let mut a: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
-		let mut b: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
-		let mut c: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
-		let mut d: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
+	fn generate_face(
+		vertices: &mut Vec<Vertex>,
+		face_orientation: OrientedAxis,
+		block_center: cgmath::Point3<f32>,
+	) {
+		// NO EARLY OPTIMIZATION
+		// This shall remain in an unoptimized, unfactorized and flexible state for now!
+		let mut a: cgmath::Point3<f32> = block_center;
+		let mut b: cgmath::Point3<f32> = block_center;
+		let mut c: cgmath::Point3<f32> = block_center;
+		let mut d: cgmath::Point3<f32> = block_center;
 		a[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
 		b[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
 		c[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
@@ -285,7 +287,11 @@ fn main() {
 
 	let mut vertices = Vec::new();
 	for direction in OrientedAxis::all_the_six_possible_directions() {
-		generate_face(&mut vertices, direction);
+		generate_face(&mut vertices, direction, (0.0, 0.0, 0.0).into());
+		generate_face(&mut vertices, direction, (1.0, 0.0, 0.0).into());
+		generate_face(&mut vertices, direction, (-1.0, 0.0, 0.0).into());
+		generate_face(&mut vertices, direction, (0.0, 1.0, 0.0).into());
+		generate_face(&mut vertices, direction, (0.0, -1.0, 0.0).into());
 	}
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -311,6 +317,29 @@ fn main() {
 		],
 	};
 
+	fn make_z_buffer_texture_view(
+		device: &wgpu::Device,
+		format: wgpu::TextureFormat,
+		w: u32,
+		h: u32,
+	) -> wgpu::TextureView {
+		let z_buffer_texture_description = wgpu::TextureDescriptor {
+			label: Some("Z Buffer"),
+			size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format,
+			view_formats: &[],
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+		};
+		let z_buffer_texture = device.create_texture(&z_buffer_texture_description);
+		z_buffer_texture.create_view(&wgpu::TextureViewDescriptor::default())
+	}
+	let z_buffer_format = wgpu::TextureFormat::Depth32Float;
+	let mut z_buffer_view =
+		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
+
 	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/test_01.wgsl").into()),
@@ -321,18 +350,17 @@ fn main() {
 		bind_group_layouts: &[&camera_bind_group_layout],
 		push_constant_ranges: &[],
 	});
-
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Render Pipeline"),
 		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
 			module: &shader,
-			entry_point: "vs_main",
+			entry_point: "vertex_shader_main",
 			buffers: &[vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
 			module: &shader,
-			entry_point: "fs_main",
+			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: config.format,
 				blend: Some(wgpu::BlendState::REPLACE),
@@ -348,7 +376,13 @@ fn main() {
 			unclipped_depth: false,
 			conservative: false,
 		},
-		depth_stencil: None,
+		depth_stencil: Some(wgpu::DepthStencilState {
+			format: z_buffer_format,
+			depth_write_enabled: true,
+			depth_compare: wgpu::CompareFunction::Less,
+			stencil: wgpu::StencilState::default(),
+			bias: wgpu::DepthBiasState::default(),
+		}),
 		multisample: wgpu::MultisampleState { count: 1, mask: !0, alpha_to_coverage_enabled: false },
 		multiview: None,
 	});
@@ -372,6 +406,8 @@ fn main() {
 				config.width = new_size.width;
 				config.height = new_size.height;
 				window_surface.configure(&device, &config);
+				z_buffer_view =
+					make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
 				camera.aspect_ratio = config.width as f32 / config.height as f32;
 			},
 			_ => {},
@@ -405,11 +441,15 @@ fn main() {
 						view: &view,
 						resolve_target: None,
 						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.01, g: 0.0, b: 0.05, a: 1.0 }),
+							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
 							store: true,
 						},
 					})],
-					depth_stencil_attachment: None,
+					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+						view: &z_buffer_view,
+						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						stencil_ops: None,
+					}),
 				});
 				render_pass.set_pipeline(&render_pipeline);
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);

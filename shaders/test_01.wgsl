@@ -11,7 +11,7 @@ struct VertexOutput {
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
 
 @vertex
-fn vs_main(vertex_input: VertexInput) -> VertexOutput {
+fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 	var vertex_output: VertexOutput;
 	vertex_output.clip_position = uniform_camera * vec4<f32>(vertex_input.position, 1.0);
 	vertex_output.color = vec4<f32>(vertex_input.color, 1.0);
@@ -19,6 +19,6 @@ fn vs_main(vertex_input: VertexInput) -> VertexOutput {
 }
 
 @fragment
-fn fs_main(the: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	return the.color;
 }
