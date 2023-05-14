@@ -98,10 +98,9 @@ fn main() {
 	}
 
 	let mut camera = CameraPerspective {
-		position: (0.0, 0.0, 2.0).into(),
+		position: (0.0, 2.0, 0.0).into(),
 		target: (0.0, 0.0, 0.0).into(),
-		up_direction: (0.0, 1.0, 0.0).into(),
-		// Ugh, TODO: make Z+ the up direction instead of Y+
+		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: config.width as f32 / config.height as f32,
 		field_of_view_y: TAU / 4.0,
 		near_plane: 0.001,
@@ -176,9 +175,9 @@ fn main() {
 	}
 
 	let vertices = [
-		Vertex { position: [-0.5, -0.5, 0.0], color: [1.0, 0.0, 0.0] },
-		Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 1.0, 0.0] },
-		Vertex { position: [0.0, 0.5, 0.0], color: [0.0, 0.0, 1.0] },
+		Vertex { position: [-0.5, 0.0, -0.5], color: [1.0, 0.0, 0.0] },
+		Vertex { position: [0.5, 0.0, -0.5], color: [0.0, 1.0, 0.0] },
+		Vertex { position: [0.0, 0.0, 0.5], color: [0.0, 0.0, 1.0] },
 	];
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -273,7 +272,7 @@ fn main() {
 			let time_since_beginning = time_beginning.elapsed();
 			let ts = time_since_beginning.as_secs_f32();
 			camera.position.x = f32::cos(ts * 5.0) * 3.0;
-			camera.position.z = f32::sin(ts * 5.0) * 3.0;
+			camera.position.y = f32::sin(ts * 5.0) * 3.0;
 
 			let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
 			queue.write_buffer(
