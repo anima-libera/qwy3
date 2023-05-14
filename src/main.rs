@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
@@ -85,6 +87,87 @@ fn main() {
 	};
 	window_surface.configure(&device, &config);
 
+	struct CameraPerspective {
+		position: cgmath::Point3<f32>,
+		target: cgmath::Point3<f32>,
+		up_direction: cgmath::Vector3<f32>,
+		aspect_ratio: f32,
+		field_of_view_y: f32,
+		near_plane: f32,
+		far_plane: f32,
+	}
+
+	let mut camera = CameraPerspective {
+		position: (0.0, 0.0, 2.0).into(),
+		target: (0.0, 0.0, 0.0).into(),
+		up_direction: (0.0, 1.0, 0.0).into(),
+		// Ugh, TODO: make Z+ the up direction instead of Y+
+		aspect_ratio: config.width as f32 / config.height as f32,
+		field_of_view_y: TAU / 4.0,
+		near_plane: 0.001,
+		far_plane: 10.0,
+	};
+
+	impl CameraPerspective {
+		fn wgpu_matrix_pod(&self) -> Matrix4x4 {
+			let view_matrix =
+				cgmath::Matrix4::look_at_rh(self.position, self.target, self.up_direction);
+			let projection_matrix = cgmath::perspective(
+				cgmath::Rad(self.field_of_view_y),
+				self.aspect_ratio,
+				self.near_plane,
+				self.far_plane,
+			);
+
+			#[rustfmt::skip]
+			pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+				1.0, 0.0, 0.0, 0.0,
+				0.0, 1.0, 0.0, 0.0,
+				0.0, 0.0, 0.5, 0.0,
+				0.0, 0.0, 0.5, 1.0,
+			);
+			let wgpu_matrix = OPENGL_TO_WGPU_MATRIX * projection_matrix * view_matrix;
+			Matrix4x4 { values: wgpu_matrix.into() }
+		}
+	}
+
+	#[repr(C)]
+	#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+	struct Matrix4x4 {
+		values: [[f32; 4]; 4],
+	}
+
+	let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
+
+	let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Camera Buffer"),
+		contents: bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+
+	let camera_bind_group_layout =
+		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::VERTEX,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Uniform,
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+			}],
+			label: Some("Camera Bind Group Layout"),
+		});
+	let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		layout: &camera_bind_group_layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding: 0,
+			resource: camera_matrix_buffer.as_entire_binding(),
+		}],
+		label: Some("Camera Bind Group"),
+	});
+
 	#[repr(C)]
 	#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 	struct Vertex {
@@ -128,7 +211,7 @@ fn main() {
 
 	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 		label: Some("Render Pipeline Layout"),
-		bind_group_layouts: &[],
+		bind_group_layouts: &[&camera_bind_group_layout],
 		push_constant_ranges: &[],
 	});
 
@@ -163,6 +246,8 @@ fn main() {
 		multiview: None,
 	});
 
+	let time_beginning = std::time::Instant::now();
+
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
 		Event::WindowEvent { ref event, window_id } if window_id == window.id() => match event {
@@ -180,10 +265,31 @@ fn main() {
 				config.width = new_size.width;
 				config.height = new_size.height;
 				window_surface.configure(&device, &config);
+				camera.aspect_ratio = config.width as f32 / config.height as f32;
 			},
 			_ => {},
 		},
-		Event::RedrawRequested(window_id) if window_id == window.id() => {
+		Event::MainEventsCleared => {
+			let time_since_beginning = time_beginning.elapsed();
+			let ts = time_since_beginning.as_secs_f32();
+			camera.position.x = f32::cos(ts * 5.0) * 3.0;
+			camera.position.z = f32::sin(ts * 5.0) * 3.0;
+
+			let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
+			let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some("Camera Buffer"),
+				contents: bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
+				usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+			});
+			let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+				layout: &camera_bind_group_layout,
+				entries: &[wgpu::BindGroupEntry {
+					binding: 0,
+					resource: camera_matrix_buffer.as_entire_binding(),
+				}],
+				label: Some("Camera Bind Group"),
+			});
+
 			let window_texture = window_surface.get_current_texture().unwrap();
 			let view = window_texture
 				.texture
@@ -206,6 +312,7 @@ fn main() {
 					depth_stencil_attachment: None,
 				});
 				render_pass.set_pipeline(&render_pipeline);
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 				render_pass.draw(0..(vertices.len() as u32), 0..1);
 			}
