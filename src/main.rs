@@ -174,11 +174,119 @@ fn main() {
 		color: [f32; 3],
 	}
 
-	let vertices = [
-		Vertex { position: [-0.5, 0.0, -0.5], color: [1.0, 0.0, 0.0] },
-		Vertex { position: [0.5, 0.0, -0.5], color: [0.0, 1.0, 0.0] },
-		Vertex { position: [0.0, 0.0, 0.5], color: [0.0, 0.0, 1.0] },
-	];
+	#[derive(Clone, Copy, PartialEq, Eq)]
+	enum NonOrientedAxis {
+		X,
+		Y,
+		Z,
+	}
+	impl NonOrientedAxis {
+		fn index(self) -> usize {
+			match self {
+				NonOrientedAxis::X => 0,
+				NonOrientedAxis::Y => 1,
+				NonOrientedAxis::Z => 2,
+			}
+		}
+	}
+	#[derive(Clone, Copy, PartialEq, Eq)]
+	enum AxisOrientation {
+		Positivewards,
+		Negativewards,
+	}
+	impl AxisOrientation {
+		fn sign(self) -> i32 {
+			match self {
+				AxisOrientation::Positivewards => 1,
+				AxisOrientation::Negativewards => -1,
+			}
+		}
+	}
+	struct OrientedAxis {
+		axis: NonOrientedAxis,
+		orientation: AxisOrientation,
+	}
+	impl OrientedAxis {
+		fn all_the_six_possible_directions() -> impl Iterator<Item = OrientedAxis> {
+			[
+				OrientedAxis {
+					axis: NonOrientedAxis::X,
+					orientation: AxisOrientation::Positivewards,
+				},
+				OrientedAxis {
+					axis: NonOrientedAxis::Y,
+					orientation: AxisOrientation::Positivewards,
+				},
+				OrientedAxis {
+					axis: NonOrientedAxis::Z,
+					orientation: AxisOrientation::Positivewards,
+				},
+				OrientedAxis {
+					axis: NonOrientedAxis::X,
+					orientation: AxisOrientation::Negativewards,
+				},
+				OrientedAxis {
+					axis: NonOrientedAxis::Y,
+					orientation: AxisOrientation::Negativewards,
+				},
+				OrientedAxis {
+					axis: NonOrientedAxis::Z,
+					orientation: AxisOrientation::Negativewards,
+				},
+			]
+			.into_iter()
+		}
+	}
+
+	fn generate_face(vertices: &mut Vec<Vertex>, face_orientation: OrientedAxis) {
+		let mut a: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
+		let mut b: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
+		let mut c: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
+		let mut d: cgmath::Point3<f32> = (0.0, 0.0, 0.0).into();
+		a[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+		b[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+		c[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+		d[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+		let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
+			.into_iter()
+			.filter(|&axis| axis != face_orientation.axis);
+		let other_axis_a = other_axes.next().unwrap();
+		let other_axis_b = other_axes.next().unwrap();
+		assert!(other_axes.next().is_none());
+		a[other_axis_a.index()] -= 0.5;
+		a[other_axis_b.index()] -= 0.5;
+		b[other_axis_a.index()] -= 0.5;
+		b[other_axis_b.index()] += 0.5;
+		c[other_axis_a.index()] += 0.5;
+		c[other_axis_b.index()] -= 0.5;
+		d[other_axis_a.index()] += 0.5;
+		d[other_axis_b.index()] += 0.5;
+		let reverse_order = match face_orientation.axis {
+			NonOrientedAxis::X => face_orientation.orientation == AxisOrientation::Negativewards,
+			NonOrientedAxis::Y => face_orientation.orientation == AxisOrientation::Positivewards,
+			NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
+		};
+		if !reverse_order {
+			vertices.push(Vertex { position: a.into(), color: [1.0, 0.0, 0.0] });
+			vertices.push(Vertex { position: c.into(), color: [0.0, 1.0, 0.0] });
+			vertices.push(Vertex { position: b.into(), color: [1.0, 1.0, 0.0] });
+			vertices.push(Vertex { position: b.into(), color: [1.0, 0.0, 1.0] });
+			vertices.push(Vertex { position: c.into(), color: [0.0, 1.0, 1.0] });
+			vertices.push(Vertex { position: d.into(), color: [1.0, 1.0, 1.0] });
+		} else {
+			vertices.push(Vertex { position: a.into(), color: [1.0, 0.0, 0.0] });
+			vertices.push(Vertex { position: b.into(), color: [0.0, 1.0, 0.0] });
+			vertices.push(Vertex { position: c.into(), color: [1.0, 1.0, 0.0] });
+			vertices.push(Vertex { position: b.into(), color: [1.0, 0.0, 1.0] });
+			vertices.push(Vertex { position: d.into(), color: [0.0, 1.0, 1.0] });
+			vertices.push(Vertex { position: c.into(), color: [1.0, 1.0, 1.0] });
+		}
+	}
+
+	let mut vertices = Vec::new();
+	for direction in OrientedAxis::all_the_six_possible_directions() {
+		generate_face(&mut vertices, direction);
+	}
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Vertex Buffer"),
@@ -273,6 +381,7 @@ fn main() {
 			let ts = time_since_beginning.as_secs_f32();
 			camera.position.x = f32::cos(ts * 5.0) * 3.0;
 			camera.position.y = f32::sin(ts * 5.0) * 3.0;
+			camera.position.z = f32::cos(ts * 1.0) * 3.0;
 
 			let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
 			queue.write_buffer(
