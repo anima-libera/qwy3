@@ -1,31 +1,45 @@
 use std::f32::consts::TAU;
 
+use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
 	window::WindowBuilder,
 };
 
-struct CameraPerspective {
-	position: cgmath::Point3<f32>,
-	target: cgmath::Point3<f32>,
+struct CameraPerspectiveConfig {
 	up_direction: cgmath::Vector3<f32>,
+	/// Width / height.
 	aspect_ratio: f32,
+	/// Angle (unsigned, in radians) of view on the vertical axis, "fovy".
 	field_of_view_y: f32,
 	near_plane: f32,
 	far_plane: f32,
 }
 
-impl CameraPerspective {
-	fn wgpu_matrix_pod(&self) -> Matrix4x4 {
-		let view_matrix = cgmath::Matrix4::look_at_rh(self.position, self.target, self.up_direction);
+impl CameraPerspectiveConfig {
+	/// Get that view projection matrix that can be sent to the GPU.
+	fn view_projection_matrix(
+		&self,
+		position: cgmath::Point3<f32>,
+		target: cgmath::Point3<f32>,
+	) -> Matrix4x4Pod {
+		let view_matrix = cgmath::Matrix4::look_at_rh(position, target, self.up_direction);
 		let projection_matrix = cgmath::perspective(
 			cgmath::Rad(self.field_of_view_y),
 			self.aspect_ratio,
 			self.near_plane,
 			self.far_plane,
 		);
+		let view_projection_matrix = projection_matrix * view_matrix;
 
+		// (https://sotrh.github.io/learn-wgpu/beginner/tutorial6-uniforms/#a-perspective-camera)
+		// suggests to use this `OPENGL_TO_WGPU_MATRIX` transformation to account for the fact that
+		// in OpenGL the view projection transformation should get the frustum to fit in the cube
+		// from (-1, -1, -1) to (1, 1, 1), but in Wgpu the frustum should fit in the rectangular
+		// area from (-1, -1, 0) to (1, 1, 1). The difference is that on the Z axis (depth) the
+		// range is not (-1, 1) but instead is (0, 1).
+		// `cgmath` assumes OpenGL-like conventions and here we correct these assumptions to Wgpu.
 		#[rustfmt::skip]
 		pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 			1.0, 0.0, 0.0, 0.0,
@@ -33,20 +47,27 @@ impl CameraPerspective {
 			0.0, 0.0, 0.5, 0.0,
 			0.0, 0.0, 0.5, 1.0,
 		);
-		let wgpu_matrix = OPENGL_TO_WGPU_MATRIX * projection_matrix * view_matrix;
-		Matrix4x4 { values: wgpu_matrix.into() }
+		let view_projection_matrix = OPENGL_TO_WGPU_MATRIX * view_projection_matrix;
+
+		Matrix4x4Pod { values: view_projection_matrix.into() }
 	}
 }
 
+/// Matrix 4×4.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Matrix4x4 {
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+struct Matrix4x4Pod {
 	values: [[f32; 4]; 4],
 }
 
+/// Vertex type used in chunk block meshes.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+struct BlockVertexPod {
 	position: [f32; 3],
 	color: [f32; 3],
 }
@@ -58,6 +79,9 @@ enum NonOrientedAxis {
 	Z,
 }
 impl NonOrientedAxis {
+	fn iter_over_the_three_possible_axes() -> impl Iterator<Item = NonOrientedAxis> {
+		[NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z].into_iter()
+	}
 	fn index(self) -> usize {
 		match self {
 			NonOrientedAxis::X => 0,
@@ -72,6 +96,13 @@ enum AxisOrientation {
 	Negativewards,
 }
 impl AxisOrientation {
+	fn iter_over_the_two_possible_orientations() -> impl Iterator<Item = AxisOrientation> {
+		[
+			AxisOrientation::Positivewards,
+			AxisOrientation::Negativewards,
+		]
+		.into_iter()
+	}
 	fn sign(self) -> i32 {
 		match self {
 			AxisOrientation::Positivewards => 1,
@@ -86,38 +117,15 @@ struct OrientedAxis {
 }
 impl OrientedAxis {
 	fn all_the_six_possible_directions() -> impl Iterator<Item = OrientedAxis> {
-		[
-			OrientedAxis {
-				axis: NonOrientedAxis::X,
-				orientation: AxisOrientation::Positivewards,
-			},
-			OrientedAxis {
-				axis: NonOrientedAxis::Y,
-				orientation: AxisOrientation::Positivewards,
-			},
-			OrientedAxis {
-				axis: NonOrientedAxis::Z,
-				orientation: AxisOrientation::Positivewards,
-			},
-			OrientedAxis {
-				axis: NonOrientedAxis::X,
-				orientation: AxisOrientation::Negativewards,
-			},
-			OrientedAxis {
-				axis: NonOrientedAxis::Y,
-				orientation: AxisOrientation::Negativewards,
-			},
-			OrientedAxis {
-				axis: NonOrientedAxis::Z,
-				orientation: AxisOrientation::Negativewards,
-			},
-		]
-		.into_iter()
+		NonOrientedAxis::iter_over_the_three_possible_axes().flat_map(|axis| {
+			AxisOrientation::iter_over_the_two_possible_orientations()
+				.map(move |orientation| OrientedAxis { axis, orientation })
+		})
 	}
 }
 
 fn generate_face(
-	vertices: &mut Vec<Vertex>,
+	vertices: &mut Vec<BlockVertexPod>,
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
 ) {
@@ -151,19 +159,62 @@ fn generate_face(
 		NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
 	};
 	if !reverse_order {
-		vertices.push(Vertex { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(Vertex { position: c.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(Vertex { position: b.into(), color: [1.0, 1.0, 0.0] });
-		vertices.push(Vertex { position: b.into(), color: [1.0, 0.0, 1.0] });
-		vertices.push(Vertex { position: c.into(), color: [0.0, 1.0, 1.0] });
-		vertices.push(Vertex { position: d.into(), color: [1.0, 1.0, 1.0] });
+		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [1.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [1.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 1.0] });
+		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 1.0] });
 	} else {
-		vertices.push(Vertex { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(Vertex { position: b.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(Vertex { position: c.into(), color: [1.0, 1.0, 0.0] });
-		vertices.push(Vertex { position: b.into(), color: [1.0, 0.0, 1.0] });
-		vertices.push(Vertex { position: d.into(), color: [0.0, 1.0, 1.0] });
-		vertices.push(Vertex { position: c.into(), color: [1.0, 1.0, 1.0] });
+		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [1.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [1.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: d.into(), color: [0.0, 1.0, 1.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [1.0, 1.0, 1.0] });
+	}
+}
+
+/// Chunks are cubic parts of the world, all of the same size and arranged in a 3D grid.
+/// The length (in blocks) of the edges of the chunks is not hardcoded. It can be
+/// modified (to some extent) and passed around in a `ChunkDimensions`.
+#[derive(Clone, Copy)]
+struct ChunkDimensions {
+	/// Length (in blocks) of the edge of each (cubic) chunk.
+	edge: u32,
+}
+impl From<ChunkDimensions> for u32 {
+	fn from(chunk_side: ChunkDimensions) -> u32 {
+		chunk_side.edge
+	}
+}
+impl From<u32> for ChunkDimensions {
+	fn from(chunk_side_length: u32) -> ChunkDimensions {
+		ChunkDimensions { edge: chunk_side_length }
+	}
+}
+impl ChunkDimensions {
+	fn number_of_blocks(self) -> usize {
+		self.edge.pow(3) as usize
+	}
+}
+
+#[derive(Clone, Copy)]
+struct ChunkInternalBlockCoords {
+	x: u32,
+	y: u32,
+	z: u32,
+}
+impl ChunkDimensions {
+	fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
+		(0..self.edge).flat_map(move |x| {
+			(0..self.edge)
+				.flat_map(move |y| (0..self.edge).map(move |z| ChunkInternalBlockCoords { x, y, z }))
+		})
+	}
+	fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
+		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
+		(z * self.edge.pow(2) + y * self.edge + x) as usize
 	}
 }
 
@@ -175,36 +226,41 @@ struct BlockTypeId {
 struct ChunkBlocks {
 	blocks: Vec<BlockTypeId>,
 }
-
-fn chunk_internal_index(chunk_side: u32, internal_coords: (u32, u32, u32)) -> usize {
-	(internal_coords.2 * chunk_side.pow(2) + internal_coords.1 * chunk_side + internal_coords.0)
-		as usize
+impl ChunkBlocks {
+	fn new(cd: ChunkDimensions) -> ChunkBlocks {
+		ChunkBlocks {
+			blocks: Vec::from_iter(
+				std::iter::repeat(BlockTypeId { is_not_air: false }).take(cd.number_of_blocks()),
+			),
+		}
+	}
 }
 
 impl ChunkBlocks {
 	fn internal_block_mut(
 		&mut self,
-		chunk_side: u32,
-		internal_coords: (u32, u32, u32),
+		cd: ChunkDimensions,
+		internal_coords: ChunkInternalBlockCoords,
 	) -> &mut BlockTypeId {
-		&mut self.blocks[chunk_internal_index(chunk_side, internal_coords)]
+		&mut self.blocks[cd.internal_index(internal_coords)]
 	}
 
-	fn internal_block(&self, chunk_side: u32, internal_coords: (u32, u32, u32)) -> BlockTypeId {
-		self.blocks[chunk_internal_index(chunk_side, internal_coords)]
+	fn internal_block(
+		&self,
+		cd: ChunkDimensions,
+		internal_coords: ChunkInternalBlockCoords,
+	) -> BlockTypeId {
+		self.blocks[cd.internal_index(internal_coords)]
 	}
 }
 
 impl ChunkBlocks {
-	fn mesh(&self, chunk_side: u32, vertices: &mut Vec<Vertex>) {
-		for z in 0..chunk_side {
-			for y in 0..chunk_side {
-				for x in 0..chunk_side {
-					if self.internal_block(chunk_side, (x, y, z)).is_not_air {
-						for direction in OrientedAxis::all_the_six_possible_directions() {
-							generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
-						}
-					}
+	fn mesh(&self, cd: ChunkDimensions, vertices: &mut Vec<BlockVertexPod>) {
+		for internal_coords in cd.iter_internal_block_coords() {
+			if self.internal_block(cd, internal_coords).is_not_air {
+				for direction in OrientedAxis::all_the_six_possible_directions() {
+					let ChunkInternalBlockCoords { x, y, z } = internal_coords;
+					generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
 				}
 			}
 		}
@@ -218,12 +274,10 @@ fn main() {
 		.with_title("Qwy3")
 		.build(&event_loop)
 		.unwrap();
-
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
 		backends: wgpu::Backends::all(),
 		dx12_shader_compiler: Default::default(),
 	});
-
 	let window_surface = unsafe { instance.create_surface(&window) }.unwrap();
 
 	// Try to get a cool adapter first.
@@ -291,19 +345,16 @@ fn main() {
 	};
 	window_surface.configure(&device, &config);
 
-	let mut camera = CameraPerspective {
-		position: (0.0, 2.0, 0.0).into(),
-		target: (0.0, 0.0, 0.0).into(),
+	let mut camera = CameraPerspectiveConfig {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: config.width as f32 / config.height as f32,
 		field_of_view_y: TAU / 4.0,
 		near_plane: 0.001,
 		far_plane: 400.0,
 	};
-	let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
 	let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Camera Buffer"),
-		contents: bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
+		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 	});
 	let camera_bind_group_layout =
@@ -329,23 +380,16 @@ fn main() {
 		label: Some("Camera Bind Group"),
 	});
 
-	let chunk_side = 11u32;
-	let mut chunk = ChunkBlocks {
-		blocks: Vec::from_iter(
-			std::iter::repeat(BlockTypeId { is_not_air: false }).take(chunk_side.pow(3) as usize),
-		),
-	};
-	for z in 0..chunk_side {
-		for y in 0..chunk_side {
-			for x in 0..chunk_side {
-				// Test chunk generation.
-				chunk.internal_block_mut(chunk_side, (x, y, z)).is_not_air = z < (x + y) / 4 + 3;
-			}
-		}
+	let cd = ChunkDimensions::from(11);
+	let mut chunk = ChunkBlocks::new(cd);
+	for internal_coords in cd.iter_internal_block_coords() {
+		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
+		// Test chunk generation.
+		chunk.internal_block_mut(cd, internal_coords).is_not_air = z < (x + y) / 4 + 3;
 	}
 
-	let mut vertices: Vec<Vertex> = Vec::new();
-	chunk.mesh(chunk_side, &mut vertices);
+	let mut vertices: Vec<BlockVertexPod> = Vec::new();
+	chunk.mesh(cd, &mut vertices);
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Vertex Buffer"),
@@ -354,7 +398,7 @@ fn main() {
 	});
 
 	let vertex_buffer_layout = wgpu::VertexBufferLayout {
-		array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &[
 			wgpu::VertexAttribute {
@@ -456,28 +500,32 @@ fn main() {
 				..
 			} => *control_flow = ControlFlow::Exit,
 			WindowEvent::Resized(new_size) => {
-				config.width = new_size.width;
-				config.height = new_size.height;
+				let winit::dpi::PhysicalSize { width, height } = *new_size;
+				config.width = width;
+				config.height = height;
 				window_surface.configure(&device, &config);
-				z_buffer_view =
-					make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
-				camera.aspect_ratio = config.width as f32 / config.height as f32;
+				z_buffer_view = make_z_buffer_texture_view(&device, z_buffer_format, width, height);
+				camera.aspect_ratio = width as f32 / height as f32;
 			},
 			_ => {},
 		},
 		Event::MainEventsCleared => {
 			let time_since_beginning = time_beginning.elapsed();
-			let ts = time_since_beginning.as_secs_f32();
-			camera.position.x = 5.5 + f32::cos(ts * 5.0) * 20.0;
-			camera.position.y = 5.5 + f32::sin(ts * 5.0) * 20.0;
-			camera.position.z = 5.5 + f32::cos(ts * 0.8) * 6.0;
-			camera.target = (5.5, 5.5, 5.5).into();
 
-			let camera_wgpu_matrix_pod = camera.wgpu_matrix_pod();
+			let ts = time_since_beginning.as_secs_f32();
+			let mut position = (5.5, 5.5, 5.5).into();
+			let target = (5.5, 5.5, 5.5).into();
+			position += (
+				f32::cos(ts * 5.0) * 20.0,
+				f32::sin(ts * 5.0) * 20.0,
+				f32::cos(ts * 0.8) * 6.0,
+			)
+				.into();
+			let camera_view_projection_matrix = camera.view_projection_matrix(position, target);
 			queue.write_buffer(
 				&camera_matrix_buffer,
 				0,
-				bytemuck::cast_slice(&[camera_wgpu_matrix_pod]),
+				bytemuck::cast_slice(&[camera_view_projection_matrix]),
 			);
 
 			let window_texture = window_surface.get_current_texture().unwrap();
