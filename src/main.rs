@@ -205,6 +205,39 @@ struct ChunkInternalBlockCoords {
 	y: u32,
 	z: u32,
 }
+impl ChunkInternalBlockCoords {
+	fn coord(self, axis: NonOrientedAxis) -> u32 {
+		match axis {
+			NonOrientedAxis::X => self.x,
+			NonOrientedAxis::Y => self.y,
+			NonOrientedAxis::Z => self.z,
+		}
+	}
+	fn coord_mut(&mut self, axis: NonOrientedAxis) -> &mut u32 {
+		match axis {
+			NonOrientedAxis::X => &mut self.x,
+			NonOrientedAxis::Y => &mut self.y,
+			NonOrientedAxis::Z => &mut self.z,
+		}
+	}
+	fn internal_neighbor(
+		mut self,
+		cd: ChunkDimensions,
+		direction: OrientedAxis,
+	) -> Option<ChunkInternalBlockCoords> {
+		let new_coord_value_opt = self
+			.coord(direction.axis)
+			.checked_add_signed(direction.orientation.sign());
+		match new_coord_value_opt {
+			None => None,
+			Some(new_coord_value) if cd.edge <= new_coord_value => None,
+			Some(new_coord_value) => {
+				*self.coord_mut(direction.axis) = new_coord_value;
+				Some(self)
+			},
+		}
+	}
+}
 impl ChunkDimensions {
 	fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
 		(0..self.edge).flat_map(move |x| {
@@ -259,8 +292,18 @@ impl ChunkBlocks {
 		for internal_coords in cd.iter_internal_block_coords() {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
-					let ChunkInternalBlockCoords { x, y, z } = internal_coords;
-					generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
+					let covered = {
+						if let Some(internal_neighbor) = internal_coords.internal_neighbor(cd, direction)
+						{
+							self.internal_block(cd, internal_neighbor).is_not_air
+						} else {
+							false
+						}
+					};
+					if !covered {
+						let ChunkInternalBlockCoords { x, y, z } = internal_coords;
+						generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
+					}
 				}
 			}
 		}
@@ -380,7 +423,7 @@ fn main() {
 		label: Some("Camera Bind Group"),
 	});
 
-	let cd = ChunkDimensions::from(11);
+	let cd = ChunkDimensions::from(30);
 	let mut chunk = ChunkBlocks::new(cd);
 	for internal_coords in cd.iter_internal_block_coords() {
 		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
