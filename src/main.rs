@@ -1,4 +1,4 @@
-use std::f32::consts::TAU;
+use std::{collections::HashMap, f32::consts::TAU};
 
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
@@ -199,6 +199,8 @@ impl ChunkDimensions {
 	}
 }
 
+/// Coordinates of a block inside a chunk
+/// (so relative to the negativeward corner of a chunk).
 #[derive(Clone, Copy)]
 struct ChunkInternalBlockCoords {
 	x: u32,
@@ -240,15 +242,48 @@ impl ChunkInternalBlockCoords {
 }
 impl ChunkDimensions {
 	fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
-		(0..self.edge).flat_map(move |x| {
-			(0..self.edge)
-				.flat_map(move |y| (0..self.edge).map(move |z| ChunkInternalBlockCoords { x, y, z }))
+		iter_3d_cube_inf_edge((0, 0, 0), self.edge).map(|(x, y, z)| ChunkInternalBlockCoords {
+			x: x as u32,
+			y: y as u32,
+			z: z as u32,
 		})
 	}
 	fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
 		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
 		(z * self.edge.pow(2) + y * self.edge + x) as usize
 	}
+}
+
+/// Iterates over the 3D rectangle area `inf..sup` (`sup` not included).
+fn iter_3d_rect_inf_sup(
+	inf: (i32, i32, i32),
+	sup: (i32, i32, i32),
+) -> impl Iterator<Item = (i32, i32, i32)> {
+	let (inf_x, inf_y, inf_z) = inf;
+	let (sup_x, sup_y, sup_z) = sup;
+	debug_assert!(inf_x <= sup_x);
+	debug_assert!(inf_y <= sup_y);
+	debug_assert!(inf_z <= sup_z);
+	(inf_z..sup_z)
+		.flat_map(move |z| (inf_y..sup_y).flat_map(move |y| (inf_x..sup_x).map(move |x| (x, y, z))))
+}
+
+/// Iterates over the 3D rectangle area `inf..(inf+dims)` (`inf+dims` not included).
+fn iter_3d_rect_inf_dims(
+	inf: (i32, i32, i32),
+	dims: (u32, u32, u32),
+) -> impl Iterator<Item = (i32, i32, i32)> {
+	let sup = (
+		inf.0 + dims.0 as i32,
+		inf.1 + dims.1 as i32,
+		inf.2 + dims.2 as i32,
+	);
+	iter_3d_rect_inf_sup(inf, sup)
+}
+
+/// Iterates over a 3D cubic area of negativewards corner at `inf` and edges of length `edge`.
+fn iter_3d_cube_inf_edge(inf: (i32, i32, i32), edge: u32) -> impl Iterator<Item = (i32, i32, i32)> {
+	iter_3d_rect_inf_dims(inf, (edge, edge, edge))
 }
 
 #[derive(Clone, Copy)]
@@ -287,8 +322,23 @@ impl ChunkBlocks {
 	}
 }
 
+impl ChunkInternalBlockCoords {
+	fn to_world_coords(self, cd: ChunkDimensions, chunk_coords: ChunkCoords) -> BlockCoords {
+		BlockCoords {
+			x: (self.x as i32) + chunk_coords.x * (cd.edge as i32),
+			y: (self.y as i32) + chunk_coords.y * (cd.edge as i32),
+			z: (self.z as i32) + chunk_coords.z * (cd.edge as i32),
+		}
+	}
+}
+
 impl ChunkBlocks {
-	fn mesh(&self, cd: ChunkDimensions, vertices: &mut Vec<BlockVertexPod>) {
+	fn mesh(
+		&self,
+		cd: ChunkDimensions,
+		chunk_coords: ChunkCoords,
+		vertices: &mut Vec<BlockVertexPod>,
+	) {
 		for internal_coords in cd.iter_internal_block_coords() {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
@@ -301,12 +351,66 @@ impl ChunkBlocks {
 						}
 					};
 					if !covered {
-						let ChunkInternalBlockCoords { x, y, z } = internal_coords;
+						let world_coords = internal_coords.to_world_coords(cd, chunk_coords);
+						let BlockCoords { x, y, z } = world_coords;
 						generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
 					}
 				}
 			}
 		}
+	}
+}
+
+/// Coordinates of a block in the world.
+#[derive(Clone, Copy)]
+struct BlockCoords {
+	x: i32,
+	y: i32,
+	z: i32,
+}
+
+/// Coordinates of a chunk in the 3D grid of chunks
+/// (which is not on the same scale as block coords, here we designate whole chunks).
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct ChunkCoords {
+	x: i32,
+	y: i32,
+	z: i32,
+}
+
+impl ChunkDimensions {
+	fn chunk_that_contains_coords(self, coords: BlockCoords) -> ChunkCoords {
+		ChunkCoords {
+			x: coords.x.div_euclid(self.edge as i32),
+			y: coords.y.div_euclid(self.edge as i32),
+			z: coords.z.div_euclid(self.edge as i32),
+		}
+	}
+
+	fn world_coords_to_internal_coords(
+		self,
+		coords: BlockCoords,
+	) -> (ChunkCoords, ChunkInternalBlockCoords) {
+		let chunk_coords = self.chunk_that_contains_coords(coords);
+		let internal_coords = ChunkInternalBlockCoords {
+			x: (coords.x as u32).rem_euclid(self.edge),
+			y: (coords.y as u32).rem_euclid(self.edge),
+			z: (coords.z as u32).rem_euclid(self.edge),
+		};
+		(chunk_coords, internal_coords)
+	}
+}
+
+struct ChunkGrid {
+	map: HashMap<ChunkCoords, ChunkBlocks>,
+}
+
+impl ChunkGrid {
+	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
+		let (chunk_coords, internal_coords) = cd.world_coords_to_internal_coords(coords);
+		let chunk = self.map.get_mut(&chunk_coords).unwrap();
+		let block_dst = chunk.internal_block_mut(cd, internal_coords);
+		*block_dst = block;
 	}
 }
 
@@ -423,16 +527,32 @@ fn main() {
 		label: Some("Camera Bind Group"),
 	});
 
-	let cd = ChunkDimensions::from(30);
-	let mut chunk = ChunkBlocks::new(cd);
-	for internal_coords in cd.iter_internal_block_coords() {
-		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
-		// Test chunk generation.
-		chunk.internal_block_mut(cd, internal_coords).is_not_air = z < (x + y) / 4 + 3;
+	let cd = ChunkDimensions::from(10);
+
+	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
+	for chunk_coords in iter_3d_rect_inf_sup((-3, -3, -3), (4, 4, 4)) {
+		let (x, y, z) = chunk_coords;
+		let chunk_coords = ChunkCoords { x, y, z };
+		chunk_grid.map.insert(chunk_coords, ChunkBlocks::new(cd));
+	}
+
+	for (chunk_coords, chunk) in chunk_grid.map.iter_mut() {
+		for internal_coords in cd.iter_internal_block_coords() {
+			let coords = internal_coords.to_world_coords(cd, *chunk_coords);
+			// Test chunk generation.
+			*chunk.internal_block_mut(cd, internal_coords) = BlockTypeId {
+				is_not_air: coords.z as f32
+					- f32::cos(coords.x as f32 * 0.3)
+					- f32::cos(coords.y as f32 * 0.3)
+					- 3.0 < 0.0,
+			};
+		}
 	}
 
 	let mut vertices: Vec<BlockVertexPod> = Vec::new();
-	chunk.mesh(cd, &mut vertices);
+	for (&chunk_coords, chunk) in chunk_grid.map.iter() {
+		chunk.mesh(cd, chunk_coords, &mut vertices);
+	}
 
 	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Vertex Buffer"),
@@ -559,9 +679,9 @@ fn main() {
 			let mut position = (5.5, 5.5, 5.5).into();
 			let target = (5.5, 5.5, 5.5).into();
 			position += (
-				f32::cos(ts * 5.0) * 20.0,
-				f32::sin(ts * 5.0) * 20.0,
-				f32::cos(ts * 0.8) * 6.0,
+				f32::cos(ts * 1.0) * 20.0,
+				f32::sin(ts * 1.0) * 20.0,
+				(f32::cos(ts * 0.8) + 0.8) * 6.0,
 			)
 				.into();
 			let camera_view_projection_matrix = camera.view_projection_matrix(position, target);
