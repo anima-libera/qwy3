@@ -1,3 +1,6 @@
+mod camera;
+mod coords;
+
 use std::{collections::HashMap, f32::consts::TAU};
 
 use bytemuck::Zeroable;
@@ -7,60 +10,8 @@ use winit::{
 	window::WindowBuilder,
 };
 
-struct CameraPerspectiveConfig {
-	up_direction: cgmath::Vector3<f32>,
-	/// Width / height.
-	aspect_ratio: f32,
-	/// Angle (unsigned, in radians) of view on the vertical axis, "fovy".
-	field_of_view_y: f32,
-	near_plane: f32,
-	far_plane: f32,
-}
-
-impl CameraPerspectiveConfig {
-	/// Get that view projection matrix that can be sent to the GPU.
-	fn view_projection_matrix(
-		&self,
-		position: cgmath::Point3<f32>,
-		target: cgmath::Point3<f32>,
-	) -> Matrix4x4Pod {
-		let view_matrix = cgmath::Matrix4::look_at_rh(position, target, self.up_direction);
-		let projection_matrix = cgmath::perspective(
-			cgmath::Rad(self.field_of_view_y),
-			self.aspect_ratio,
-			self.near_plane,
-			self.far_plane,
-		);
-		let view_projection_matrix = projection_matrix * view_matrix;
-
-		// (https://sotrh.github.io/learn-wgpu/beginner/tutorial6-uniforms/#a-perspective-camera)
-		// suggests to use this `OPENGL_TO_WGPU_MATRIX` transformation to account for the fact that
-		// in OpenGL the view projection transformation should get the frustum to fit in the cube
-		// from (-1, -1, -1) to (1, 1, 1), but in Wgpu the frustum should fit in the rectangular
-		// area from (-1, -1, 0) to (1, 1, 1). The difference is that on the Z axis (depth) the
-		// range is not (-1, 1) but instead is (0, 1).
-		// `cgmath` assumes OpenGL-like conventions and here we correct these assumptions to Wgpu.
-		#[rustfmt::skip]
-		pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-			1.0, 0.0, 0.0, 0.0,
-			0.0, 1.0, 0.0, 0.0,
-			0.0, 0.0, 0.5, 0.0,
-			0.0, 0.0, 0.5, 1.0,
-		);
-		let view_projection_matrix = OPENGL_TO_WGPU_MATRIX * view_projection_matrix;
-
-		Matrix4x4Pod { values: view_projection_matrix.into() }
-	}
-}
-
-/// Matrix 4×4.
-#[derive(Copy, Clone, Debug)]
-/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-struct Matrix4x4Pod {
-	values: [[f32; 4]; 4],
-}
+use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
+use coords::*;
 
 /// Vertex type used in chunk block meshes.
 #[derive(Copy, Clone, Debug)]
@@ -70,58 +21,6 @@ struct Matrix4x4Pod {
 struct BlockVertexPod {
 	position: [f32; 3],
 	color: [f32; 3],
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum NonOrientedAxis {
-	X,
-	Y,
-	Z,
-}
-impl NonOrientedAxis {
-	fn iter_over_the_three_possible_axes() -> impl Iterator<Item = NonOrientedAxis> {
-		[NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z].into_iter()
-	}
-	fn index(self) -> usize {
-		match self {
-			NonOrientedAxis::X => 0,
-			NonOrientedAxis::Y => 1,
-			NonOrientedAxis::Z => 2,
-		}
-	}
-}
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AxisOrientation {
-	Positivewards,
-	Negativewards,
-}
-impl AxisOrientation {
-	fn iter_over_the_two_possible_orientations() -> impl Iterator<Item = AxisOrientation> {
-		[
-			AxisOrientation::Positivewards,
-			AxisOrientation::Negativewards,
-		]
-		.into_iter()
-	}
-	fn sign(self) -> i32 {
-		match self {
-			AxisOrientation::Positivewards => 1,
-			AxisOrientation::Negativewards => -1,
-		}
-	}
-}
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct OrientedAxis {
-	axis: NonOrientedAxis,
-	orientation: AxisOrientation,
-}
-impl OrientedAxis {
-	fn all_the_six_possible_directions() -> impl Iterator<Item = OrientedAxis> {
-		NonOrientedAxis::iter_over_the_three_possible_axes().flat_map(|axis| {
-			AxisOrientation::iter_over_the_two_possible_orientations()
-				.map(move |orientation| OrientedAxis { axis, orientation })
-		})
-	}
 }
 
 fn generate_face(
@@ -175,117 +74,6 @@ fn generate_face(
 	}
 }
 
-/// Chunks are cubic parts of the world, all of the same size and arranged in a 3D grid.
-/// The length (in blocks) of the edges of the chunks is not hardcoded. It can be
-/// modified (to some extent) and passed around in a `ChunkDimensions`.
-#[derive(Clone, Copy)]
-struct ChunkDimensions {
-	/// Length (in blocks) of the edge of each (cubic) chunk.
-	edge: u32,
-}
-impl From<ChunkDimensions> for u32 {
-	fn from(chunk_side: ChunkDimensions) -> u32 {
-		chunk_side.edge
-	}
-}
-impl From<u32> for ChunkDimensions {
-	fn from(chunk_side_length: u32) -> ChunkDimensions {
-		ChunkDimensions { edge: chunk_side_length }
-	}
-}
-impl ChunkDimensions {
-	fn number_of_blocks(self) -> usize {
-		self.edge.pow(3) as usize
-	}
-}
-
-/// Coordinates of a block inside a chunk
-/// (so relative to the negativeward corner of a chunk).
-#[derive(Clone, Copy)]
-struct ChunkInternalBlockCoords {
-	x: u32,
-	y: u32,
-	z: u32,
-}
-impl ChunkInternalBlockCoords {
-	fn coord(self, axis: NonOrientedAxis) -> u32 {
-		match axis {
-			NonOrientedAxis::X => self.x,
-			NonOrientedAxis::Y => self.y,
-			NonOrientedAxis::Z => self.z,
-		}
-	}
-	fn coord_mut(&mut self, axis: NonOrientedAxis) -> &mut u32 {
-		match axis {
-			NonOrientedAxis::X => &mut self.x,
-			NonOrientedAxis::Y => &mut self.y,
-			NonOrientedAxis::Z => &mut self.z,
-		}
-	}
-	fn internal_neighbor(
-		mut self,
-		cd: ChunkDimensions,
-		direction: OrientedAxis,
-	) -> Option<ChunkInternalBlockCoords> {
-		let new_coord_value_opt = self
-			.coord(direction.axis)
-			.checked_add_signed(direction.orientation.sign());
-		match new_coord_value_opt {
-			None => None,
-			Some(new_coord_value) if cd.edge <= new_coord_value => None,
-			Some(new_coord_value) => {
-				*self.coord_mut(direction.axis) = new_coord_value;
-				Some(self)
-			},
-		}
-	}
-}
-impl ChunkDimensions {
-	fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
-		iter_3d_cube_inf_edge((0, 0, 0), self.edge).map(|(x, y, z)| ChunkInternalBlockCoords {
-			x: x as u32,
-			y: y as u32,
-			z: z as u32,
-		})
-	}
-	fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
-		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
-		(z * self.edge.pow(2) + y * self.edge + x) as usize
-	}
-}
-
-/// Iterates over the 3D rectangle area `inf..sup` (`sup` not included).
-fn iter_3d_rect_inf_sup(
-	inf: (i32, i32, i32),
-	sup: (i32, i32, i32),
-) -> impl Iterator<Item = (i32, i32, i32)> {
-	let (inf_x, inf_y, inf_z) = inf;
-	let (sup_x, sup_y, sup_z) = sup;
-	debug_assert!(inf_x <= sup_x);
-	debug_assert!(inf_y <= sup_y);
-	debug_assert!(inf_z <= sup_z);
-	(inf_z..sup_z)
-		.flat_map(move |z| (inf_y..sup_y).flat_map(move |y| (inf_x..sup_x).map(move |x| (x, y, z))))
-}
-
-/// Iterates over the 3D rectangle area `inf..(inf+dims)` (`inf+dims` not included).
-fn iter_3d_rect_inf_dims(
-	inf: (i32, i32, i32),
-	dims: (u32, u32, u32),
-) -> impl Iterator<Item = (i32, i32, i32)> {
-	let sup = (
-		inf.0 + dims.0 as i32,
-		inf.1 + dims.1 as i32,
-		inf.2 + dims.2 as i32,
-	);
-	iter_3d_rect_inf_sup(inf, sup)
-}
-
-/// Iterates over a 3D cubic area of negativewards corner at `inf` and edges of length `edge`.
-fn iter_3d_cube_inf_edge(inf: (i32, i32, i32), edge: u32) -> impl Iterator<Item = (i32, i32, i32)> {
-	iter_3d_rect_inf_dims(inf, (edge, edge, edge))
-}
-
 #[derive(Clone, Copy)]
 struct BlockTypeId {
 	is_not_air: bool,
@@ -322,16 +110,6 @@ impl ChunkBlocks {
 	}
 }
 
-impl ChunkInternalBlockCoords {
-	fn to_world_coords(self, cd: ChunkDimensions, chunk_coords: ChunkCoords) -> BlockCoords {
-		BlockCoords {
-			x: (self.x as i32) + chunk_coords.x * (cd.edge as i32),
-			y: (self.y as i32) + chunk_coords.y * (cd.edge as i32),
-			z: (self.z as i32) + chunk_coords.z * (cd.edge as i32),
-		}
-	}
-}
-
 impl ChunkBlocks {
 	fn mesh(
 		&self,
@@ -351,7 +129,8 @@ impl ChunkBlocks {
 						}
 					};
 					if !covered {
-						let world_coords = internal_coords.to_world_coords(cd, chunk_coords);
+						let world_coords =
+							cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
 						let BlockCoords { x, y, z } = world_coords;
 						generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
 					}
@@ -361,53 +140,13 @@ impl ChunkBlocks {
 	}
 }
 
-/// Coordinates of a block in the world.
-#[derive(Clone, Copy)]
-struct BlockCoords {
-	x: i32,
-	y: i32,
-	z: i32,
-}
-
-/// Coordinates of a chunk in the 3D grid of chunks
-/// (which is not on the same scale as block coords, here we designate whole chunks).
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-struct ChunkCoords {
-	x: i32,
-	y: i32,
-	z: i32,
-}
-
-impl ChunkDimensions {
-	fn chunk_that_contains_coords(self, coords: BlockCoords) -> ChunkCoords {
-		ChunkCoords {
-			x: coords.x.div_euclid(self.edge as i32),
-			y: coords.y.div_euclid(self.edge as i32),
-			z: coords.z.div_euclid(self.edge as i32),
-		}
-	}
-
-	fn world_coords_to_internal_coords(
-		self,
-		coords: BlockCoords,
-	) -> (ChunkCoords, ChunkInternalBlockCoords) {
-		let chunk_coords = self.chunk_that_contains_coords(coords);
-		let internal_coords = ChunkInternalBlockCoords {
-			x: (coords.x as u32).rem_euclid(self.edge),
-			y: (coords.y as u32).rem_euclid(self.edge),
-			z: (coords.z as u32).rem_euclid(self.edge),
-		};
-		(chunk_coords, internal_coords)
-	}
-}
-
 struct ChunkGrid {
 	map: HashMap<ChunkCoords, ChunkBlocks>,
 }
 
 impl ChunkGrid {
 	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
-		let (chunk_coords, internal_coords) = cd.world_coords_to_internal_coords(coords);
+		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
 		let chunk = self.map.get_mut(&chunk_coords).unwrap();
 		let block_dst = chunk.internal_block_mut(cd, internal_coords);
 		*block_dst = block;
@@ -493,7 +232,7 @@ pub fn run() {
 	};
 	window_surface.configure(&device, &config);
 
-	let mut camera = CameraPerspectiveConfig {
+	let mut camera = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: config.width as f32 / config.height as f32,
 		field_of_view_y: TAU / 4.0,
@@ -539,7 +278,7 @@ pub fn run() {
 
 	for (chunk_coords, chunk) in chunk_grid.map.iter_mut() {
 		for internal_coords in cd.iter_internal_block_coords() {
-			let coords = internal_coords.to_world_coords(cd, *chunk_coords);
+			let coords = cd.chunk_internal_coords_to_world_coords(*chunk_coords, internal_coords);
 			// Test chunk generation.
 			*chunk.internal_block_mut(cd, internal_coords) = BlockTypeId {
 				is_not_air: coords.z as f32
@@ -669,7 +408,7 @@ pub fn run() {
 				config.height = height;
 				window_surface.configure(&device, &config);
 				z_buffer_view = make_z_buffer_texture_view(&device, z_buffer_format, width, height);
-				camera.aspect_ratio = width as f32 / height as f32;
+				camera.aspect_ratio = aspect_ratio(width, height);
 			},
 			_ => {},
 		},
