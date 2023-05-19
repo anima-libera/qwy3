@@ -7,7 +7,6 @@ use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
-	platform::x11::WindowBuilderExtX11,
 	window::WindowBuilder,
 };
 
