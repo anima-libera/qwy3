@@ -113,10 +113,11 @@ impl ChunkBlocks {
 impl ChunkBlocks {
 	fn mesh(
 		&self,
+		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
-		vertices: &mut Vec<BlockVertexPod>,
-	) {
+	) -> ChunkMesh {
+		let mut block_vertices = Vec::new();
 		for internal_coords in cd.iter_internal_block_coords() {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
@@ -132,23 +133,49 @@ impl ChunkBlocks {
 						let world_coords =
 							cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
 						let BlockCoords { x, y, z } = world_coords;
-						generate_face(vertices, direction, (x as f32, y as f32, z as f32).into());
+						generate_face(
+							&mut block_vertices,
+							direction,
+							(x as f32, y as f32, z as f32).into(),
+						);
 					}
 				}
 			}
 		}
+		ChunkMesh::from_vertices(device, block_vertices)
 	}
 }
 
+struct ChunkMesh {
+	block_vertices: Vec<BlockVertexPod>,
+	block_vertex_buffer: wgpu::Buffer,
+}
+
+impl ChunkMesh {
+	fn from_vertices(device: &wgpu::Device, block_vertices: Vec<BlockVertexPod>) -> ChunkMesh {
+		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Vertex Buffer"),
+			contents: bytemuck::cast_slice(&block_vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+		ChunkMesh { block_vertices, block_vertex_buffer }
+	}
+}
+
+struct Chunk {
+	blocks: ChunkBlocks,
+	mesh: Option<ChunkMesh>,
+}
+
 struct ChunkGrid {
-	map: HashMap<ChunkCoords, ChunkBlocks>,
+	map: HashMap<ChunkCoords, Chunk>,
 }
 
 impl ChunkGrid {
 	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
 		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
 		let chunk = self.map.get_mut(&chunk_coords).unwrap();
-		let block_dst = chunk.internal_block_mut(cd, internal_coords);
+		let block_dst = chunk.blocks.internal_block_mut(cd, internal_coords);
 		*block_dst = block;
 	}
 }
@@ -273,14 +300,15 @@ pub fn run() {
 	for chunk_coords in iter_3d_rect_inf_sup((-3, -3, -3), (4, 4, 4)) {
 		let (x, y, z) = chunk_coords;
 		let chunk_coords = ChunkCoords { x, y, z };
-		chunk_grid.map.insert(chunk_coords, ChunkBlocks::new(cd));
+		let chunk = Chunk { blocks: ChunkBlocks::new(cd), mesh: None };
+		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
 	for (chunk_coords, chunk) in chunk_grid.map.iter_mut() {
 		for internal_coords in cd.iter_internal_block_coords() {
 			let coords = cd.chunk_internal_coords_to_world_coords(*chunk_coords, internal_coords);
 			// Test chunk generation.
-			*chunk.internal_block_mut(cd, internal_coords) = BlockTypeId {
+			*chunk.blocks.internal_block_mut(cd, internal_coords) = BlockTypeId {
 				is_not_air: coords.z as f32
 					- f32::cos(coords.x as f32 * 0.3)
 					- f32::cos(coords.y as f32 * 0.3)
@@ -289,18 +317,12 @@ pub fn run() {
 		}
 	}
 
-	let mut vertices: Vec<BlockVertexPod> = Vec::new();
-	for (&chunk_coords, chunk) in chunk_grid.map.iter() {
-		chunk.mesh(cd, chunk_coords, &mut vertices);
+	for (&chunk_coords, chunk) in chunk_grid.map.iter_mut() {
+		let mesh = chunk.blocks.mesh(&device, cd, chunk_coords);
+		chunk.mesh = Some(mesh);
 	}
 
-	let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-		label: Some("Vertex Buffer"),
-		contents: bytemuck::cast_slice(&vertices),
-		usage: wgpu::BufferUsages::VERTEX,
-	});
-
-	let vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &[
@@ -356,7 +378,7 @@ pub fn run() {
 		vertex: wgpu::VertexState {
 			module: &shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[vertex_buffer_layout],
+			buffers: &[block_vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
 			module: &shader,
@@ -458,8 +480,12 @@ pub fn run() {
 				});
 				render_pass.set_pipeline(&render_pipeline);
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-				render_pass.draw(0..(vertices.len() as u32), 0..1);
+				for (_chunk_coords, chunk) in chunk_grid.map.iter() {
+					if let Some(ref mesh) = chunk.mesh {
+						render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
+						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+					}
+				}
 			}
 			queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();
