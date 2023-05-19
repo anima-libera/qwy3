@@ -1,3 +1,5 @@
+use cgmath::Zero;
+
 /// Camera settings with perspective.
 ///
 /// It doesn't contain the camera position and target or vector,
@@ -21,12 +23,23 @@ pub fn aspect_ratio(width: u32, height: u32) -> AspectRatio {
 
 impl CameraPerspectiveSettings {
 	/// Get the view projection matrix that can be sent to the GPU.
+	///
+	/// The `up_head` parameter does not represent the world's upwards direction
+	/// but instead represents the vector from the bottom to the top of the screen
+	/// but in 3D world coordinates. It helps when the `direction` is exactly vertical
+	/// (because in this case there would be no way to know how to angle the camera).
 	pub fn view_projection_matrix(
 		&self,
 		position: cgmath::Point3<f32>,
-		target: cgmath::Point3<f32>,
+		direction: cgmath::Vector3<f32>,
+		up_head: cgmath::Vector3<f32>,
 	) -> Matrix4x4Pod {
-		let view_matrix = cgmath::Matrix4::look_at_rh(position, target, self.up_direction);
+		let up = if direction.x.is_zero() && direction.y.is_zero() {
+			up_head
+		} else {
+			self.up_direction
+		};
+		let view_matrix = cgmath::Matrix4::look_to_rh(position, direction, up);
 		let projection_matrix = cgmath::perspective(
 			cgmath::Rad(self.field_of_view_y),
 			self.aspect_ratio,

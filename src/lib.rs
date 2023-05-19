@@ -7,6 +7,7 @@ use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
+	platform::x11::WindowBuilderExtX11,
 	window::WindowBuilder,
 };
 
@@ -186,6 +187,7 @@ pub fn run() {
 	let window = WindowBuilder::new()
 		.with_title("Qwy3")
 		.with_maximized(true)
+		.with_resizable(true)
 		.build(&event_loop)
 		.unwrap();
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -293,6 +295,14 @@ pub fn run() {
 		}],
 		label: Some("Camera Bind Group"),
 	});
+
+	let mut camera_angle_horizontal: f32 = 0.0;
+	let mut camera_angle_vertical: f32 = 0.0;
+
+	window
+		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+		.unwrap();
+	window.set_cursor_visible(false);
 
 	let cd = ChunkDimensions::from(10);
 
@@ -434,19 +444,42 @@ pub fn run() {
 			},
 			_ => {},
 		},
+		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. } => {
+			let sensitivity = 0.01;
+			camera_angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
+			camera_angle_vertical += delta.1 as f32 * sensitivity;
+			if camera_angle_vertical < 0.0 {
+				camera_angle_vertical = 0.0;
+			}
+			if TAU / 2.0 < camera_angle_vertical {
+				camera_angle_vertical = TAU / 2.0;
+			}
+		},
 		Event::MainEventsCleared => {
 			let time_since_beginning = time_beginning.elapsed();
+			let _ts = time_since_beginning.as_secs_f32();
 
-			let ts = time_since_beginning.as_secs_f32();
-			let mut position = (5.5, 5.5, 5.5).into();
-			let target = (5.5, 5.5, 5.5).into();
-			position += (
-				f32::cos(ts * 1.0) * 20.0,
-				f32::sin(ts * 1.0) * 20.0,
-				(f32::cos(ts * 0.8) + 0.8) * 6.0,
-			)
-				.into();
-			let camera_view_projection_matrix = camera.view_projection_matrix(position, target);
+			let position = (5.5, 5.5, 5.5).into();
+			fn direction_from_angles(
+				angle_horizontal: f32,
+				angle_vertical: f32,
+			) -> cgmath::Vector3<f32> {
+				let direction_vertical = f32::cos(angle_vertical);
+				let direction_horizontal = cgmath::Vector2::<f32>::from((
+					f32::cos(angle_horizontal),
+					f32::sin(angle_horizontal),
+				)) * f32::sqrt(1.0 - direction_vertical.powi(2));
+				cgmath::Vector3::<f32>::from((
+					direction_horizontal.x,
+					direction_horizontal.y,
+					direction_vertical,
+				))
+			}
+			let direction = direction_from_angles(camera_angle_horizontal, camera_angle_vertical);
+			let up_head =
+				direction_from_angles(camera_angle_horizontal, camera_angle_vertical + TAU / 4.0);
+			let camera_view_projection_matrix =
+				camera.view_projection_matrix(position, direction, up_head);
 			queue.write_buffer(
 				&camera_matrix_buffer,
 				0,
