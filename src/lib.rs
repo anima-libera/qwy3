@@ -296,8 +296,21 @@ pub fn run() {
 		label: Some("Camera Bind Group"),
 	});
 
+	let mut camera_position = cgmath::Point3::<f32>::from((5.5, 5.5, 5.5));
 	let mut camera_angle_horizontal: f32 = 0.0;
-	let mut camera_angle_vertical: f32 = 0.0;
+	let mut camera_angle_vertical: f32 = TAU / 4.0;
+	fn direction_from_angles(angle_horizontal: f32, angle_vertical: f32) -> cgmath::Vector3<f32> {
+		let direction_vertical = f32::cos(angle_vertical);
+		let direction_horizontal =
+			cgmath::Vector2::<f32>::from((f32::cos(angle_horizontal), f32::sin(angle_horizontal)))
+				* f32::sqrt(1.0 - direction_vertical.powi(2))
+				* if angle_vertical < 0.0 { -1.0 } else { 1.0 };
+		cgmath::Vector3::<f32>::from((
+			direction_horizontal.x,
+			direction_horizontal.y,
+			direction_vertical,
+		))
+	}
 
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -442,6 +455,26 @@ pub fn run() {
 				z_buffer_view = make_z_buffer_texture_view(&device, z_buffer_format, width, height);
 				camera.aspect_ratio = aspect_ratio(width, height);
 			},
+			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state: ElementState::Pressed, virtual_keycode: Some(key), .. },
+				..
+			} => match key {
+				VirtualKeyCode::Z => {
+					camera_position += direction_from_angles(camera_angle_horizontal, TAU / 4.0);
+				},
+				VirtualKeyCode::S => {
+					camera_position -= direction_from_angles(camera_angle_horizontal, TAU / 4.0);
+				},
+				VirtualKeyCode::Q => {
+					camera_position +=
+						direction_from_angles(camera_angle_horizontal + TAU / 4.0, TAU / 4.0);
+				},
+				VirtualKeyCode::D => {
+					camera_position +=
+						direction_from_angles(camera_angle_horizontal - TAU / 4.0, TAU / 4.0);
+				},
+				_ => {},
+			},
 			_ => {},
 		},
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. } => {
@@ -455,31 +488,26 @@ pub fn run() {
 				camera_angle_vertical = TAU / 2.0;
 			}
 		},
+		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseWheel { delta }, .. } => {
+			let (dx, dy) = match delta {
+				MouseScrollDelta::LineDelta(horizontal, vertical) => (horizontal, vertical),
+				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
+			};
+			let sensitivity = 0.01;
+			camera_position.z -= dy * sensitivity;
+			camera_position +=
+				direction_from_angles(camera_angle_horizontal + TAU / 4.0 * dx.signum(), TAU / 4.0)
+					* f32::abs(dx) * sensitivity;
+		},
 		Event::MainEventsCleared => {
 			let time_since_beginning = time_beginning.elapsed();
 			let _ts = time_since_beginning.as_secs_f32();
 
-			let position = (5.5, 5.5, 5.5).into();
-			fn direction_from_angles(
-				angle_horizontal: f32,
-				angle_vertical: f32,
-			) -> cgmath::Vector3<f32> {
-				let direction_vertical = f32::cos(angle_vertical);
-				let direction_horizontal = cgmath::Vector2::<f32>::from((
-					f32::cos(angle_horizontal),
-					f32::sin(angle_horizontal),
-				)) * f32::sqrt(1.0 - direction_vertical.powi(2));
-				cgmath::Vector3::<f32>::from((
-					direction_horizontal.x,
-					direction_horizontal.y,
-					direction_vertical,
-				))
-			}
 			let direction = direction_from_angles(camera_angle_horizontal, camera_angle_vertical);
 			let up_head =
-				direction_from_angles(camera_angle_horizontal, camera_angle_vertical + TAU / 4.0);
+				direction_from_angles(camera_angle_horizontal, camera_angle_vertical - TAU / 4.0);
 			let camera_view_projection_matrix =
-				camera.view_projection_matrix(position, direction, up_head);
+				camera.view_projection_matrix(camera_position, direction, up_head);
 			queue.write_buffer(
 				&camera_matrix_buffer,
 				0,
