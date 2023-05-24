@@ -166,9 +166,9 @@ impl ChunkDimensions {
 	) -> (ChunkCoords, ChunkInternalBlockCoords) {
 		let chunk_coords = self.world_coords_to_containing_chunk_coords(coords);
 		let internal_coords = ChunkInternalBlockCoords {
-			x: (coords.x as u32).rem_euclid(self.edge),
-			y: (coords.y as u32).rem_euclid(self.edge),
-			z: (coords.z as u32).rem_euclid(self.edge),
+			x: coords.x.rem_euclid(self.edge as i32) as u32,
+			y: coords.y.rem_euclid(self.edge as i32) as u32,
+			z: coords.z.rem_euclid(self.edge as i32) as u32,
 		};
 		(chunk_coords, internal_coords)
 	}

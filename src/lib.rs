@@ -178,6 +178,20 @@ impl ChunkGrid {
 		let block_dst = chunk.blocks.internal_block_mut(cd, internal_coords);
 		*block_dst = block;
 	}
+
+	fn get_block(&self, cd: ChunkDimensions, coords: BlockCoords) -> Option<BlockTypeId> {
+		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
+		let chunk = self.map.get(&chunk_coords)?;
+		Some(chunk.blocks.internal_block(cd, internal_coords))
+	}
+}
+
+struct AlignedPhysBox {
+	/// Position of the center of the box.
+	pos: cgmath::Point3<f32>,
+	motion: cgmath::Vector3<f32>,
+	dims: cgmath::Vector3<f32>,
+	gravity_factor: f32,
 }
 
 pub fn run() {
@@ -295,7 +309,6 @@ pub fn run() {
 		label: Some("Camera Bind Group"),
 	});
 
-	let mut camera_position = cgmath::Point3::<f32>::from((5.5, 5.5, 5.5));
 	let mut camera_angle_horizontal: f32 = 0.0;
 	let mut camera_angle_vertical: f32 = TAU / 4.0;
 	fn direction_from_angles(angle_horizontal: f32, angle_vertical: f32) -> cgmath::Vector3<f32> {
@@ -310,6 +323,14 @@ pub fn run() {
 			direction_vertical,
 		))
 	}
+
+	let mut player_phys = AlignedPhysBox {
+		pos: (5.5, 5.5, 5.5).into(),
+		motion: (0.0, 0.0, 0.0).into(),
+		dims: (0.8, 0.8, 1.8).into(),
+		gravity_factor: 1.0,
+	};
+	let mut enable_physics = true;
 
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -432,6 +453,7 @@ pub fn run() {
 	});
 
 	let time_beginning = std::time::Instant::now();
+	let mut time_from_last_iteration = std::time::Instant::now();
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
@@ -459,18 +481,55 @@ pub fn run() {
 				..
 			} => match key {
 				VirtualKeyCode::Z => {
-					camera_position += direction_from_angles(camera_angle_horizontal, TAU / 4.0);
+					player_phys.pos += direction_from_angles(camera_angle_horizontal, TAU / 4.0);
 				},
 				VirtualKeyCode::S => {
-					camera_position -= direction_from_angles(camera_angle_horizontal, TAU / 4.0);
+					player_phys.pos -= direction_from_angles(camera_angle_horizontal, TAU / 4.0);
 				},
 				VirtualKeyCode::Q => {
-					camera_position +=
+					player_phys.pos +=
 						direction_from_angles(camera_angle_horizontal + TAU / 4.0, TAU / 4.0);
 				},
 				VirtualKeyCode::D => {
-					camera_position +=
+					player_phys.pos +=
 						direction_from_angles(camera_angle_horizontal - TAU / 4.0, TAU / 4.0);
+				},
+				VirtualKeyCode::P => enable_physics = !enable_physics,
+				VirtualKeyCode::H => {
+					dbg!(player_phys.pos);
+					let player_bottom = player_phys.pos
+						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
+					dbg!(player_bottom);
+					let player_bottom_block_coords = (
+						player_bottom.x.round() as i32,
+						player_bottom.y.round() as i32,
+						player_bottom.z.round() as i32,
+					);
+					dbg!(player_bottom_block_coords);
+					println!();
+				},
+				VirtualKeyCode::O => {
+					let player_bottom = player_phys.pos
+						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
+					let player_bottom_block_coords = BlockCoords {
+						x: player_bottom.x.round() as i32,
+						y: player_bottom.y.round() as i32,
+						z: player_bottom.z.round() as i32,
+					};
+					let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
+					if let Some(block) = player_bottom_block_opt {
+						chunk_grid.set_block(
+							cd,
+							player_bottom_block_coords,
+							BlockTypeId { is_not_air: !block.is_not_air },
+						);
+
+						let chunk_coords =
+							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
+						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
+						let mesh = chunk.blocks.mesh(&device, cd, chunk_coords);
+						chunk.mesh = Some(mesh);
+					}
 				},
 				_ => {},
 			},
@@ -493,15 +552,39 @@ pub fn run() {
 				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
 			};
 			let sensitivity = 0.01;
-			camera_position.z -= dy * sensitivity;
-			camera_position +=
+			player_phys.pos.z -= dy * sensitivity;
+			player_phys.pos +=
 				direction_from_angles(camera_angle_horizontal + TAU / 4.0 * dx.signum(), TAU / 4.0)
 					* f32::abs(dx) * sensitivity;
 		},
 		Event::MainEventsCleared => {
-			let time_since_beginning = time_beginning.elapsed();
-			let _ts = time_since_beginning.as_secs_f32();
+			let _time_since_beginning = time_beginning.elapsed();
+			let now = std::time::Instant::now();
+			let dt = now - time_from_last_iteration;
+			time_from_last_iteration = now;
 
+			if enable_physics {
+				let player_bottom =
+					player_phys.pos - cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
+				let player_bottom_block_coords = BlockCoords {
+					x: player_bottom.x.round() as i32,
+					y: player_bottom.y.round() as i32,
+					z: player_bottom.z.round() as i32,
+				};
+				let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
+				if let Some(block) = player_bottom_block_opt {
+					if block.is_not_air {
+						player_phys.motion.z = 0.0;
+						player_phys.pos.z =
+							player_bottom_block_coords.z as f32 + 0.5 + player_phys.dims.z / 2.0;
+					}
+				}
+				player_phys.pos += player_phys.motion;
+				player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
+			}
+
+			let camera_position = player_phys.pos
+				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0)) * 0.7;
 			let direction = direction_from_angles(camera_angle_horizontal, camera_angle_vertical);
 			let up_head =
 				direction_from_angles(camera_angle_horizontal, camera_angle_vertical - TAU / 4.0);
