@@ -687,6 +687,13 @@ pub fn run() {
 				},
 				_ => {},
 			},
+			WindowEvent::MouseInput {
+				state: winit::event::ElementState::Pressed,
+				button: winit::event::MouseButton::Right,
+				..
+			} => {
+				player_phys.motion.z = 0.1;
+			},
 			_ => {},
 		},
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. } => {
@@ -729,8 +736,6 @@ pub fn run() {
 				* moving_rightward_factor as f32
 				* moving_factor;
 
-			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys);
-
 			if enable_physics {
 				let player_bottom =
 					player_phys.pos - cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
@@ -740,16 +745,29 @@ pub fn run() {
 					z: player_bottom.z.round() as i32,
 				};
 				let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
-				if let Some(block) = player_bottom_block_opt {
-					if block.is_not_air {
-						player_phys.motion.z = 0.0;
-						player_phys.pos.z =
-							player_bottom_block_coords.z as f32 + 0.5 + player_phys.dims.z / 2.0;
+				let is_on_ground = if player_phys.motion.z <= 0.0 {
+					if let Some(block) = player_bottom_block_opt {
+						if block.is_not_air {
+							player_phys.motion.z = 0.0;
+							player_phys.pos.z =
+								player_bottom_block_coords.z as f32 + 0.5 + player_phys.dims.z / 2.0;
+							true
+						} else {
+							false
+						}
+					} else {
+						false
 					}
-				}
+				} else {
+					false
+				};
 				player_phys.pos += player_phys.motion;
-				player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
+				if !is_on_ground {
+					player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
+				}
 			}
+
+			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys);
 
 			let camera_position = player_phys.pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0)) * 0.7;
