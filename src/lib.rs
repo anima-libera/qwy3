@@ -154,7 +154,7 @@ struct ChunkMesh {
 impl ChunkMesh {
 	fn from_vertices(device: &wgpu::Device, block_vertices: Vec<BlockVertexPod>) -> ChunkMesh {
 		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("Vertex Buffer"),
+			label: Some("Block Vertex Buffer"),
 			contents: bytemuck::cast_slice(&block_vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
@@ -192,6 +192,78 @@ struct AlignedPhysBox {
 	motion: cgmath::Vector3<f32>,
 	dims: cgmath::Vector3<f32>,
 	gravity_factor: f32,
+}
+
+/// Vertex type used in debugging line meshes.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+struct SimpleLineVertexPod {
+	position: [f32; 3],
+	color: [f32; 3],
+}
+
+struct SimpleLineMesh {
+	vertices: Vec<SimpleLineVertexPod>,
+	vertex_buffer: wgpu::Buffer,
+}
+
+impl SimpleLineMesh {
+	fn from_vertices(device: &wgpu::Device, vertices: Vec<SimpleLineVertexPod>) -> SimpleLineMesh {
+		let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Simple Line Vertex Buffer"),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+		SimpleLineMesh { vertices, vertex_buffer }
+	}
+
+	fn from_aligned_box(device: &wgpu::Device, aligned_box: &AlignedPhysBox) -> SimpleLineMesh {
+		let color = [1.0, 1.0, 1.0];
+		let mut vertices = Vec::new();
+
+		// A---B  +--->   The L square and the H square are horizontal.
+		// |   |  |   X+  L has lower value of Z coord.
+		// C---D  v Y+    H has heigher value of Z coord.
+		let al = aligned_box.pos - aligned_box.dims / 2.0;
+		let bl = al + cgmath::Vector3::<f32>::unit_x() * aligned_box.dims.x;
+		let cl = al + cgmath::Vector3::<f32>::unit_y() * aligned_box.dims.y;
+		let dl = bl + cgmath::Vector3::<f32>::unit_y() * aligned_box.dims.y;
+		let ah = al + cgmath::Vector3::<f32>::unit_z() * aligned_box.dims.z;
+		let bh = bl + cgmath::Vector3::<f32>::unit_z() * aligned_box.dims.z;
+		let ch = cl + cgmath::Vector3::<f32>::unit_z() * aligned_box.dims.z;
+		let dh = dl + cgmath::Vector3::<f32>::unit_z() * aligned_box.dims.z;
+		// L square
+		vertices.push(SimpleLineVertexPod { position: al.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: cl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: cl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: al.into(), color });
+		// H square
+		vertices.push(SimpleLineVertexPod { position: ah.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bh.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bh.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
+		vertices.push(SimpleLineVertexPod { position: ch.into(), color });
+		vertices.push(SimpleLineVertexPod { position: ch.into(), color });
+		vertices.push(SimpleLineVertexPod { position: ah.into(), color });
+		// Edges between L square and H square corresponding vertices.
+		vertices.push(SimpleLineVertexPod { position: al.into(), color });
+		vertices.push(SimpleLineVertexPod { position: ah.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: bh.into(), color });
+		vertices.push(SimpleLineVertexPod { position: cl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: ch.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dl.into(), color });
+		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
+
+		SimpleLineMesh::from_vertices(device, vertices)
+	}
 }
 
 pub fn run() {
@@ -410,11 +482,10 @@ pub fn run() {
 	let mut z_buffer_view =
 		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
 
-	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-		label: Some("Shader"),
+	let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+		label: Some("Block Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/test_01.wgsl").into()),
 	});
-
 	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 		label: Some("Render Pipeline Layout"),
 		bind_group_layouts: &[&camera_bind_group_layout],
@@ -424,12 +495,12 @@ pub fn run() {
 		label: Some("Render Pipeline"),
 		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &shader,
+			module: &block_shader,
 			entry_point: "vertex_shader_main",
 			buffers: &[block_vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &shader,
+			module: &block_shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: config.format,
@@ -456,6 +527,74 @@ pub fn run() {
 		multisample: wgpu::MultisampleState { count: 1, mask: !0, alpha_to_coverage_enabled: false },
 		multiview: None,
 	});
+
+	let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
+		array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
+		step_mode: wgpu::VertexStepMode::Vertex,
+		attributes: &[
+			wgpu::VertexAttribute {
+				offset: 0,
+				shader_location: 0,
+				format: wgpu::VertexFormat::Float32x3,
+			},
+			wgpu::VertexAttribute {
+				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+				shader_location: 1,
+				format: wgpu::VertexFormat::Float32x3,
+			},
+		],
+	};
+	let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+		label: Some("Simple Line Shader"),
+		source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/simple_line.wgsl").into()),
+	});
+	let simple_line_render_pipeline_layout =
+		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+			label: Some("Simple Line Render Pipeline Layout"),
+			bind_group_layouts: &[&camera_bind_group_layout],
+			push_constant_ranges: &[],
+		});
+	let simple_line_render_pipeline =
+		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+			label: Some("Simple Line Render Pipeline"),
+			layout: Some(&simple_line_render_pipeline_layout),
+			vertex: wgpu::VertexState {
+				module: &simple_line_shader,
+				entry_point: "vertex_shader_main",
+				buffers: &[simple_line_vertex_buffer_layout],
+			},
+			fragment: Some(wgpu::FragmentState {
+				module: &simple_line_shader,
+				entry_point: "fragment_shader_main",
+				targets: &[Some(wgpu::ColorTargetState {
+					format: config.format,
+					blend: Some(wgpu::BlendState::REPLACE),
+					write_mask: wgpu::ColorWrites::ALL,
+				})],
+			}),
+			primitive: wgpu::PrimitiveState {
+				topology: wgpu::PrimitiveTopology::LineList,
+				strip_index_format: None,
+				front_face: wgpu::FrontFace::Ccw,
+				cull_mode: None,
+				polygon_mode: wgpu::PolygonMode::Fill,
+				unclipped_depth: false,
+				conservative: false,
+			},
+			depth_stencil: Some(wgpu::DepthStencilState {
+				format: z_buffer_format,
+				depth_write_enabled: true,
+				depth_compare: wgpu::CompareFunction::Less,
+				stencil: wgpu::StencilState::default(),
+				bias: wgpu::DepthBiasState::default(),
+			}),
+			multisample: wgpu::MultisampleState {
+				count: 1,
+				mask: !0,
+				alpha_to_coverage_enabled: false,
+			},
+			multiview: None,
+		});
 
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();
@@ -590,6 +729,8 @@ pub fn run() {
 				* moving_rightward_factor as f32
 				* moving_factor;
 
+			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys);
+
 			if enable_physics {
 				let player_bottom =
 					player_phys.pos - cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
@@ -648,6 +789,7 @@ pub fn run() {
 						stencil_ops: None,
 					}),
 				});
+
 				render_pass.set_pipeline(&render_pipeline);
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				for (_chunk_coords, chunk) in chunk_grid.map.iter() {
@@ -656,6 +798,11 @@ pub fn run() {
 						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 					}
 				}
+
+				render_pass.set_pipeline(&simple_line_render_pipeline);
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
 			}
 			queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();
