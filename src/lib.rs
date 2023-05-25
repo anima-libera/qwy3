@@ -332,6 +332,11 @@ pub fn run() {
 	};
 	let mut enable_physics = true;
 
+	let mut moving_forward = false;
+	let mut moving_backward = false;
+	let mut moving_leftward = false;
+	let mut moving_rightward = false;
+
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 		.unwrap();
@@ -477,23 +482,33 @@ pub fn run() {
 				camera.aspect_ratio = aspect_ratio(width, height);
 			},
 			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::Z), .. },
+				..
+			} => {
+				moving_forward = *state == ElementState::Pressed;
+			},
+			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::S), .. },
+				..
+			} => {
+				moving_backward = *state == ElementState::Pressed;
+			},
+			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::Q), .. },
+				..
+			} => {
+				moving_leftward = *state == ElementState::Pressed;
+			},
+			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::D), .. },
+				..
+			} => {
+				moving_rightward = *state == ElementState::Pressed;
+			},
+			WindowEvent::KeyboardInput {
 				input: KeyboardInput { state: ElementState::Pressed, virtual_keycode: Some(key), .. },
 				..
 			} => match key {
-				VirtualKeyCode::Z => {
-					player_phys.pos += direction_from_angles(camera_angle_horizontal, TAU / 4.0);
-				},
-				VirtualKeyCode::S => {
-					player_phys.pos -= direction_from_angles(camera_angle_horizontal, TAU / 4.0);
-				},
-				VirtualKeyCode::Q => {
-					player_phys.pos +=
-						direction_from_angles(camera_angle_horizontal + TAU / 4.0, TAU / 4.0);
-				},
-				VirtualKeyCode::D => {
-					player_phys.pos +=
-						direction_from_angles(camera_angle_horizontal - TAU / 4.0, TAU / 4.0);
-				},
 				VirtualKeyCode::P => enable_physics = !enable_physics,
 				VirtualKeyCode::H => {
 					dbg!(player_phys.pos);
@@ -562,6 +577,18 @@ pub fn run() {
 			let now = std::time::Instant::now();
 			let dt = now - time_from_last_iteration;
 			time_from_last_iteration = now;
+
+			let moving_factor = 35.0 * dt.as_secs_f32();
+			let moving_forward_factor =
+				if moving_forward { 1 } else { 0 } + if moving_backward { -1 } else { 0 };
+			let moving_rightward_factor =
+				if moving_rightward { 1 } else { 0 } + if moving_leftward { -1 } else { 0 };
+			player_phys.pos += direction_from_angles(camera_angle_horizontal, TAU / 4.0)
+				* moving_forward_factor as f32
+				* moving_factor;
+			player_phys.pos += direction_from_angles(camera_angle_horizontal - TAU / 4.0, TAU / 4.0)
+				* moving_rightward_factor as f32
+				* moving_factor;
 
 			if enable_physics {
 				let player_bottom =
