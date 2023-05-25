@@ -578,7 +578,7 @@ pub fn run() {
 			let dt = now - time_from_last_iteration;
 			time_from_last_iteration = now;
 
-			let moving_factor = 35.0 * dt.as_secs_f32();
+			let moving_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
 			let moving_forward_factor =
 				if moving_forward { 1 } else { 0 } + if moving_backward { -1 } else { 0 };
 			let moving_rightward_factor =
