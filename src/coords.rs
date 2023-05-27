@@ -142,6 +142,25 @@ pub fn iter_3d_cube_inf_edge(
 	iter_3d_rect_inf_dims(inf, (edge, edge, edge))
 }
 
+/// Iterates over a 3D cubic area of the given center and given radius.
+pub fn iter_3d_cube_center_radius(
+	center: (i32, i32, i32),
+	radius: u32,
+) -> impl Iterator<Item = (i32, i32, i32)> {
+	if radius == 0 {
+		iter_3d_cube_inf_edge(center, 0)
+	} else {
+		iter_3d_cube_inf_edge(
+			(
+				center.0 - (radius - 1) as i32,
+				center.1 - (radius - 1) as i32,
+				center.2 - (radius - 1) as i32,
+			),
+			radius * 2 - 1,
+		)
+	}
+}
+
 /// Coordinates of a chunk in the 3D grid of chunks
 /// (which is not on the same scale as block coords, here we designate whole chunks).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -149,6 +168,13 @@ pub struct ChunkCoords {
 	pub x: i32,
 	pub y: i32,
 	pub z: i32,
+}
+
+impl From<(i32, i32, i32)> for ChunkCoords {
+	fn from(coords: (i32, i32, i32)) -> ChunkCoords {
+		let (x, y, z) = coords;
+		ChunkCoords { x, y, z }
+	}
 }
 
 impl ChunkDimensions {

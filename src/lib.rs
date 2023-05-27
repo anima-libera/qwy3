@@ -51,7 +51,7 @@ impl ChunkBlocks {
 }
 
 impl ChunkBlocks {
-	fn mesh(
+	fn generate_mesh_assuming_surrounded_by_air(
 		&self,
 		device: &wgpu::Device,
 		cd: ChunkDimensions,
@@ -73,7 +73,7 @@ impl ChunkBlocks {
 						let world_coords =
 							cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
 						let BlockCoords { x, y, z } = world_coords;
-						generate_face(
+						generate_block_face_mesh(
 							&mut block_vertices,
 							direction,
 							(x as f32, y as f32, z as f32).into(),
@@ -112,7 +112,8 @@ struct BlockVertexPod {
 	color: [f32; 3],
 }
 
-fn generate_face(
+/// Generate the mesh of a face of a block, adding it to `vertices`.
+fn generate_block_face_mesh(
 	vertices: &mut Vec<BlockVertexPod>,
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
@@ -180,6 +181,24 @@ struct Chunk {
 	mesh: Option<ChunkMesh>,
 }
 
+impl Chunk {
+	fn new_empty(cd: ChunkDimensions) -> Chunk {
+		Chunk { blocks: ChunkBlocks::new(cd), mesh: None }
+	}
+
+	fn generate_mesh_assuming_surrounded_by_air(
+		&mut self,
+		device: &wgpu::Device,
+		cd: ChunkDimensions,
+		chunk_coords: ChunkCoords,
+	) {
+		let mesh = self
+			.blocks
+			.generate_mesh_assuming_surrounded_by_air(device, cd, chunk_coords);
+		self.mesh = Some(mesh);
+	}
+}
+
 struct ChunkGrid {
 	map: HashMap<ChunkCoords, Chunk>,
 }
@@ -235,6 +254,9 @@ struct SimpleLineVertexPod {
 	color: [f32; 3],
 }
 
+/// Mesh of simple lines.
+///
+/// Can be used (for example) to display hit boxes for debugging purposes.
 struct SimpleLineMesh {
 	vertices: Vec<SimpleLineVertexPod>,
 	vertex_buffer: wgpu::Buffer,
@@ -358,8 +380,8 @@ pub fn run() {
 				None,
 			)
 			.await
-			.unwrap()
-	});
+	})
+	.unwrap();
 
 	let surface_caps = window_surface.get_capabilities(&adapter);
 	let surface_format = surface_caps
@@ -421,16 +443,18 @@ pub fn run() {
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
 	let mut enable_camera_third_person = false;
 
+	let mut walking_forward = false;
+	let mut walking_backward = false;
+	let mut walking_leftward = false;
+	let mut walking_rightward = false;
+
 	let mut player_phys = AlignedPhysBox {
 		aligned_box: AlignedBox { pos: (5.5, 5.5, 5.5).into(), dims: (0.8, 0.8, 1.8).into() },
 		motion: (0.0, 0.0, 0.0).into(),
 		gravity_factor: 1.0,
 	};
 	let mut enable_physics = true;
-	let mut walking_forward = false;
-	let mut walking_backward = false;
-	let mut walking_leftward = false;
-	let mut walking_rightward = false;
+	let mut enable_display_phys_box = true;
 
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -440,10 +464,9 @@ pub fn run() {
 	let cd = ChunkDimensions::from(10);
 
 	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
-	for chunk_coords in iter_3d_rect_inf_sup((-3, -3, -3), (4, 4, 4)) {
-		let (x, y, z) = chunk_coords;
-		let chunk_coords = ChunkCoords { x, y, z };
-		let chunk = Chunk { blocks: ChunkBlocks::new(cd), mesh: None };
+	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0), 3) {
+		let chunk_coords = ChunkCoords::from(chunk_coords);
+		let chunk = Chunk::new_empty(cd);
 		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
@@ -451,29 +474,27 @@ pub fn run() {
 		for internal_coords in cd.iter_internal_block_coords() {
 			let coords = cd.chunk_internal_coords_to_world_coords(*chunk_coords, internal_coords);
 			// Test chunk generation.
-			*chunk.blocks.internal_block_mut(cd, internal_coords) = BlockTypeId {
-				is_not_air: coords.z as f32
-					- f32::cos(coords.x as f32 * 0.3)
-					- f32::cos(coords.y as f32 * 0.3)
-					- 3.0 < 0.0,
-			};
+			let ground = coords.z as f32
+				- f32::cos(coords.x as f32 * 0.3)
+				- f32::cos(coords.y as f32 * 0.3)
+				- 3.0 < 0.0;
+			*chunk.blocks.internal_block_mut(cd, internal_coords) = BlockTypeId { is_not_air: ground };
 		}
 	}
 
 	for (&chunk_coords, chunk) in chunk_grid.map.iter_mut() {
-		let mesh = chunk.blocks.mesh(&device, cd, chunk_coords);
-		chunk.mesh = Some(mesh);
+		chunk.generate_mesh_assuming_surrounded_by_air(&device, cd, chunk_coords);
 	}
 
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
 		format: wgpu::TextureFormat,
-		w: u32,
-		h: u32,
+		width: u32,
+		height: u32,
 	) -> wgpu::TextureView {
 		let z_buffer_texture_description = wgpu::TextureDescriptor {
 			label: Some("Z Buffer"),
-			size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+			size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
 			mip_level_count: 1,
 			sample_count: 1,
 			dimension: wgpu::TextureDimension::D2,
@@ -676,6 +697,10 @@ pub fn run() {
 					enable_camera_third_person = !enable_camera_third_person
 				},
 
+				(VirtualKeyCode::L, ElementState::Pressed) => {
+					enable_display_phys_box = !enable_display_phys_box
+				},
+
 				(VirtualKeyCode::H, ElementState::Pressed) => {
 					dbg!(player_phys.aligned_box.pos);
 					let player_bottom = player_phys.aligned_box.pos
@@ -685,11 +710,7 @@ pub fn run() {
 
 				(VirtualKeyCode::O, ElementState::Pressed) => {
 					let player_bottom = player_phys.aligned_box.pos
-						- cgmath::Vector3::<f32>::from((
-							0.0,
-							0.0,
-							player_phys.aligned_box.dims.z / 2.0 + 0.1,
-						));
+						- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1);
 					let player_bottom_block_coords = BlockCoords::from(player_bottom);
 					let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
 					if let Some(block) = player_bottom_block_opt {
@@ -702,8 +723,7 @@ pub fn run() {
 						let chunk_coords =
 							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
 						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-						let mesh = chunk.blocks.mesh(&device, cd, chunk_coords);
-						chunk.mesh = Some(mesh);
+						chunk.generate_mesh_assuming_surrounded_by_air(&device, cd, chunk_coords);
 					}
 				},
 				_ => {},
@@ -856,10 +876,12 @@ pub fn run() {
 				}
 			}
 
-			render_pass.set_pipeline(&simple_line_render_pipeline);
-			render_pass.set_bind_group(0, &camera_bind_group, &[]);
-			render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
-			render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
+			if enable_display_phys_box {
+				render_pass.set_pipeline(&simple_line_render_pipeline);
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
+			}
 
 			// Release `render_pass.parent` which is a ref mut to `encoder`.
 			drop(render_pass);
