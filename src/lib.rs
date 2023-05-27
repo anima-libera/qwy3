@@ -110,6 +110,7 @@ impl ChunkMesh {
 struct BlockVertexPod {
 	position: [f32; 3],
 	color: [f32; 3],
+	normal: [f32; 3],
 }
 
 /// Generate the mesh of a face of a block, adding it to `vertices`.
@@ -159,20 +160,26 @@ fn generate_block_face_mesh(
 		NonOrientedAxis::Y => face_orientation.orientation == AxisOrientation::Positivewards,
 		NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
 	};
+	let normal = {
+		let mut normal = [0.0, 0.0, 0.0];
+		normal[face_orientation.axis.index()] = face_orientation.orientation.sign() as f32;
+		normal
+	};
+	let color = [0.8, 0.8, 0.8];
 	if !reverse_order {
-		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: a.into(), color, normal });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal });
+		vertices.push(BlockVertexPod { position: d.into(), color, normal });
 	} else {
-		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: a.into(), color, normal });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal });
+		vertices.push(BlockVertexPod { position: d.into(), color, normal });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal });
 	}
 }
 
@@ -318,6 +325,15 @@ impl SimpleLineMesh {
 		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
+}
+
+/// Vector in 3D.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vector3Pod {
+	values: [f32; 3],
 }
 
 pub fn run() {
@@ -487,6 +503,35 @@ pub fn run() {
 		chunk.generate_mesh_assuming_surrounded_by_air(&device, cd, chunk_coords);
 	}
 
+	let mut sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
+	let sun_light_direction_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Sun Light Direction Buffer"),
+		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let sun_light_direction_bind_group_layout =
+		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 1,
+				visibility: wgpu::ShaderStages::VERTEX,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Uniform,
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+			}],
+			label: Some("Sun Light Direction Bind Group Layout"),
+		});
+	let sun_light_direction_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		layout: &sun_light_direction_bind_group_layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding: 1,
+			resource: sun_light_direction_buffer.as_entire_binding(),
+		}],
+		label: Some("Sun Light Direction Bind Group"),
+	});
+
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
 		format: wgpu::TextureFormat,
@@ -525,6 +570,11 @@ pub fn run() {
 					shader_location: 1,
 					format: wgpu::VertexFormat::Float32x3,
 				},
+				wgpu::VertexAttribute {
+					offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress,
+					shader_location: 2,
+					format: wgpu::VertexFormat::Float32x3,
+				},
 			],
 		};
 		let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -533,12 +583,15 @@ pub fn run() {
 		});
 		let block_render_pipeline_layout =
 			device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-				label: Some("Render Pipeline Layout"),
-				bind_group_layouts: &[&camera_bind_group_layout],
+				label: Some("Block Render Pipeline Layout"),
+				bind_group_layouts: &[
+					&camera_bind_group_layout,
+					&sun_light_direction_bind_group_layout,
+				],
 				push_constant_ranges: &[],
 			});
 		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("Render Pipeline"),
+			label: Some("Block Render Pipeline"),
 			layout: Some(&block_render_pipeline_layout),
 			vertex: wgpu::VertexState {
 				module: &block_shader,
@@ -873,6 +926,14 @@ pub fn run() {
 				bytemuck::cast_slice(&[camera_view_projection_matrix]),
 			);
 
+			sun_position_in_sky.angle_horizontal += (TAU / 30.0) * dt.as_secs_f32();
+			let sun_light_direction = Vector3Pod { values: sun_position_in_sky.to_vec3().into() };
+			queue.write_buffer(
+				&sun_light_direction_buffer,
+				0,
+				bytemuck::cast_slice(&[sun_light_direction]),
+			);
+
 			let window_texture = window_surface.get_current_texture().unwrap();
 			let window_texture_view = window_texture
 				.texture
@@ -899,6 +960,7 @@ pub fn run() {
 
 			render_pass.set_pipeline(&block_render_pipeline);
 			render_pass.set_bind_group(0, &camera_bind_group, &[]);
+			render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
 			for (_chunk_coords, chunk) in chunk_grid.map.iter() {
 				if let Some(ref mesh) = chunk.mesh {
 					render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
