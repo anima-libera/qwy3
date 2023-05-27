@@ -443,6 +443,12 @@ pub fn run() {
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
 	let mut enable_camera_third_person = false;
 
+	let mut cursor_is_captured = true;
+	window
+		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+		.unwrap();
+	window.set_cursor_visible(false);
+
 	let mut walking_forward = false;
 	let mut walking_backward = false;
 	let mut walking_leftward = false;
@@ -455,11 +461,6 @@ pub fn run() {
 	};
 	let mut enable_physics = true;
 	let mut enable_display_phys_box = true;
-
-	window
-		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-		.unwrap();
-	window.set_cursor_visible(false);
 
 	let cd = ChunkDimensions::from(10);
 
@@ -701,6 +702,21 @@ pub fn run() {
 					enable_display_phys_box = !enable_display_phys_box
 				},
 
+				(VirtualKeyCode::K, ElementState::Pressed) => {
+					cursor_is_captured = !cursor_is_captured;
+					if cursor_is_captured {
+						window
+							.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+							.unwrap();
+						window.set_cursor_visible(false);
+					} else {
+						window
+							.set_cursor_grab(winit::window::CursorGrabMode::None)
+							.unwrap();
+						window.set_cursor_visible(true);
+					}
+				},
+
 				(VirtualKeyCode::H, ElementState::Pressed) => {
 					dbg!(player_phys.aligned_box.pos);
 					let player_bottom = player_phys.aligned_box.pos
@@ -733,13 +749,27 @@ pub fn run() {
 				state: winit::event::ElementState::Pressed,
 				button: winit::event::MouseButton::Right,
 				..
-			} => {
+			} if cursor_is_captured => {
 				player_phys.motion.z = 0.1;
+			},
+
+			WindowEvent::MouseInput {
+				state: winit::event::ElementState::Pressed,
+				button: winit::event::MouseButton::Left,
+				..
+			} if !cursor_is_captured => {
+				cursor_is_captured = true;
+				window
+					.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+					.unwrap();
+				window.set_cursor_visible(false);
 			},
 			_ => {},
 		},
 
-		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. } => {
+		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. }
+			if cursor_is_captured =>
+		{
 			let sensitivity = 0.01;
 			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
 			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
