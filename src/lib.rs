@@ -4,6 +4,7 @@ mod coords;
 use std::{collections::HashMap, f32::consts::TAU};
 
 use bytemuck::Zeroable;
+use cgmath::InnerSpace;
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
@@ -12,67 +13,6 @@ use winit::{
 
 use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
 use coords::*;
-
-/// Vertex type used in chunk block meshes.
-#[derive(Copy, Clone, Debug)]
-/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-struct BlockVertexPod {
-	position: [f32; 3],
-	color: [f32; 3],
-}
-
-fn generate_face(
-	vertices: &mut Vec<BlockVertexPod>,
-	face_orientation: OrientedAxis,
-	block_center: cgmath::Point3<f32>,
-) {
-	// NO EARLY OPTIMIZATION
-	// This shall remain in an unoptimized, unfactorized and flexible state for now!
-	let mut a: cgmath::Point3<f32> = block_center;
-	let mut b: cgmath::Point3<f32> = block_center;
-	let mut c: cgmath::Point3<f32> = block_center;
-	let mut d: cgmath::Point3<f32> = block_center;
-	a[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	b[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	c[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	d[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
-		.into_iter()
-		.filter(|&axis| axis != face_orientation.axis);
-	let other_axis_a = other_axes.next().unwrap();
-	let other_axis_b = other_axes.next().unwrap();
-	assert!(other_axes.next().is_none());
-	a[other_axis_a.index()] -= 0.5;
-	a[other_axis_b.index()] -= 0.5;
-	b[other_axis_a.index()] -= 0.5;
-	b[other_axis_b.index()] += 0.5;
-	c[other_axis_a.index()] += 0.5;
-	c[other_axis_b.index()] -= 0.5;
-	d[other_axis_a.index()] += 0.5;
-	d[other_axis_b.index()] += 0.5;
-	let reverse_order = match face_orientation.axis {
-		NonOrientedAxis::X => face_orientation.orientation == AxisOrientation::Negativewards,
-		NonOrientedAxis::Y => face_orientation.orientation == AxisOrientation::Positivewards,
-		NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
-	};
-	if !reverse_order {
-		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
-	} else {
-		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
-		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
-		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
-	}
-}
 
 #[derive(Clone, Copy)]
 struct BlockTypeId {
@@ -162,6 +102,79 @@ impl ChunkMesh {
 	}
 }
 
+/// Vertex type used in chunk block meshes.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+struct BlockVertexPod {
+	position: [f32; 3],
+	color: [f32; 3],
+}
+
+fn generate_face(
+	vertices: &mut Vec<BlockVertexPod>,
+	face_orientation: OrientedAxis,
+	block_center: cgmath::Point3<f32>,
+) {
+	// NO EARLY OPTIMIZATION
+	// This shall remain in an unoptimized, unfactorized and flexible state for now!
+
+	// We are just meshing a single face, thus a square.
+	// We start by 4 points at the center of a block.
+	let mut a: cgmath::Point3<f32> = block_center;
+	let mut b: cgmath::Point3<f32> = block_center;
+	let mut c: cgmath::Point3<f32> = block_center;
+	let mut d: cgmath::Point3<f32> = block_center;
+	// We move the 4 points to the center of the face we are meshing.
+	a[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	b[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	c[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	d[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	// In doing so we moved the points along some axis.
+	// The two other axes are the ones that describe a plane in which the 4 points will be moved
+	// to make a square, so we get these two other axes.
+	let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
+		.into_iter()
+		.filter(|&axis| axis != face_orientation.axis);
+	let other_axis_a = other_axes.next().unwrap();
+	let other_axis_b = other_axes.next().unwrap();
+	assert!(other_axes.next().is_none());
+	// Now we move each point from the center of the face square to one of the square vertex.
+	a[other_axis_a.index()] -= 0.5;
+	a[other_axis_b.index()] -= 0.5;
+	b[other_axis_a.index()] -= 0.5;
+	b[other_axis_b.index()] += 0.5;
+	c[other_axis_a.index()] += 0.5;
+	c[other_axis_b.index()] -= 0.5;
+	d[other_axis_a.index()] += 0.5;
+	d[other_axis_b.index()] += 0.5;
+	// Face culling will discard triangles whose verices don't end up clipped to the screen in
+	// a counter-clockwise order. This means that triangles must be counter-clockwise when
+	// we look at their front and clockwise when we look at their back.
+	// `reverse_order` makes sure that they have the right orientation.
+	let reverse_order = match face_orientation.axis {
+		NonOrientedAxis::X => face_orientation.orientation == AxisOrientation::Negativewards,
+		NonOrientedAxis::Y => face_orientation.orientation == AxisOrientation::Positivewards,
+		NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
+	};
+	if !reverse_order {
+		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
+	} else {
+		vertices.push(BlockVertexPod { position: a.into(), color: [1.0, 0.0, 0.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
+		vertices.push(BlockVertexPod { position: b.into(), color: [0.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: d.into(), color: [1.0, 1.0, 0.0] });
+		vertices.push(BlockVertexPod { position: c.into(), color: [0.0, 0.0, 1.0] });
+	}
+}
+
 struct Chunk {
 	blocks: ChunkBlocks,
 	mesh: Option<ChunkMesh>,
@@ -174,9 +187,17 @@ struct ChunkGrid {
 impl ChunkGrid {
 	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
 		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
-		let chunk = self.map.get_mut(&chunk_coords).unwrap();
-		let block_dst = chunk.blocks.internal_block_mut(cd, internal_coords);
-		*block_dst = block;
+		match self.map.get_mut(&chunk_coords) {
+			Some(chunk) => {
+				let block_dst = chunk.blocks.internal_block_mut(cd, internal_coords);
+				*block_dst = block;
+			},
+			None => {
+				// TODO: Handle this case by storing the fact that a block
+				// has to be set when loding the chunk.
+				unimplemented!()
+			},
+		}
 	}
 
 	fn get_block(&self, cd: ChunkDimensions, coords: BlockCoords) -> Option<BlockTypeId> {
@@ -186,11 +207,21 @@ impl ChunkGrid {
 	}
 }
 
-struct AlignedPhysBox {
+/// Just a 3D rectangular axis-aligned box.
+/// It cannot rotate as it stays aligned on the axes.
+struct AlignedBox {
 	/// Position of the center of the box.
 	pos: cgmath::Point3<f32>,
-	motion: cgmath::Vector3<f32>,
+	/// Width of the box along each axis.
 	dims: cgmath::Vector3<f32>,
+}
+
+/// Represents an `AlignedBox`-shaped object that has physics or something like that.
+struct AlignedPhysBox {
+	aligned_box: AlignedBox,
+	motion: cgmath::Vector3<f32>,
+	/// Gravity's acceleration of this box is influenced by this parameter.
+	/// It may not be exactly analog to weight but it's not too far.
 	gravity_factor: f32,
 }
 
@@ -219,10 +250,12 @@ impl SimpleLineMesh {
 		SimpleLineMesh { vertices, vertex_buffer }
 	}
 
-	fn from_aligned_box(device: &wgpu::Device, aligned_box: &AlignedPhysBox) -> SimpleLineMesh {
+	fn from_aligned_box(device: &wgpu::Device, aligned_box: &AlignedBox) -> SimpleLineMesh {
+		// NO EARLY OPTIMIZATION
+		// This shall remain in an unoptimized, unfactorized and flexible state for now!
+
 		let color = [1.0, 1.0, 1.0];
 		let mut vertices = Vec::new();
-
 		// A---B  +--->   The L square and the H square are horizontal.
 		// |   |  |   X+  L has lower value of Z coord.
 		// C---D  v Y+    H has heigher value of Z coord.
@@ -261,13 +294,15 @@ impl SimpleLineMesh {
 		vertices.push(SimpleLineVertexPod { position: ch.into(), color });
 		vertices.push(SimpleLineVertexPod { position: dl.into(), color });
 		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
-
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
 }
 
 pub fn run() {
+	// Wgpu uses the `log`/`env_logger` crates to log errors and stuff,
+	// and we do want to see the errors very much.
 	env_logger::init();
+
 	let event_loop = EventLoop::new();
 	let window = WindowBuilder::new()
 		.with_title("Qwy3")
@@ -305,6 +340,8 @@ pub fn run() {
 
 	println!("SELECTED ADAPTER:");
 	dbg!(adapter.get_info());
+	// At some point it could be nice to allow the user to choose their preferred adapter.
+	// No one should have to struggle to make some game use the big GPU instead of the tiny one.
 	println!("AVAILABLE ADAPTERS:");
 	for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
 		dbg!(adapter.get_info());
@@ -381,33 +418,18 @@ pub fn run() {
 		label: Some("Camera Bind Group"),
 	});
 
-	let mut camera_angle_horizontal: f32 = 0.0;
-	let mut camera_angle_vertical: f32 = TAU / 4.0;
-	fn direction_from_angles(angle_horizontal: f32, angle_vertical: f32) -> cgmath::Vector3<f32> {
-		let direction_vertical = f32::cos(angle_vertical);
-		let direction_horizontal =
-			cgmath::Vector2::<f32>::from((f32::cos(angle_horizontal), f32::sin(angle_horizontal)))
-				* f32::sqrt(1.0 - direction_vertical.powi(2))
-				* if angle_vertical < 0.0 { -1.0 } else { 1.0 };
-		cgmath::Vector3::<f32>::from((
-			direction_horizontal.x,
-			direction_horizontal.y,
-			direction_vertical,
-		))
-	}
+	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
 
 	let mut player_phys = AlignedPhysBox {
-		pos: (5.5, 5.5, 5.5).into(),
+		aligned_box: AlignedBox { pos: (5.5, 5.5, 5.5).into(), dims: (0.8, 0.8, 1.8).into() },
 		motion: (0.0, 0.0, 0.0).into(),
-		dims: (0.8, 0.8, 1.8).into(),
 		gravity_factor: 1.0,
 	};
 	let mut enable_physics = true;
-
-	let mut moving_forward = false;
-	let mut moving_backward = false;
-	let mut moving_leftward = false;
-	let mut moving_rightward = false;
+	let mut walking_forward = false;
+	let mut walking_backward = false;
+	let mut walking_leftward = false;
+	let mut walking_rightward = false;
 
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
@@ -442,23 +464,6 @@ pub fn run() {
 		chunk.mesh = Some(mesh);
 	}
 
-	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
-		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
-		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-		],
-	};
-
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
 		format: wgpu::TextureFormat,
@@ -482,79 +487,102 @@ pub fn run() {
 	let mut z_buffer_view =
 		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
 
-	let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-		label: Some("Block Shader"),
-		source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/test_01.wgsl").into()),
-	});
-	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-		label: Some("Render Pipeline Layout"),
-		bind_group_layouts: &[&camera_bind_group_layout],
-		push_constant_ranges: &[],
-	});
-	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-		label: Some("Render Pipeline"),
-		layout: Some(&render_pipeline_layout),
-		vertex: wgpu::VertexState {
-			module: &block_shader,
-			entry_point: "vertex_shader_main",
-			buffers: &[block_vertex_buffer_layout],
-		},
-		fragment: Some(wgpu::FragmentState {
-			module: &block_shader,
-			entry_point: "fragment_shader_main",
-			targets: &[Some(wgpu::ColorTargetState {
-				format: config.format,
-				blend: Some(wgpu::BlendState::REPLACE),
-				write_mask: wgpu::ColorWrites::ALL,
-			})],
-		}),
-		primitive: wgpu::PrimitiveState {
-			topology: wgpu::PrimitiveTopology::TriangleList,
-			strip_index_format: None,
-			front_face: wgpu::FrontFace::Ccw,
-			cull_mode: Some(wgpu::Face::Back),
-			polygon_mode: wgpu::PolygonMode::Fill,
-			unclipped_depth: false,
-			conservative: false,
-		},
-		depth_stencil: Some(wgpu::DepthStencilState {
-			format: z_buffer_format,
-			depth_write_enabled: true,
-			depth_compare: wgpu::CompareFunction::Less,
-			stencil: wgpu::StencilState::default(),
-			bias: wgpu::DepthBiasState::default(),
-		}),
-		multisample: wgpu::MultisampleState { count: 1, mask: !0, alpha_to_coverage_enabled: false },
-		multiview: None,
-	});
-
-	let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
-		array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
-		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-		],
-	};
-	let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-		label: Some("Simple Line Shader"),
-		source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/simple_line.wgsl").into()),
-	});
-	let simple_line_render_pipeline_layout =
-		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Simple Line Render Pipeline Layout"),
-			bind_group_layouts: &[&camera_bind_group_layout],
-			push_constant_ranges: &[],
+	let block_render_pipeline = {
+		let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
+			array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
+			step_mode: wgpu::VertexStepMode::Vertex,
+			attributes: &[
+				wgpu::VertexAttribute {
+					offset: 0,
+					shader_location: 0,
+					format: wgpu::VertexFormat::Float32x3,
+				},
+				wgpu::VertexAttribute {
+					offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+					shader_location: 1,
+					format: wgpu::VertexFormat::Float32x3,
+				},
+			],
+		};
+		let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+			label: Some("Block Shader"),
+			source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/block.wgsl").into()),
 		});
-	let simple_line_render_pipeline =
+		let block_render_pipeline_layout =
+			device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+				label: Some("Render Pipeline Layout"),
+				bind_group_layouts: &[&camera_bind_group_layout],
+				push_constant_ranges: &[],
+			});
+		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+			label: Some("Render Pipeline"),
+			layout: Some(&block_render_pipeline_layout),
+			vertex: wgpu::VertexState {
+				module: &block_shader,
+				entry_point: "vertex_shader_main",
+				buffers: &[block_vertex_buffer_layout],
+			},
+			fragment: Some(wgpu::FragmentState {
+				module: &block_shader,
+				entry_point: "fragment_shader_main",
+				targets: &[Some(wgpu::ColorTargetState {
+					format: config.format,
+					blend: Some(wgpu::BlendState::REPLACE),
+					write_mask: wgpu::ColorWrites::ALL,
+				})],
+			}),
+			primitive: wgpu::PrimitiveState {
+				topology: wgpu::PrimitiveTopology::TriangleList,
+				strip_index_format: None,
+				front_face: wgpu::FrontFace::Ccw,
+				cull_mode: Some(wgpu::Face::Back),
+				polygon_mode: wgpu::PolygonMode::Fill,
+				unclipped_depth: false,
+				conservative: false,
+			},
+			depth_stencil: Some(wgpu::DepthStencilState {
+				format: z_buffer_format,
+				depth_write_enabled: true,
+				depth_compare: wgpu::CompareFunction::Less,
+				stencil: wgpu::StencilState::default(),
+				bias: wgpu::DepthBiasState::default(),
+			}),
+			multisample: wgpu::MultisampleState {
+				count: 1,
+				mask: !0,
+				alpha_to_coverage_enabled: false,
+			},
+			multiview: None,
+		})
+	};
+
+	let simple_line_render_pipeline = {
+		let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
+			array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
+			step_mode: wgpu::VertexStepMode::Vertex,
+			attributes: &[
+				wgpu::VertexAttribute {
+					offset: 0,
+					shader_location: 0,
+					format: wgpu::VertexFormat::Float32x3,
+				},
+				wgpu::VertexAttribute {
+					offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+					shader_location: 1,
+					format: wgpu::VertexFormat::Float32x3,
+				},
+			],
+		};
+		let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+			label: Some("Simple Line Shader"),
+			source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/simple_line.wgsl").into()),
+		});
+		let simple_line_render_pipeline_layout =
+			device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+				label: Some("Simple Line Render Pipeline Layout"),
+				bind_group_layouts: &[&camera_bind_group_layout],
+				push_constant_ranges: &[],
+			});
 		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 			label: Some("Simple Line Render Pipeline"),
 			layout: Some(&simple_line_render_pipeline_layout),
@@ -594,7 +622,8 @@ pub fn run() {
 				alpha_to_coverage_enabled: false,
 			},
 			multiview: None,
-		});
+		})
+	};
 
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();
@@ -612,6 +641,7 @@ pub fn run() {
 					},
 				..
 			} => *control_flow = ControlFlow::Exit,
+
 			WindowEvent::Resized(new_size) => {
 				let winit::dpi::PhysicalSize { width, height } = *new_size;
 				config.width = width;
@@ -620,56 +650,42 @@ pub fn run() {
 				z_buffer_view = make_z_buffer_texture_view(&device, z_buffer_format, width, height);
 				camera.aspect_ratio = aspect_ratio(width, height);
 			},
+
 			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::Z), .. },
+				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
 				..
-			} => {
-				moving_forward = *state == ElementState::Pressed;
-			},
-			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::S), .. },
-				..
-			} => {
-				moving_backward = *state == ElementState::Pressed;
-			},
-			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::Q), .. },
-				..
-			} => {
-				moving_leftward = *state == ElementState::Pressed;
-			},
-			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(VirtualKeyCode::D), .. },
-				..
-			} => {
-				moving_rightward = *state == ElementState::Pressed;
-			},
-			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state: ElementState::Pressed, virtual_keycode: Some(key), .. },
-				..
-			} => match key {
-				VirtualKeyCode::P => enable_physics = !enable_physics,
-				VirtualKeyCode::H => {
-					dbg!(player_phys.pos);
-					let player_bottom = player_phys.pos
-						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
-					dbg!(player_bottom);
-					let player_bottom_block_coords = (
-						player_bottom.x.round() as i32,
-						player_bottom.y.round() as i32,
-						player_bottom.z.round() as i32,
-					);
-					dbg!(player_bottom_block_coords);
-					println!();
-				},
-				VirtualKeyCode::O => {
-					let player_bottom = player_phys.pos
-						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
-					let player_bottom_block_coords = BlockCoords {
-						x: player_bottom.x.round() as i32,
-						y: player_bottom.y.round() as i32,
-						z: player_bottom.z.round() as i32,
+			} => match (key, state) {
+				(VirtualKeyCode::Z, _)
+				| (VirtualKeyCode::S, _)
+				| (VirtualKeyCode::Q, _)
+				| (VirtualKeyCode::D, _) => {
+					let moving_in_some_direction = match key {
+						VirtualKeyCode::Z => &mut walking_forward,
+						VirtualKeyCode::S => &mut walking_backward,
+						VirtualKeyCode::Q => &mut walking_leftward,
+						VirtualKeyCode::D => &mut walking_rightward,
+						_ => unreachable!(),
 					};
+					*moving_in_some_direction = *state == ElementState::Pressed;
+				},
+
+				(VirtualKeyCode::P, ElementState::Pressed) => enable_physics = !enable_physics,
+
+				(VirtualKeyCode::H, ElementState::Pressed) => {
+					dbg!(player_phys.aligned_box.pos);
+					let player_bottom = player_phys.aligned_box.pos
+						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
+					dbg!(player_bottom);
+				},
+
+				(VirtualKeyCode::O, ElementState::Pressed) => {
+					let player_bottom = player_phys.aligned_box.pos
+						- cgmath::Vector3::<f32>::from((
+							0.0,
+							0.0,
+							player_phys.aligned_box.dims.z / 2.0 + 0.1,
+						));
+					let player_bottom_block_coords = BlockCoords::from(player_bottom);
 					let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
 					if let Some(block) = player_bottom_block_opt {
 						chunk_grid.set_block(
@@ -687,6 +703,7 @@ pub fn run() {
 				},
 				_ => {},
 			},
+
 			WindowEvent::MouseInput {
 				state: winit::event::ElementState::Pressed,
 				button: winit::event::MouseButton::Right,
@@ -696,61 +713,72 @@ pub fn run() {
 			},
 			_ => {},
 		},
+
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. } => {
 			let sensitivity = 0.01;
-			camera_angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
-			camera_angle_vertical += delta.1 as f32 * sensitivity;
-			if camera_angle_vertical < 0.0 {
-				camera_angle_vertical = 0.0;
+			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
+			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
+			if camera_direction.angle_vertical < 0.0 {
+				camera_direction.angle_vertical = 0.0;
 			}
-			if TAU / 2.0 < camera_angle_vertical {
-				camera_angle_vertical = TAU / 2.0;
+			if TAU / 2.0 < camera_direction.angle_vertical {
+				camera_direction.angle_vertical = TAU / 2.0;
 			}
 		},
+
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseWheel { delta }, .. } => {
 			let (dx, dy) = match delta {
 				MouseScrollDelta::LineDelta(horizontal, vertical) => (horizontal, vertical),
 				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
 			};
 			let sensitivity = 0.01;
-			player_phys.pos.z -= dy * sensitivity;
-			player_phys.pos +=
-				direction_from_angles(camera_angle_horizontal + TAU / 4.0 * dx.signum(), TAU / 4.0)
-					* f32::abs(dx) * sensitivity;
+			let direction_left_or_right = camera_direction
+				.to_horizontal()
+				.add_to_horizontal_angle(TAU / 4.0 * dx.signum());
+			player_phys.aligned_box.pos.z -= dy * sensitivity;
+			player_phys.aligned_box.pos +=
+				direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
 		},
+
 		Event::MainEventsCleared => {
 			let _time_since_beginning = time_beginning.elapsed();
 			let now = std::time::Instant::now();
 			let dt = now - time_from_last_iteration;
 			time_from_last_iteration = now;
 
-			let moving_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
-			let moving_forward_factor =
-				if moving_forward { 1 } else { 0 } + if moving_backward { -1 } else { 0 };
-			let moving_rightward_factor =
-				if moving_rightward { 1 } else { 0 } + if moving_leftward { -1 } else { 0 };
-			player_phys.pos += direction_from_angles(camera_angle_horizontal, TAU / 4.0)
-				* moving_forward_factor as f32
-				* moving_factor;
-			player_phys.pos += direction_from_angles(camera_angle_horizontal - TAU / 4.0, TAU / 4.0)
-				* moving_rightward_factor as f32
-				* moving_factor;
+			let walking_vector = {
+				let walking_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
+				let walking_forward_factor =
+					if walking_forward { 1 } else { 0 } + if walking_backward { -1 } else { 0 };
+				let walking_rightward_factor =
+					if walking_rightward { 1 } else { 0 } + if walking_leftward { -1 } else { 0 };
+				let walking_forward_direction =
+					camera_direction.to_horizontal().to_vec3() * walking_forward_factor as f32;
+				let walking_rightward_direction = camera_direction
+					.to_horizontal()
+					.add_to_horizontal_angle(-TAU / 4.0)
+					.to_vec3() * walking_rightward_factor as f32;
+				let walking_vector_direction = walking_forward_direction + walking_rightward_direction;
+				(if walking_vector_direction.magnitude() == 0.0 {
+					walking_vector_direction
+				} else {
+					walking_vector_direction.normalize()
+				} * walking_factor)
+			};
+			player_phys.aligned_box.pos += walking_vector;
 
 			if enable_physics {
-				let player_bottom =
-					player_phys.pos - cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0));
-				let player_bottom_block_coords = BlockCoords {
-					x: player_bottom.x.round() as i32,
-					y: player_bottom.y.round() as i32,
-					z: player_bottom.z.round() as i32,
-				};
+				let player_bottom = player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
+				let player_bottom_block_coords = BlockCoords::from(player_bottom);
 				let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
 				let is_on_ground = if player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt {
 						if block.is_not_air {
+							// The player is on the ground, so we make sure we are not overlapping it.
 							player_phys.motion.z = 0.0;
-							player_phys.pos.z =
-								player_bottom_block_coords.z as f32 + 0.5 + player_phys.dims.z / 2.0;
+							player_phys.aligned_box.pos.z = player_bottom_block_coords.z as f32
+								+ 0.5 + player_phys.aligned_box.dims.z / 2.0;
 							true
 						} else {
 							false
@@ -761,21 +789,26 @@ pub fn run() {
 				} else {
 					false
 				};
-				player_phys.pos += player_phys.motion;
+				player_phys.aligned_box.pos += player_phys.motion;
 				if !is_on_ground {
 					player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
 				}
 			}
 
-			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys);
+			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys.aligned_box);
 
-			let camera_position = player_phys.pos
-				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.dims.z / 2.0)) * 0.7;
-			let direction = direction_from_angles(camera_angle_horizontal, camera_angle_vertical);
-			let up_head =
-				direction_from_angles(camera_angle_horizontal, camera_angle_vertical - TAU / 4.0);
-			let camera_view_projection_matrix =
-				camera.view_projection_matrix(camera_position, direction, up_head);
+			let camera_view_projection_matrix = {
+				let camera_position = player_phys.aligned_box.pos
+					+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0))
+						* 0.7;
+				let camera_direction_vector = camera_direction.to_vec3();
+				let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
+				camera.view_projection_matrix(
+					camera_position,
+					camera_direction_vector,
+					camera_up_vector,
+				)
+			};
 			queue.write_buffer(
 				&camera_matrix_buffer,
 				0,
@@ -783,45 +816,46 @@ pub fn run() {
 			);
 
 			let window_texture = window_surface.get_current_texture().unwrap();
-			let view = window_texture
+			let window_texture_view = window_texture
 				.texture
 				.create_view(&wgpu::TextureViewDescriptor::default());
 			let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
 				label: Some("Render Encoder"),
 			});
+			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+				label: Some("Render Pass"),
+				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+					view: &window_texture_view,
+					resolve_target: None,
+					ops: wgpu::Operations {
+						load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
+						store: true,
+					},
+				})],
+				depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+					view: &z_buffer_view,
+					depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+					stencil_ops: None,
+				}),
+			});
 
-			{
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &view,
-						resolve_target: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
-							store: true,
-						},
-					})],
-					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &z_buffer_view,
-						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
-						stencil_ops: None,
-					}),
-				});
-
-				render_pass.set_pipeline(&render_pipeline);
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				for (_chunk_coords, chunk) in chunk_grid.map.iter() {
-					if let Some(ref mesh) = chunk.mesh {
-						render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
-						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
-					}
+			render_pass.set_pipeline(&block_render_pipeline);
+			render_pass.set_bind_group(0, &camera_bind_group, &[]);
+			for (_chunk_coords, chunk) in chunk_grid.map.iter() {
+				if let Some(ref mesh) = chunk.mesh {
+					render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
+					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 				}
-
-				render_pass.set_pipeline(&simple_line_render_pipeline);
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
 			}
+
+			render_pass.set_pipeline(&simple_line_render_pipeline);
+			render_pass.set_bind_group(0, &camera_bind_group, &[]);
+			render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
+			render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
+
+			// Release `render_pass.parent` which is a ref mut to `encoder`.
+			drop(render_pass);
+
 			queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();
 		},

@@ -6,12 +6,24 @@
 //! This means that the world is as infinite along the Z axis (in both directions) as it is
 //! horizontally.
 
+use std::f32::consts::TAU;
+
 /// Coordinates of a block in the world.
 #[derive(Clone, Copy)]
 pub struct BlockCoords {
 	pub x: i32,
 	pub y: i32,
 	pub z: i32,
+}
+
+impl From<cgmath::Point3<f32>> for BlockCoords {
+	fn from(position: cgmath::Point3<f32>) -> Self {
+		BlockCoords {
+			x: position.x.round() as i32,
+			y: position.y.round() as i32,
+			z: position.z.round() as i32,
+		}
+	}
 }
 
 /// Chunks are cubic parts of the world, all of the same size and arranged in a 3D grid.
@@ -244,5 +256,76 @@ impl OrientedAxis {
 			AxisOrientation::iter_over_the_two_possible_orientations()
 				.map(move |orientation| OrientedAxis { axis, orientation })
 		})
+	}
+}
+
+/// Spherical polar coordinates, represent a direction in 3D (a vector without a magnitude).
+/// It makes wokring with some stuff eazier than via a normalized vector.
+///
+/// Angles are in radians.
+#[derive(Clone, Copy)]
+pub struct AngularDirection {
+	/// Angle of the direction when projected on the horizontal plane.
+	/// It should range from `0.0` to `TAU` radians.
+	pub angle_horizontal: f32,
+	/// Angle that gives the direction a height component (along the Z axis).
+	/// * `0.0` radians means that the direction points straight upwards,
+	/// * `TAU / 4.0` means that the direction is horizontal,
+	/// * `TAU / 2.0` means that the direction points straight downwards.
+	///
+	/// It is not really an issue if this angle gets outside of its range
+	/// (from `0.0` to `TAU / 2.0`) but uh.. idk, maybe it is in some cases, beware.
+	pub angle_vertical: f32,
+}
+
+impl AngularDirection {
+	/// When `AngularDirection::angle_vertical` is `ANGLE_VERTICAL_HORIZONTAL` then
+	/// it means the angular direction is horizontal (no Z component).
+	///
+	/// See the documentation of `AngularDirection::angle_vertical`.
+	const ANGLE_VERTICAL_HORIZONTAL: f32 = TAU / 4.0;
+
+	pub fn from_angles(angle_horizontal: f32, angle_vertical: f32) -> AngularDirection {
+		AngularDirection { angle_horizontal, angle_vertical }
+	}
+
+	pub fn from_angle_horizontal(angle_horizontal: f32) -> AngularDirection {
+		AngularDirection::from_angles(
+			angle_horizontal,
+			AngularDirection::ANGLE_VERTICAL_HORIZONTAL,
+		)
+	}
+
+	pub fn add_to_horizontal_angle(mut self, angle_horizontal_to_add: f32) -> AngularDirection {
+		self.angle_horizontal += angle_horizontal_to_add;
+		self
+	}
+
+	pub fn add_to_vertical_angle(mut self, angle_vertical_to_add: f32) -> AngularDirection {
+		self.angle_vertical += angle_vertical_to_add;
+		self
+	}
+
+	pub fn to_horizontal(mut self) -> AngularDirection {
+		self.angle_vertical = AngularDirection::ANGLE_VERTICAL_HORIZONTAL;
+		self
+	}
+
+	/// Turn it into a good old vec3, normalized.
+	pub fn to_vec3(self) -> cgmath::Vector3<f32> {
+		let direction_vertical = f32::cos(self.angle_vertical);
+		let mut direction_horizontal = cgmath::Vector2::<f32>::from((
+			f32::cos(self.angle_horizontal),
+			f32::sin(self.angle_horizontal),
+		));
+		// Kinda normalize the result.
+		direction_horizontal *= f32::sqrt(1.0 - direction_vertical.powi(2));
+		// Handle the fact that `angle_vertical` may be outside of the `0.0` to `TAU / 2.0` range.
+		direction_horizontal *= if self.angle_vertical < 0.0 { -1.0 } else { 1.0 };
+		cgmath::Vector3::<f32>::from((
+			direction_horizontal.x,
+			direction_horizontal.y,
+			direction_vertical,
+		))
 	}
 }
