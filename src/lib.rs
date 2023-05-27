@@ -419,6 +419,7 @@ pub fn run() {
 	});
 
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
+	let mut enable_camera_third_person = false;
 
 	let mut player_phys = AlignedPhysBox {
 		aligned_box: AlignedBox { pos: (5.5, 5.5, 5.5).into(), dims: (0.8, 0.8, 1.8).into() },
@@ -671,6 +672,10 @@ pub fn run() {
 
 				(VirtualKeyCode::P, ElementState::Pressed) => enable_physics = !enable_physics,
 
+				(VirtualKeyCode::M, ElementState::Pressed) => {
+					enable_camera_third_person = !enable_camera_third_person
+				},
+
 				(VirtualKeyCode::H, ElementState::Pressed) => {
 					dbg!(player_phys.aligned_box.pos);
 					let player_bottom = player_phys.aligned_box.pos
@@ -798,10 +803,13 @@ pub fn run() {
 			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys.aligned_box);
 
 			let camera_view_projection_matrix = {
-				let camera_position = player_phys.aligned_box.pos
+				let mut camera_position = player_phys.aligned_box.pos
 					+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0))
 						* 0.7;
 				let camera_direction_vector = camera_direction.to_vec3();
+				if enable_camera_third_person {
+					camera_position -= camera_direction_vector * 5.0;
+				}
 				let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
 				camera.view_projection_matrix(
 					camera_position,
