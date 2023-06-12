@@ -53,7 +53,6 @@ impl ChunkBlocks {
 impl ChunkBlocks {
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
-		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
 		surrounded_by_opaque: bool,
@@ -83,7 +82,7 @@ impl ChunkBlocks {
 				}
 			}
 		}
-		ChunkMesh::from_vertices(device, block_vertices)
+		ChunkMesh::from_vertices(block_vertices)
 	}
 
 	/// Generates the faces of blocks in the chunk at `chunk_coords` that touch blocks in
@@ -91,13 +90,15 @@ impl ChunkBlocks {
 	/// given the blocks in the neighbor chunk.
 	fn generate_missing_faces_on_chunk_boarder_in_mesh(
 		&self,
-		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
 		chunk_mesh: &mut ChunkMesh,
 		neighbor_chunk: &ChunkBlocks,
 		neighbor_chunk_coords: ChunkCoords,
 	) {
+		assert!(chunk_coords.is_neighbor_with(neighbor_chunk_coords));
+		// Note that this is redundent with the `unwrap` of the direction...
+		// TODO: Remove?
 		let direction = chunk_coords
 			.direction_to_neighbor(neighbor_chunk_coords)
 			.unwrap();
@@ -122,26 +123,36 @@ impl ChunkBlocks {
 				}
 			}
 		}
+		chunk_mesh.cpu_to_gpu_update_required = true;
 	}
 }
 
 struct ChunkMesh {
 	block_vertices: Vec<BlockVertexPod>,
-	block_vertex_buffer: wgpu::Buffer,
+	block_vertex_buffer: Option<wgpu::Buffer>,
+	// When `block_vertices` is modified, `block_vertex_buffer` becomes out of sync
+	// and must be updated. This is what this field keeps track of.
+	cpu_to_gpu_update_required: bool,
 }
 
 impl ChunkMesh {
-	fn from_vertices(device: &wgpu::Device, block_vertices: Vec<BlockVertexPod>) -> ChunkMesh {
-		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("Block Vertex Buffer"),
-			contents: bytemuck::cast_slice(&block_vertices),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
-		ChunkMesh { block_vertices, block_vertex_buffer }
+	fn from_vertices(block_vertices: Vec<BlockVertexPod>) -> ChunkMesh {
+		let cpu_to_gpu_update_required = !block_vertices.is_empty();
+		ChunkMesh {
+			block_vertices,
+			block_vertex_buffer: None,
+			cpu_to_gpu_update_required,
+		}
 	}
 
-	fn update_buffer_from_vertices(self, device: &wgpu::Device) -> ChunkMesh {
-		ChunkMesh::from_vertices(device, self.block_vertices)
+	fn update_gpu_data(&mut self, device: &wgpu::Device) {
+		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Block Vertex Buffer"),
+			contents: bytemuck::cast_slice(&self.block_vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+		self.block_vertex_buffer = Some(block_vertex_buffer);
+		self.cpu_to_gpu_update_required = false;
 	}
 }
 
@@ -238,7 +249,6 @@ impl Chunk {
 
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&mut self,
-		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
 		surrounded_by_opaque: bool,
@@ -246,7 +256,6 @@ impl Chunk {
 		let mesh = self
 			.blocks
 			.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-				device,
 				cd,
 				chunk_coords,
 				surrounded_by_opaque,
@@ -553,26 +562,25 @@ pub fn run() {
 	// The borrow checker is hard but fair, but here it is too hard.
 	// Borrowing the chunk map mutably in a more fine grained manner is necessary here,
 	// and iterating over the keys without borrowing it is the only way I could find.
+	// Also removing a chunk from the map to modify its mesh while iterating over other chunks
+	// in the map before putting the chunk back in is the only thing that worked (among the lots
+	// of things that I tried).
 	// TODO: Find a better way maybe?
 	// TODO: Definitely find something better here, this piece of code is highly questionable.
 	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().cloned().collect();
 	for chunk_coords in chunk_coords_list {
+		// We are going to generate the mesh of the `chunk`. It will be inserted back in
+		// when we are done with it.
 		let mut chunk = chunk_grid.map.remove(&chunk_coords).unwrap();
-		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-			&device,
-			cd,
-			chunk_coords,
-			true,
-		);
+
+		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(cd, chunk_coords, true);
 
 		for direction in OrientedAxis::all_the_six_possible_directions() {
 			let neighbor_chunk_coords = chunk_coords.moved_one_chunk_in_direction(direction);
 			if chunk_grid.map.contains_key(&neighbor_chunk_coords) {
 				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
 				let Chunk { ref blocks, ref mut mesh } = chunk;
-
 				blocks.generate_missing_faces_on_chunk_boarder_in_mesh(
-					&device,
 					cd,
 					chunk_coords,
 					mesh.as_mut().unwrap(),
@@ -582,7 +590,7 @@ pub fn run() {
 			}
 		}
 
-		chunk.mesh = Some(chunk.mesh.unwrap().update_buffer_from_vertices(&device));
+		chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
 		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
@@ -876,11 +884,13 @@ pub fn run() {
 							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
 						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
 						chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-							&device,
 							cd,
 							chunk_coords,
 							true,
 						);
+						chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
+						// TODO: If the block is on the edge of a chunk we also need to update the
+						// meshes of these chunks.
 					}
 				},
 				_ => {},
@@ -1051,7 +1061,8 @@ pub fn run() {
 			render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
 			for (_chunk_coords, chunk) in chunk_grid.map.iter() {
 				if let Some(ref mesh) = chunk.mesh {
-					render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
+					render_pass
+						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
 					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 				}
 			}
