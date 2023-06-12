@@ -51,11 +51,12 @@ impl ChunkBlocks {
 }
 
 impl ChunkBlocks {
-	fn generate_mesh_assuming_surrounded_by_air(
+	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
 		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
+		surrounded_by_opaque: bool,
 	) -> ChunkMesh {
 		let mut block_vertices = Vec::new();
 		for internal_coords in cd.iter_internal_block_coords() {
@@ -66,7 +67,7 @@ impl ChunkBlocks {
 						{
 							self.internal_block(cd, internal_neighbor).is_not_air
 						} else {
-							false
+							surrounded_by_opaque
 						}
 					};
 					if !covered {
@@ -84,6 +85,44 @@ impl ChunkBlocks {
 		}
 		ChunkMesh::from_vertices(device, block_vertices)
 	}
+
+	/// Generates the faces of blocks in the chunk at `chunk_coords` that touch blocks in
+	/// the neighbor chunk at `neighbor_chunk_coords` and that cen be known to be visible
+	/// given the blocks in the neighbor chunk.
+	fn generate_missing_faces_on_chunk_boarder_in_mesh(
+		&self,
+		device: &wgpu::Device,
+		cd: ChunkDimensions,
+		chunk_coords: ChunkCoords,
+		chunk_mesh: &mut ChunkMesh,
+		neighbor_chunk: &ChunkBlocks,
+		neighbor_chunk_coords: ChunkCoords,
+	) {
+		let direction = chunk_coords
+			.direction_to_neighbor(neighbor_chunk_coords)
+			.unwrap();
+		for internal_coords in cd.iter_internal_block_coords_on_chunk_face(direction) {
+			if self.internal_block(cd, internal_coords).is_not_air {
+				let world_coords =
+					cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
+				let covering_block_world_coords = world_coords.moved_one_block_in_direction(direction);
+				let (covering_block_chunk_coords, covering_block_internal_coords) =
+					cd.world_coords_to_chunk_internal_coords(covering_block_world_coords);
+				assert_eq!(covering_block_chunk_coords, neighbor_chunk_coords);
+				let covered = neighbor_chunk
+					.internal_block(cd, covering_block_internal_coords)
+					.is_not_air;
+				if !covered {
+					let BlockCoords { x, y, z } = world_coords;
+					generate_block_face_mesh(
+						&mut chunk_mesh.block_vertices,
+						direction,
+						(x as f32, y as f32, z as f32).into(),
+					);
+				}
+			}
+		}
+	}
 }
 
 struct ChunkMesh {
@@ -99,6 +138,10 @@ impl ChunkMesh {
 			usage: wgpu::BufferUsages::VERTEX,
 		});
 		ChunkMesh { block_vertices, block_vertex_buffer }
+	}
+
+	fn update_buffer_from_vertices(self, device: &wgpu::Device) -> ChunkMesh {
+		ChunkMesh::from_vertices(device, self.block_vertices)
 	}
 }
 
@@ -193,15 +236,21 @@ impl Chunk {
 		Chunk { blocks: ChunkBlocks::new(cd), mesh: None }
 	}
 
-	fn generate_mesh_assuming_surrounded_by_air(
+	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&mut self,
 		device: &wgpu::Device,
 		cd: ChunkDimensions,
 		chunk_coords: ChunkCoords,
+		surrounded_by_opaque: bool,
 	) {
 		let mesh = self
 			.blocks
-			.generate_mesh_assuming_surrounded_by_air(device, cd, chunk_coords);
+			.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
+				device,
+				cd,
+				chunk_coords,
+				surrounded_by_opaque,
+			);
 		self.mesh = Some(mesh);
 	}
 }
@@ -499,8 +548,42 @@ pub fn run() {
 		}
 	}
 
-	for (&chunk_coords, chunk) in chunk_grid.map.iter_mut() {
-		chunk.generate_mesh_assuming_surrounded_by_air(&device, cd, chunk_coords);
+	// It seems pretty hard (or at least it requires a trick that I didn't figure out yet)
+	// to iterate over pairs of values of a HashMap and be able to mutate them.
+	// The borrow checker is hard but fair, but here it is too hard.
+	// Borrowing the chunk map mutably in a more fine grained manner is necessary here,
+	// and iterating over the keys without borrowing it is the only way I could find.
+	// TODO: Find a better way maybe?
+	// TODO: Definitely find something better here, this piece of code is highly questionable.
+	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().cloned().collect();
+	for chunk_coords in chunk_coords_list {
+		let mut chunk = chunk_grid.map.remove(&chunk_coords).unwrap();
+		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
+			&device,
+			cd,
+			chunk_coords,
+			true,
+		);
+
+		for direction in OrientedAxis::all_the_six_possible_directions() {
+			let neighbor_chunk_coords = chunk_coords.moved_one_chunk_in_direction(direction);
+			if chunk_grid.map.contains_key(&neighbor_chunk_coords) {
+				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
+				let Chunk { ref blocks, ref mut mesh } = chunk;
+
+				blocks.generate_missing_faces_on_chunk_boarder_in_mesh(
+					&device,
+					cd,
+					chunk_coords,
+					mesh.as_mut().unwrap(),
+					&neighbor_chunk.blocks,
+					neighbor_chunk_coords,
+				);
+			}
+		}
+
+		chunk.mesh = Some(chunk.mesh.unwrap().update_buffer_from_vertices(&device));
+		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
 	let mut sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
@@ -792,7 +875,12 @@ pub fn run() {
 						let chunk_coords =
 							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
 						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-						chunk.generate_mesh_assuming_surrounded_by_air(&device, cd, chunk_coords);
+						chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
+							&device,
+							cd,
+							chunk_coords,
+							true,
+						);
 					}
 				},
 				_ => {},

@@ -26,6 +26,19 @@ impl From<cgmath::Point3<f32>> for BlockCoords {
 	}
 }
 
+impl BlockCoords {
+	pub fn moved_one_block_in_direction(mut self, direction: OrientedAxis) -> BlockCoords {
+		if direction.axis == NonOrientedAxis::X {
+			self.x += direction.orientation.sign()
+		} else if direction.axis == NonOrientedAxis::Y {
+			self.y += direction.orientation.sign()
+		} else if direction.axis == NonOrientedAxis::Z {
+			self.z += direction.orientation.sign()
+		}
+		self
+	}
+}
+
 /// Chunks are cubic parts of the world, all of the same size and arranged in a 3D grid.
 /// The length (in blocks) of the edges of the chunks is not hardcoded. It can be
 /// modified (to some extent) and passed around in a `ChunkDimensions`.
@@ -101,6 +114,21 @@ impl ChunkDimensions {
 		})
 	}
 
+	/// Iterates over the blocks in a chunk that are on the given face of the chunk.
+	pub fn iter_internal_block_coords_on_chunk_face(
+		self,
+		face_orientation: OrientedAxis,
+	) -> impl Iterator<Item = ChunkInternalBlockCoords> {
+		let mut inf: [i32; 3] = [0, 0, 0];
+		let mut dims: [u32; 3] = [self.edge, self.edge, self.edge];
+		if face_orientation.orientation == AxisOrientation::Positivewards {
+			inf[face_orientation.axis.index()] += (self.edge - 1) as i32;
+		}
+		dims[face_orientation.axis.index()] = 1;
+		iter_3d_rect_inf_dims((inf[0], inf[1], inf[2]), (dims[0], dims[1], dims[2]))
+			.map(|(x, y, z)| ChunkInternalBlockCoords { x: x as u32, y: y as u32, z: z as u32 })
+	}
+
 	pub fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
 		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
 		(z * self.edge.pow(2) + y * self.edge + x) as usize
@@ -163,7 +191,7 @@ pub fn iter_3d_cube_center_radius(
 
 /// Coordinates of a chunk in the 3D grid of chunks
 /// (which is not on the same scale as block coords, here we designate whole chunks).
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ChunkCoords {
 	pub x: i32,
 	pub y: i32,
@@ -174,6 +202,48 @@ impl From<(i32, i32, i32)> for ChunkCoords {
 	fn from(coords: (i32, i32, i32)) -> ChunkCoords {
 		let (x, y, z) = coords;
 		ChunkCoords { x, y, z }
+	}
+}
+
+impl ChunkCoords {
+	pub fn is_neighbor_with(self, other: ChunkCoords) -> bool {
+		self.x.abs_diff(other.x) + self.y.abs_diff(other.y) + self.z.abs_diff(other.z) == 1
+	}
+
+	/// This is supposed to return the direction to go from `self` to `other` if that takes
+	/// just one move of one chunk (so if they are neighbors). Returns `None` if not neighbors.
+	pub fn direction_to_neighbor(self, other: ChunkCoords) -> Option<OrientedAxis> {
+		let dx = other.x - self.x;
+		let dy = other.y - self.y;
+		let dz = other.z - self.z;
+		let (axis, d) = if dx != 0 && dy == 0 && dz == 0 {
+			(NonOrientedAxis::X, dx)
+		} else if dx == 0 && dy != 0 && dz == 0 {
+			(NonOrientedAxis::Y, dy)
+		} else if dx == 0 && dy == 0 && dz != 0 {
+			(NonOrientedAxis::Z, dz)
+		} else {
+			return None;
+		};
+		let orientation = if d == -1 {
+			AxisOrientation::Negativewards
+		} else if d == 1 {
+			AxisOrientation::Positivewards
+		} else {
+			return None;
+		};
+		Some(OrientedAxis { axis, orientation })
+	}
+
+	pub fn moved_one_chunk_in_direction(mut self, direction: OrientedAxis) -> ChunkCoords {
+		if direction.axis == NonOrientedAxis::X {
+			self.x += direction.orientation.sign()
+		} else if direction.axis == NonOrientedAxis::Y {
+			self.y += direction.orientation.sign()
+		} else if direction.axis == NonOrientedAxis::Z {
+			self.z += direction.orientation.sign()
+		}
+		self
 	}
 }
 
