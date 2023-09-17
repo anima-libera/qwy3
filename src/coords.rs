@@ -45,11 +45,11 @@ impl BlockCoords {
 #[derive(Clone, Copy)]
 pub struct ChunkDimensions {
 	/// Length (in blocks) of the edge of each (cubic) chunk.
-	pub edge: u32,
+	pub edge: i32,
 }
 
-impl From<u32> for ChunkDimensions {
-	fn from(chunk_side_length: u32) -> ChunkDimensions {
+impl From<i32> for ChunkDimensions {
+	fn from(chunk_side_length: i32) -> ChunkDimensions {
 		ChunkDimensions { edge: chunk_side_length }
 	}
 }
@@ -64,13 +64,13 @@ impl ChunkDimensions {
 /// (so relative to the negativeward corner of a chunk).
 #[derive(Clone, Copy)]
 pub struct ChunkInternalBlockCoords {
-	pub x: u32,
-	pub y: u32,
-	pub z: u32,
+	pub x: i32,
+	pub y: i32,
+	pub z: i32,
 }
 
 impl ChunkInternalBlockCoords {
-	pub fn coord(self, axis: NonOrientedAxis) -> u32 {
+	pub fn coord(self, axis: NonOrientedAxis) -> i32 {
 		match axis {
 			NonOrientedAxis::X => self.x,
 			NonOrientedAxis::Y => self.y,
@@ -78,7 +78,7 @@ impl ChunkInternalBlockCoords {
 		}
 	}
 
-	pub fn coord_mut(&mut self, axis: NonOrientedAxis) -> &mut u32 {
+	pub fn coord_mut(&mut self, axis: NonOrientedAxis) -> &mut i32 {
 		match axis {
 			NonOrientedAxis::X => &mut self.x,
 			NonOrientedAxis::Y => &mut self.y,
@@ -91,16 +91,12 @@ impl ChunkInternalBlockCoords {
 		cd: ChunkDimensions,
 		direction: OrientedAxis,
 	) -> Option<ChunkInternalBlockCoords> {
-		let new_coord_value_opt = self
-			.coord(direction.axis)
-			.checked_add_signed(direction.orientation.sign());
-		match new_coord_value_opt {
-			None => None,
-			Some(new_coord_value) if cd.edge <= new_coord_value => None,
-			Some(new_coord_value) => {
-				*self.coord_mut(direction.axis) = new_coord_value;
-				Some(self)
-			},
+		let new_coord_value = self.coord(direction.axis) + direction.orientation.sign();
+		if new_coord_value < 0 || cd.edge <= new_coord_value {
+			None
+		} else {
+			*self.coord_mut(direction.axis) = new_coord_value;
+			Some(self)
 		}
 	}
 }
@@ -108,9 +104,9 @@ impl ChunkInternalBlockCoords {
 impl ChunkDimensions {
 	pub fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
 		iter_3d_cube_inf_edge((0, 0, 0), self.edge).map(|(x, y, z)| ChunkInternalBlockCoords {
-			x: x as u32,
-			y: y as u32,
-			z: z as u32,
+			x,
+			y,
+			z,
 		})
 	}
 
@@ -120,13 +116,13 @@ impl ChunkDimensions {
 		face_orientation: OrientedAxis,
 	) -> impl Iterator<Item = ChunkInternalBlockCoords> {
 		let mut inf: [i32; 3] = [0, 0, 0];
-		let mut dims: [u32; 3] = [self.edge, self.edge, self.edge];
+		let mut dims: [i32; 3] = [self.edge, self.edge, self.edge];
 		if face_orientation.orientation == AxisOrientation::Positivewards {
-			inf[face_orientation.axis.index()] += (self.edge - 1) as i32;
+			inf[face_orientation.axis.index()] += self.edge - 1;
 		}
 		dims[face_orientation.axis.index()] = 1;
 		iter_3d_rect_inf_dims((inf[0], inf[1], inf[2]), (dims[0], dims[1], dims[2]))
-			.map(|(x, y, z)| ChunkInternalBlockCoords { x: x as u32, y: y as u32, z: z as u32 })
+			.map(|(x, y, z)| ChunkInternalBlockCoords { x, y, z })
 	}
 
 	pub fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
@@ -152,20 +148,16 @@ pub fn iter_3d_rect_inf_sup(
 /// Iterates over the 3D rectangle area `inf..(inf+dims)` (`inf+dims` not included).
 pub fn iter_3d_rect_inf_dims(
 	inf: (i32, i32, i32),
-	dims: (u32, u32, u32),
+	dims: (i32, i32, i32),
 ) -> impl Iterator<Item = (i32, i32, i32)> {
-	let sup = (
-		inf.0 + dims.0 as i32,
-		inf.1 + dims.1 as i32,
-		inf.2 + dims.2 as i32,
-	);
+	let sup = (inf.0 + dims.0, inf.1 + dims.1, inf.2 + dims.2);
 	iter_3d_rect_inf_sup(inf, sup)
 }
 
 /// Iterates over a 3D cubic area of negativewards corner at `inf` and edges of length `edge`.
 pub fn iter_3d_cube_inf_edge(
 	inf: (i32, i32, i32),
-	edge: u32,
+	edge: i32,
 ) -> impl Iterator<Item = (i32, i32, i32)> {
 	iter_3d_rect_inf_dims(inf, (edge, edge, edge))
 }
@@ -173,16 +165,16 @@ pub fn iter_3d_cube_inf_edge(
 /// Iterates over a 3D cubic area of the given center and given radius.
 pub fn iter_3d_cube_center_radius(
 	center: (i32, i32, i32),
-	radius: u32,
+	radius: i32,
 ) -> impl Iterator<Item = (i32, i32, i32)> {
 	if radius == 0 {
 		iter_3d_cube_inf_edge(center, 0)
 	} else {
 		iter_3d_cube_inf_edge(
 			(
-				center.0 - (radius - 1) as i32,
-				center.1 - (radius - 1) as i32,
-				center.2 - (radius - 1) as i32,
+				center.0 - (radius - 1),
+				center.1 - (radius - 1),
+				center.2 - (radius - 1),
 			),
 			radius * 2 - 1,
 		)
@@ -254,17 +246,17 @@ impl ChunkDimensions {
 		internal_coords: ChunkInternalBlockCoords,
 	) -> BlockCoords {
 		BlockCoords {
-			x: (internal_coords.x as i32) + chunk_coords.x * (self.edge as i32),
-			y: (internal_coords.y as i32) + chunk_coords.y * (self.edge as i32),
-			z: (internal_coords.z as i32) + chunk_coords.z * (self.edge as i32),
+			x: internal_coords.x + chunk_coords.x * self.edge,
+			y: internal_coords.y + chunk_coords.y * self.edge,
+			z: internal_coords.z + chunk_coords.z * self.edge,
 		}
 	}
 
 	pub fn world_coords_to_containing_chunk_coords(self, coords: BlockCoords) -> ChunkCoords {
 		ChunkCoords {
-			x: coords.x.div_euclid(self.edge as i32),
-			y: coords.y.div_euclid(self.edge as i32),
-			z: coords.z.div_euclid(self.edge as i32),
+			x: coords.x.div_euclid(self.edge),
+			y: coords.y.div_euclid(self.edge),
+			z: coords.z.div_euclid(self.edge),
 		}
 	}
 
@@ -274,9 +266,9 @@ impl ChunkDimensions {
 	) -> (ChunkCoords, ChunkInternalBlockCoords) {
 		let chunk_coords = self.world_coords_to_containing_chunk_coords(coords);
 		let internal_coords = ChunkInternalBlockCoords {
-			x: coords.x.rem_euclid(self.edge as i32) as u32,
-			y: coords.y.rem_euclid(self.edge as i32) as u32,
-			z: coords.z.rem_euclid(self.edge as i32) as u32,
+			x: coords.x.rem_euclid(self.edge),
+			y: coords.y.rem_euclid(self.edge),
+			z: coords.z.rem_euclid(self.edge),
 		};
 		(chunk_coords, internal_coords)
 	}
