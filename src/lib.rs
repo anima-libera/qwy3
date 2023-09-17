@@ -1,5 +1,6 @@
 mod camera;
 mod coords;
+mod shaders;
 
 use std::{collections::HashMap, f32::consts::TAU};
 
@@ -13,6 +14,9 @@ use winit::{
 
 use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
 use coords::*;
+
+use shaders::block::BlockVertexPod;
+use shaders::simple_line::SimpleLineVertexPod;
 
 #[derive(Clone, Copy)]
 struct BlockTypeId {
@@ -154,17 +158,6 @@ impl ChunkMesh {
 		self.block_vertex_buffer = Some(block_vertex_buffer);
 		self.cpu_to_gpu_update_required = false;
 	}
-}
-
-/// Vertex type used in chunk block meshes.
-#[derive(Copy, Clone, Debug)]
-/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-struct BlockVertexPod {
-	position: [f32; 3],
-	color: [f32; 3],
-	normal: [f32; 3],
 }
 
 /// Generate the mesh of a face of a block, adding it to `vertices`.
@@ -309,16 +302,6 @@ struct AlignedPhysBox {
 	gravity_factor: f32,
 }
 
-/// Vertex type used in debugging line meshes.
-#[derive(Copy, Clone, Debug)]
-/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-struct SimpleLineVertexPod {
-	position: [f32; 3],
-	color: [f32; 3],
-}
-
 /// Mesh of simple lines.
 ///
 /// Can be used (for example) to display hit boxes for debugging purposes.
@@ -434,14 +417,14 @@ pub fn run() {
 	});
 	let adapter = adapter.unwrap();
 
-	println!("SELECTED ADAPTER:");
-	dbg!(adapter.get_info());
 	// At some point it could be nice to allow the user to choose their preferred adapter.
 	// No one should have to struggle to make some game use the big GPU instead of the tiny one.
 	println!("AVAILABLE ADAPTERS:");
 	for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
 		dbg!(adapter.get_info());
 	}
+	println!("SELECTED ADAPTER:");
+	dbg!(adapter.get_info());
 
 	let (device, queue) = futures::executor::block_on(async {
 		adapter
@@ -457,14 +440,14 @@ pub fn run() {
 	})
 	.unwrap();
 
-	let surface_caps = window_surface.get_capabilities(&adapter);
-	let surface_format = surface_caps
+	let surface_capabilities = window_surface.get_capabilities(&adapter);
+	let surface_format = surface_capabilities
 		.formats
 		.iter()
 		.copied()
 		.find(|f| f.is_srgb())
-		.unwrap_or(surface_caps.formats[0]);
-	assert!(surface_caps
+		.unwrap_or(surface_capabilities.formats[0]);
+	assert!(surface_capabilities
 		.present_modes
 		.contains(&wgpu::PresentMode::Fifo));
 	let size = window.inner_size();
@@ -474,7 +457,7 @@ pub fn run() {
 		width: size.width,
 		height: size.height,
 		present_mode: wgpu::PresentMode::Fifo,
-		alpha_mode: surface_caps.alpha_modes[0],
+		alpha_mode: surface_capabilities.alpha_modes[0],
 		view_formats: vec![],
 	};
 	window_surface.configure(&device, &config);
@@ -603,7 +586,7 @@ pub fn run() {
 	let sun_light_direction_bind_group_layout =
 		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 1,
+				binding: 0,
 				visibility: wgpu::ShaderStages::VERTEX,
 				ty: wgpu::BindingType::Buffer {
 					ty: wgpu::BufferBindingType::Uniform,
@@ -617,7 +600,7 @@ pub fn run() {
 	let sun_light_direction_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		layout: &sun_light_direction_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
-			binding: 1,
+			binding: 0,
 			resource: sun_light_direction_buffer.as_entire_binding(),
 		}],
 		label: Some("Sun Light Direction Bind Group"),
@@ -646,151 +629,20 @@ pub fn run() {
 	let mut z_buffer_view =
 		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
 
-	let block_render_pipeline = {
-		let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
-			array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
-			step_mode: wgpu::VertexStepMode::Vertex,
-			attributes: &[
-				wgpu::VertexAttribute {
-					offset: 0,
-					shader_location: 0,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-				wgpu::VertexAttribute {
-					offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-					shader_location: 1,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-				wgpu::VertexAttribute {
-					offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress,
-					shader_location: 2,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-			],
-		};
-		let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("Block Shader"),
-			source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/block.wgsl").into()),
-		});
-		let block_render_pipeline_layout =
-			device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-				label: Some("Block Render Pipeline Layout"),
-				bind_group_layouts: &[
-					&camera_bind_group_layout,
-					&sun_light_direction_bind_group_layout,
-				],
-				push_constant_ranges: &[],
-			});
-		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("Block Render Pipeline"),
-			layout: Some(&block_render_pipeline_layout),
-			vertex: wgpu::VertexState {
-				module: &block_shader,
-				entry_point: "vertex_shader_main",
-				buffers: &[block_vertex_buffer_layout],
-			},
-			fragment: Some(wgpu::FragmentState {
-				module: &block_shader,
-				entry_point: "fragment_shader_main",
-				targets: &[Some(wgpu::ColorTargetState {
-					format: config.format,
-					blend: Some(wgpu::BlendState::REPLACE),
-					write_mask: wgpu::ColorWrites::ALL,
-				})],
-			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::TriangleList,
-				strip_index_format: None,
-				front_face: wgpu::FrontFace::Ccw,
-				cull_mode: Some(wgpu::Face::Back),
-				polygon_mode: wgpu::PolygonMode::Fill,
-				unclipped_depth: false,
-				conservative: false,
-			},
-			depth_stencil: Some(wgpu::DepthStencilState {
-				format: z_buffer_format,
-				depth_write_enabled: true,
-				depth_compare: wgpu::CompareFunction::Less,
-				stencil: wgpu::StencilState::default(),
-				bias: wgpu::DepthBiasState::default(),
-			}),
-			multisample: wgpu::MultisampleState {
-				count: 1,
-				mask: !0,
-				alpha_to_coverage_enabled: false,
-			},
-			multiview: None,
-		})
-	};
+	let block_render_pipeline = shaders::block::render_pipeline(
+		&device,
+		&camera_bind_group_layout,
+		&sun_light_direction_bind_group_layout,
+		config.format,
+		z_buffer_format,
+	);
 
-	let simple_line_render_pipeline = {
-		let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
-			array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
-			step_mode: wgpu::VertexStepMode::Vertex,
-			attributes: &[
-				wgpu::VertexAttribute {
-					offset: 0,
-					shader_location: 0,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-				wgpu::VertexAttribute {
-					offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-					shader_location: 1,
-					format: wgpu::VertexFormat::Float32x3,
-				},
-			],
-		};
-		let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-			label: Some("Simple Line Shader"),
-			source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/simple_line.wgsl").into()),
-		});
-		let simple_line_render_pipeline_layout =
-			device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-				label: Some("Simple Line Render Pipeline Layout"),
-				bind_group_layouts: &[&camera_bind_group_layout],
-				push_constant_ranges: &[],
-			});
-		device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-			label: Some("Simple Line Render Pipeline"),
-			layout: Some(&simple_line_render_pipeline_layout),
-			vertex: wgpu::VertexState {
-				module: &simple_line_shader,
-				entry_point: "vertex_shader_main",
-				buffers: &[simple_line_vertex_buffer_layout],
-			},
-			fragment: Some(wgpu::FragmentState {
-				module: &simple_line_shader,
-				entry_point: "fragment_shader_main",
-				targets: &[Some(wgpu::ColorTargetState {
-					format: config.format,
-					blend: Some(wgpu::BlendState::REPLACE),
-					write_mask: wgpu::ColorWrites::ALL,
-				})],
-			}),
-			primitive: wgpu::PrimitiveState {
-				topology: wgpu::PrimitiveTopology::LineList,
-				strip_index_format: None,
-				front_face: wgpu::FrontFace::Ccw,
-				cull_mode: None,
-				polygon_mode: wgpu::PolygonMode::Fill,
-				unclipped_depth: false,
-				conservative: false,
-			},
-			depth_stencil: Some(wgpu::DepthStencilState {
-				format: z_buffer_format,
-				depth_write_enabled: true,
-				depth_compare: wgpu::CompareFunction::Less,
-				stencil: wgpu::StencilState::default(),
-				bias: wgpu::DepthBiasState::default(),
-			}),
-			multisample: wgpu::MultisampleState {
-				count: 1,
-				mask: !0,
-				alpha_to_coverage_enabled: false,
-			},
-			multiview: None,
-		})
-	};
+	let simple_line_render_pipeline = shaders::simple_line::render_pipeline(
+		&device,
+		&camera_bind_group_layout,
+		config.format,
+		z_buffer_format,
+	);
 
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();

@@ -10,7 +10,7 @@ struct VertexOutput {
 };
 
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
-@group(1) @binding(1) var<uniform> uniform_sun_light_direction: vec3<f32>;
+@group(1) @binding(0) var<uniform> uniform_sun_light_direction: vec3<f32>;
 
 @vertex
 fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
