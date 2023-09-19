@@ -66,7 +66,7 @@ impl ChunkBlocks {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
 					let covered = {
-						if let Some(internal_neighbor) = internal_coords.internal_neighbor(cd, direction)
+						if let Some(internal_neighbor) = internal_neighbor(internal_coords, cd, direction)
 						{
 							self.internal_block(cd, internal_neighbor).is_not_air
 						} else {
@@ -520,7 +520,7 @@ pub fn run() {
 	let cd = ChunkDimensions::from(10);
 
 	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
-	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0), 3) {
+	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
 		let chunk_coords = ChunkCoords::from(chunk_coords);
 		let chunk = Chunk::new_empty(cd);
 		chunk_grid.map.insert(chunk_coords, chunk);
