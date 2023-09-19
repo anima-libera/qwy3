@@ -99,12 +99,10 @@ impl ChunkBlocks {
 		neighbor_chunk: &ChunkBlocks,
 		neighbor_chunk_coords: ChunkCoords,
 	) {
-		assert!(chunk_coords.is_neighbor_with(neighbor_chunk_coords));
+		assert!(is_neighbor_with(chunk_coords, neighbor_chunk_coords));
 		// Note that this is redundent with the `unwrap` of the direction...
 		// TODO: Remove?
-		let direction = chunk_coords
-			.direction_to_neighbor(neighbor_chunk_coords)
-			.unwrap();
+		let direction = direction_to_neighbor(chunk_coords, neighbor_chunk_coords).unwrap();
 		for internal_coords in cd.iter_internal_block_coords_on_chunk_face(direction) {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				let world_coords =
@@ -521,7 +519,6 @@ pub fn run() {
 
 	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
 	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
-		let chunk_coords = ChunkCoords::from(chunk_coords);
 		let chunk = Chunk::new_empty(cd);
 		chunk_grid.map.insert(chunk_coords, chunk);
 	}
@@ -557,7 +554,7 @@ pub fn run() {
 		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(cd, chunk_coords, true);
 
 		for direction in OrientedAxis::all_the_six_possible_directions() {
-			let neighbor_chunk_coords = chunk_coords.moved_one_chunk_in_direction(direction);
+			let neighbor_chunk_coords = chunk_coords + direction.delta();
 			if chunk_grid.map.contains_key(&neighbor_chunk_coords) {
 				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
 				let Chunk { ref blocks, ref mut mesh } = chunk;
