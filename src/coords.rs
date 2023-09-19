@@ -9,35 +9,7 @@
 use std::f32::consts::TAU;
 
 /// Coordinates of a block in the world.
-#[derive(Clone, Copy)]
-pub struct BlockCoords {
-	pub x: i32,
-	pub y: i32,
-	pub z: i32,
-}
-
-impl From<cgmath::Point3<f32>> for BlockCoords {
-	fn from(position: cgmath::Point3<f32>) -> Self {
-		BlockCoords {
-			x: position.x.round() as i32,
-			y: position.y.round() as i32,
-			z: position.z.round() as i32,
-		}
-	}
-}
-
-impl BlockCoords {
-	pub fn moved_one_block_in_direction(mut self, direction: OrientedAxis) -> BlockCoords {
-		if direction.axis == NonOrientedAxis::X {
-			self.x += direction.orientation.sign()
-		} else if direction.axis == NonOrientedAxis::Y {
-			self.y += direction.orientation.sign()
-		} else if direction.axis == NonOrientedAxis::Z {
-			self.z += direction.orientation.sign()
-		}
-		self
-	}
-}
+pub type BlockCoords = cgmath::Point3<i32>;
 
 /// Chunks are cubic parts of the world, all of the same size and arranged in a 3D grid.
 /// The length (in blocks) of the edges of the chunks is not hardcoded. It can be
@@ -344,6 +316,12 @@ impl OrientedAxis {
 			AxisOrientation::iter_over_the_two_possible_orientations()
 				.map(move |orientation| OrientedAxis { axis, orientation })
 		})
+	}
+
+	pub fn delta(self) -> cgmath::Vector3<i32> {
+		let mut delta: cgmath::Vector3<i32> = (0, 0, 0).into();
+		delta[self.axis.index()] = self.orientation.sign();
+		delta
 	}
 }
 

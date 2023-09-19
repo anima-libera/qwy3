@@ -76,11 +76,10 @@ impl ChunkBlocks {
 					if !covered {
 						let world_coords =
 							cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
-						let BlockCoords { x, y, z } = world_coords;
 						generate_block_face_mesh(
 							&mut block_vertices,
 							direction,
-							(x as f32, y as f32, z as f32).into(),
+							world_coords.map(|x| x as f32),
 						);
 					}
 				}
@@ -110,7 +109,7 @@ impl ChunkBlocks {
 			if self.internal_block(cd, internal_coords).is_not_air {
 				let world_coords =
 					cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
-				let covering_block_world_coords = world_coords.moved_one_block_in_direction(direction);
+				let covering_block_world_coords = world_coords + direction.delta();
 				let (covering_block_chunk_coords, covering_block_internal_coords) =
 					cd.world_coords_to_chunk_internal_coords(covering_block_world_coords);
 				assert_eq!(covering_block_chunk_coords, neighbor_chunk_coords);
@@ -118,11 +117,10 @@ impl ChunkBlocks {
 					.internal_block(cd, covering_block_internal_coords)
 					.is_not_air;
 				if !covered {
-					let BlockCoords { x, y, z } = world_coords;
 					generate_block_face_mesh(
 						&mut chunk_mesh.block_vertices,
 						direction,
-						(x as f32, y as f32, z as f32).into(),
+						world_coords.map(|x| x as f32),
 					);
 				}
 			}
@@ -723,7 +721,7 @@ pub fn run() {
 				(VirtualKeyCode::O, ElementState::Pressed) => {
 					let player_bottom = player_phys.aligned_box.pos
 						- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1);
-					let player_bottom_block_coords = BlockCoords::from(player_bottom);
+					let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 					let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
 					if let Some(block) = player_bottom_block_opt {
 						chunk_grid.set_block(
@@ -828,7 +826,7 @@ pub fn run() {
 			if enable_physics {
 				let player_bottom = player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
-				let player_bottom_block_coords = BlockCoords::from(player_bottom);
+				let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 				let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
 				let is_on_ground = if player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt {
