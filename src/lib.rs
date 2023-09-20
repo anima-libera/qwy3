@@ -19,6 +19,56 @@ use shaders::block::BlockVertexPod;
 use shaders::simple_line::SimpleLineVertexPod;
 
 #[derive(Clone, Copy)]
+struct ChunkCoordsSpan {
+	cd: ChunkDimensions,
+	chunk_coords: ChunkCoords,
+}
+
+impl ChunkCoordsSpan {
+	fn block_coords_inf(self) -> BlockCoords {
+		self
+			.cd
+			.chunk_internal_coords_to_world_coords(self.chunk_coords, (0, 0, 0).into())
+	}
+
+	fn block_coords_sup_excluded(self) -> BlockCoords {
+		let sup = self.cd.edge;
+		self
+			.cd
+			.chunk_internal_coords_to_world_coords(self.chunk_coords, (sup, sup, sup).into())
+	}
+
+	fn iter_coords(self) -> impl Iterator<Item = cgmath::Point3<i32>> {
+		iter_3d_rect_inf_sup(self.block_coords_inf(), self.block_coords_sup_excluded())
+	}
+
+	fn contains(self, coords: BlockCoords) -> bool {
+		let inf = self.block_coords_inf();
+		let sup_excl = self.block_coords_sup_excluded();
+		inf.x <= coords.x
+			&& coords.x < sup_excl.x
+			&& inf.y <= coords.y
+			&& coords.y < sup_excl.y
+			&& inf.z <= coords.z
+			&& coords.z < sup_excl.z
+	}
+
+	fn iter_internal_block_coords_on_chunk_face(
+		self,
+		face_orientation: OrientedAxis,
+	) -> impl Iterator<Item = BlockCoords> {
+		self
+			.cd
+			.iter_internal_block_coords_on_chunk_face(face_orientation)
+			.map(move |internal_coords| {
+				self
+					.cd
+					.chunk_internal_coords_to_world_coords(self.chunk_coords, internal_coords)
+			})
+	}
+}
+
+#[derive(Clone, Copy)]
 struct BlockTypeId {
 	is_not_air: bool,
 }
@@ -40,50 +90,46 @@ impl ChunkBlocks {
 }
 
 impl ChunkBlocks {
-	fn internal_block_mut(
-		&mut self,
-		cd: ChunkDimensions,
-		internal_coords: ChunkInternalBlockCoords,
-	) -> &mut BlockTypeId {
-		&mut self.blocks[cd.internal_index(internal_coords)]
+	fn get(&self, coords: BlockCoords) -> BlockTypeId {
+		let (_chunk_coords, internal_coords) = self
+			.coords_span
+			.cd
+			.world_coords_to_chunk_internal_coords(coords);
+		self.blocks[self.coords_span.cd.internal_index(internal_coords)]
 	}
 
-	fn internal_block(
-		&self,
-		cd: ChunkDimensions,
-		internal_coords: ChunkInternalBlockCoords,
-	) -> BlockTypeId {
-		self.blocks[cd.internal_index(internal_coords)]
+	fn get_mut(&mut self, coords: BlockCoords) -> &mut BlockTypeId {
+		let (_chunk_coords, internal_coords) = self
+			.coords_span
+			.cd
+			.world_coords_to_chunk_internal_coords(coords);
+		&mut self.blocks[self.coords_span.cd.internal_index(internal_coords)]
 	}
 }
 
 impl ChunkBlocks {
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
-		coords: ChunkCoordsSpan,
+		coords_span: ChunkCoordsSpan,
 		surrounded_by_opaque: bool,
 	) -> ChunkMesh {
 		let mut block_vertices = Vec::new();
-		for internal_coords in coords.cd.iter_internal_block_coords() {
-			if self.internal_block(coords.cd, internal_coords).is_not_air {
+		for coords in coords_span.iter_coords() {
+			if self.get(coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
 					let covered = {
-						if let Some(internal_neighbor) =
-							internal_neighbor(internal_coords, coords.cd, direction)
-						{
-							self.internal_block(coords.cd, internal_neighbor).is_not_air
+						let neighbor_coords = coords + direction.delta();
+						if self.coords_span.contains(neighbor_coords) {
+							self.get(neighbor_coords).is_not_air
 						} else {
 							surrounded_by_opaque
 						}
 					};
 					if !covered {
-						let world_coords = coords
-							.cd
-							.chunk_internal_coords_to_world_coords(coords.chunk_coords, internal_coords);
 						generate_block_face_mesh(
 							&mut block_vertices,
 							direction,
-							world_coords.map(|x| x as f32),
+							coords.map(|x| x as f32),
 						);
 					}
 				}
@@ -97,32 +143,33 @@ impl ChunkBlocks {
 	/// given the blocks in the neighbor chunk.
 	fn generate_missing_faces_on_chunk_boarder_in_mesh(
 		&self,
-		cd: ChunkDimensions,
-		chunk_coords: ChunkCoords,
 		chunk_mesh: &mut ChunkMesh,
 		neighbor_chunk: &ChunkBlocks,
-		neighbor_chunk_coords: ChunkCoords,
 	) {
-		assert!(is_neighbor_with(chunk_coords, neighbor_chunk_coords));
+		assert!(is_neighbor_with(
+			self.coords_span.chunk_coords,
+			neighbor_chunk.coords_span.chunk_coords
+		));
 		// Note that this is redundent with the `unwrap` of the direction...
 		// TODO: Remove?
-		let direction = direction_to_neighbor(chunk_coords, neighbor_chunk_coords).unwrap();
-		for internal_coords in cd.iter_internal_block_coords_on_chunk_face(direction) {
-			if self.internal_block(cd, internal_coords).is_not_air {
-				let world_coords =
-					cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
-				let covering_block_world_coords = world_coords + direction.delta();
-				let (covering_block_chunk_coords, covering_block_internal_coords) =
-					cd.world_coords_to_chunk_internal_coords(covering_block_world_coords);
-				assert_eq!(covering_block_chunk_coords, neighbor_chunk_coords);
-				let covered = neighbor_chunk
-					.internal_block(cd, covering_block_internal_coords)
-					.is_not_air;
+		let direction = direction_to_neighbor(
+			self.coords_span.chunk_coords,
+			neighbor_chunk.coords_span.chunk_coords,
+		)
+		.unwrap();
+		for coords in self
+			.coords_span
+			.iter_internal_block_coords_on_chunk_face(direction)
+		{
+			if self.get(coords).is_not_air {
+				let covering_block_coords = coords + direction.delta();
+				assert!(neighbor_chunk.coords_span.contains(covering_block_coords));
+				let covered = neighbor_chunk.get(covering_block_coords).is_not_air;
 				if !covered {
 					generate_block_face_mesh(
 						&mut chunk_mesh.block_vertices,
 						direction,
-						world_coords.map(|x| x as f32),
+						coords.map(|x| x as f32),
 					);
 				}
 			}
@@ -230,12 +277,6 @@ fn generate_block_face_mesh(
 	}
 }
 
-#[derive(Clone, Copy)]
-struct ChunkCoordsSpan {
-	cd: ChunkDimensions,
-	chunk_coords: ChunkCoords,
-}
-
 struct Chunk {
 	blocks: ChunkBlocks,
 	mesh: Option<ChunkMesh>,
@@ -266,10 +307,10 @@ struct ChunkGrid {
 
 impl ChunkGrid {
 	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
-		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
+		let chunk_coords = cd.world_coords_to_containing_chunk_coords(coords);
 		match self.map.get_mut(&chunk_coords) {
 			Some(chunk) => {
-				let block_dst = chunk.blocks.internal_block_mut(cd, internal_coords);
+				let block_dst = chunk.blocks.get_mut(coords);
 				*block_dst = block;
 			},
 			None => {
@@ -281,9 +322,9 @@ impl ChunkGrid {
 	}
 
 	fn get_block(&self, cd: ChunkDimensions, coords: BlockCoords) -> Option<BlockTypeId> {
-		let (chunk_coords, internal_coords) = cd.world_coords_to_chunk_internal_coords(coords);
+		let chunk_coords = cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk = self.map.get(&chunk_coords)?;
-		Some(chunk.blocks.internal_block(cd, internal_coords))
+		Some(chunk.blocks.get(coords))
 	}
 }
 
@@ -538,7 +579,7 @@ pub fn run() {
 				- f32::cos(coords.x as f32 * 0.3)
 				- f32::cos(coords.y as f32 * 0.3)
 				- 3.0 < 0.0;
-			*chunk.blocks.internal_block_mut(cd, internal_coords) = BlockTypeId { is_not_air: ground };
+			*chunk.blocks.get_mut(coords) = BlockTypeId { is_not_air: ground };
 		}
 	}
 
@@ -566,11 +607,8 @@ pub fn run() {
 				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
 				let Chunk { ref blocks, ref mut mesh, .. } = chunk;
 				blocks.generate_missing_faces_on_chunk_boarder_in_mesh(
-					cd,
-					chunk_coords,
 					mesh.as_mut().unwrap(),
 					&neighbor_chunk.blocks,
-					neighbor_chunk_coords,
 				);
 			}
 		}
