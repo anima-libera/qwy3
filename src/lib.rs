@@ -24,13 +24,16 @@ struct BlockTypeId {
 }
 
 struct ChunkBlocks {
+	coords_span: ChunkCoordsSpan,
 	blocks: Vec<BlockTypeId>,
 }
 impl ChunkBlocks {
-	fn new(cd: ChunkDimensions) -> ChunkBlocks {
+	fn new(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks {
+			coords_span,
 			blocks: Vec::from_iter(
-				std::iter::repeat(BlockTypeId { is_not_air: false }).take(cd.number_of_blocks()),
+				std::iter::repeat(BlockTypeId { is_not_air: false })
+					.take(coords_span.cd.number_of_blocks()),
 			),
 		}
 	}
@@ -57,25 +60,26 @@ impl ChunkBlocks {
 impl ChunkBlocks {
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
-		cd: ChunkDimensions,
-		chunk_coords: ChunkCoords,
+		coords: ChunkCoordsSpan,
 		surrounded_by_opaque: bool,
 	) -> ChunkMesh {
 		let mut block_vertices = Vec::new();
-		for internal_coords in cd.iter_internal_block_coords() {
-			if self.internal_block(cd, internal_coords).is_not_air {
+		for internal_coords in coords.cd.iter_internal_block_coords() {
+			if self.internal_block(coords.cd, internal_coords).is_not_air {
 				for direction in OrientedAxis::all_the_six_possible_directions() {
 					let covered = {
-						if let Some(internal_neighbor) = internal_neighbor(internal_coords, cd, direction)
+						if let Some(internal_neighbor) =
+							internal_neighbor(internal_coords, coords.cd, direction)
 						{
-							self.internal_block(cd, internal_neighbor).is_not_air
+							self.internal_block(coords.cd, internal_neighbor).is_not_air
 						} else {
 							surrounded_by_opaque
 						}
 					};
 					if !covered {
-						let world_coords =
-							cd.chunk_internal_coords_to_world_coords(chunk_coords, internal_coords);
+						let world_coords = coords
+							.cd
+							.chunk_internal_coords_to_world_coords(coords.chunk_coords, internal_coords);
 						generate_block_face_mesh(
 							&mut block_vertices,
 							direction,
@@ -226,27 +230,30 @@ fn generate_block_face_mesh(
 	}
 }
 
+#[derive(Clone, Copy)]
+struct ChunkCoordsSpan {
+	cd: ChunkDimensions,
+	chunk_coords: ChunkCoords,
+}
+
 struct Chunk {
 	blocks: ChunkBlocks,
 	mesh: Option<ChunkMesh>,
 }
 
 impl Chunk {
-	fn new_empty(cd: ChunkDimensions) -> Chunk {
-		Chunk { blocks: ChunkBlocks::new(cd), mesh: None }
+	fn new_empty(coords: ChunkCoordsSpan) -> Chunk {
+		Chunk { blocks: ChunkBlocks::new(coords), mesh: None }
 	}
 
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&mut self,
-		cd: ChunkDimensions,
-		chunk_coords: ChunkCoords,
 		surrounded_by_opaque: bool,
 	) {
 		let mesh = self
 			.blocks
 			.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-				cd,
-				chunk_coords,
+				self.blocks.coords_span,
 				surrounded_by_opaque,
 			);
 		self.mesh = Some(mesh);
@@ -519,7 +526,7 @@ pub fn run() {
 
 	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
 	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
-		let chunk = Chunk::new_empty(cd);
+		let chunk = Chunk::new_empty(ChunkCoordsSpan { cd, chunk_coords });
 		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
@@ -551,13 +558,13 @@ pub fn run() {
 		// when we are done with it.
 		let mut chunk = chunk_grid.map.remove(&chunk_coords).unwrap();
 
-		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(cd, chunk_coords, true);
+		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(true);
 
 		for direction in OrientedAxis::all_the_six_possible_directions() {
 			let neighbor_chunk_coords = chunk_coords + direction.delta();
 			if chunk_grid.map.contains_key(&neighbor_chunk_coords) {
 				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
-				let Chunk { ref blocks, ref mut mesh } = chunk;
+				let Chunk { ref blocks, ref mut mesh, .. } = chunk;
 				blocks.generate_missing_faces_on_chunk_boarder_in_mesh(
 					cd,
 					chunk_coords,
@@ -730,11 +737,7 @@ pub fn run() {
 						let chunk_coords =
 							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
 						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-						chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-							cd,
-							chunk_coords,
-							true,
-						);
+						chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(true);
 						chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
 						// TODO: If the block is on the edge of a chunk we also need to update the
 						// meshes of these chunks.
