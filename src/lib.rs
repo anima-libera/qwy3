@@ -795,6 +795,8 @@ pub fn run() {
 			player_phys.aligned_box.pos += walking_vector;
 
 			if enable_physics {
+				// TODO: Work out something better here,
+				// although it is not very important at the moment.
 				let player_bottom = player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
 				let player_bottom_below = player_phys.aligned_box.pos
@@ -828,7 +830,7 @@ pub fn run() {
 				let is_in_ground = if player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt {
 						if block.is_not_air {
-							// The player is on the ground, so we make sure we are not overlapping it.
+							// The player is inside the ground, so we uuh.. do something?
 							player_phys.motion.z = 0.0;
 							player_phys.aligned_box.pos.z = player_bottom_block_coords.z as f32
 								+ 0.5 + player_phys.aligned_box.dims.z / 2.0;
