@@ -151,7 +151,7 @@ pub fn is_neighbor_with(a: cgmath::Point3<i32>, b: cgmath::Point3<i32>) -> bool 
 	a.x.abs_diff(b.x) + a.y.abs_diff(b.y) + a.z.abs_diff(b.z) == 1
 }
 
-/// This is supposed to return the direction to go from `self` to `other` if that takes
+/// This is supposed to return the direction to go from `a` to `b` if that takes
 /// just one move of one chunk (so if they are neighbors). Returns `None` if not neighbors.
 pub fn direction_to_neighbor(
 	a: cgmath::Point3<i32>,
@@ -181,11 +181,7 @@ pub fn direction_to_neighbor(
 
 impl ChunkDimensions {
 	pub fn world_coords_to_containing_chunk_coords(self, coords: BlockCoords) -> ChunkCoords {
-		ChunkCoords {
-			x: coords.x.div_euclid(self.edge),
-			y: coords.y.div_euclid(self.edge),
-			z: coords.z.div_euclid(self.edge),
-		}
+		coords.map(|x| x.div_euclid(self.edge))
 	}
 }
 
@@ -229,6 +225,7 @@ pub enum AxisOrientation {
 
 impl AxisOrientation {
 	pub fn iter_over_the_two_possible_orientations() -> impl Iterator<Item = AxisOrientation> {
+		// Truly one of the functions of all times.
 		[
 			AxisOrientation::Positivewards,
 			AxisOrientation::Negativewards,
@@ -246,7 +243,7 @@ impl AxisOrientation {
 
 /// Axis but oriented.
 ///
-/// Note that upwards is Z+, downwards is Z-.
+/// Note that upwards is Z+ and downwards is Z-.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct OrientedAxis {
 	pub axis: NonOrientedAxis,

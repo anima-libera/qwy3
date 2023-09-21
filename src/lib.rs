@@ -14,19 +14,19 @@ use winit::{
 
 use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
 use coords::*;
-
-use shaders::block::BlockVertexPod;
-use shaders::simple_line::SimpleLineVertexPod;
+use shaders::{block::BlockVertexPod, simple_line::SimpleLineVertexPod};
 
 #[derive(Clone, Copy)]
 struct BlockTypeId {
 	is_not_air: bool,
 }
 
+/// The blocks of a chunk.
 struct ChunkBlocks {
 	coords_span: ChunkCoordsSpan,
 	blocks: Vec<BlockTypeId>,
 }
+
 impl ChunkBlocks {
 	fn new(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks {
@@ -37,9 +37,7 @@ impl ChunkBlocks {
 			),
 		}
 	}
-}
 
-impl ChunkBlocks {
 	fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
 		Some(self.blocks[self.coords_span.internal_index(coords)?])
 	}
@@ -47,9 +45,7 @@ impl ChunkBlocks {
 	fn get_mut(&mut self, coords: BlockCoords) -> Option<&mut BlockTypeId> {
 		Some(&mut self.blocks[self.coords_span.internal_index(coords)?])
 	}
-}
 
-impl ChunkBlocks {
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
 		surrounded_by_opaque: bool,
@@ -240,12 +236,13 @@ impl Chunk {
 }
 
 struct ChunkGrid {
+	cd: ChunkDimensions,
 	map: HashMap<ChunkCoords, Chunk>,
 }
 
 impl ChunkGrid {
-	fn set_block(&mut self, cd: ChunkDimensions, coords: BlockCoords, block: BlockTypeId) {
-		let chunk_coords = cd.world_coords_to_containing_chunk_coords(coords);
+	fn set_block(&mut self, coords: BlockCoords, block: BlockTypeId) {
+		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		match self.map.get_mut(&chunk_coords) {
 			Some(chunk) => {
 				let block_dst = chunk.blocks.get_mut(coords).unwrap();
@@ -259,8 +256,8 @@ impl ChunkGrid {
 		}
 	}
 
-	fn get_block(&self, cd: ChunkDimensions, coords: BlockCoords) -> Option<BlockTypeId> {
-		let chunk_coords = cd.world_coords_to_containing_chunk_coords(coords);
+	fn get_block(&self, coords: BlockCoords) -> Option<BlockTypeId> {
+		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk = self.map.get(&chunk_coords)?;
 		Some(chunk.blocks.get(coords).unwrap())
 	}
@@ -503,7 +500,7 @@ pub fn run() {
 
 	let cd = ChunkDimensions::from(10);
 
-	let mut chunk_grid = ChunkGrid { map: HashMap::new() };
+	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
 	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
 		let chunk = Chunk::new_empty(ChunkCoordsSpan { cd, chunk_coords });
 		chunk_grid.map.insert(chunk_coords, chunk);
@@ -701,10 +698,9 @@ pub fn run() {
 					let player_bottom = player_phys.aligned_box.pos
 						- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1);
 					let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-					let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
+					let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
 					if let Some(block) = player_bottom_block_opt {
 						chunk_grid.set_block(
-							cd,
 							player_bottom_block_coords,
 							BlockTypeId { is_not_air: !block.is_not_air },
 						);
@@ -801,9 +797,35 @@ pub fn run() {
 			if enable_physics {
 				let player_bottom = player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
+				let player_bottom_below = player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::from((
+						0.0,
+						0.0,
+						player_phys.aligned_box.dims.z / 2.0 + 0.01,
+					));
 				let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-				let player_bottom_block_opt = chunk_grid.get_block(cd, player_bottom_block_coords);
+				let player_bottom_block_coords_below = player_bottom_below.map(|x| x.round() as i32);
+				let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
+				let player_bottom_block_opt_below =
+					chunk_grid.get_block(player_bottom_block_coords_below);
 				let is_on_ground = if player_phys.motion.z <= 0.0 {
+					if let Some(block) = player_bottom_block_opt_below {
+						if block.is_not_air {
+							// The player is on the ground, so we make sure we are not overlapping it.
+							player_phys.motion.z = 0.0;
+							player_phys.aligned_box.pos.z = player_bottom_block_coords_below.z as f32
+								+ 0.5 + player_phys.aligned_box.dims.z / 2.0;
+							true
+						} else {
+							false
+						}
+					} else {
+						false
+					}
+				} else {
+					false
+				};
+				let is_in_ground = if player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt {
 						if block.is_not_air {
 							// The player is on the ground, so we make sure we are not overlapping it.
@@ -823,6 +845,9 @@ pub fn run() {
 				player_phys.aligned_box.pos += player_phys.motion;
 				if !is_on_ground {
 					player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
+				}
+				if is_in_ground {
+					player_phys.aligned_box.pos.z += 0.01;
 				}
 			}
 
