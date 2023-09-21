@@ -45,7 +45,137 @@ impl ChunkBlocks {
 	fn get_mut(&mut self, coords: BlockCoords) -> Option<&mut BlockTypeId> {
 		Some(&mut self.blocks[self.coords_span.internal_index(coords)?])
 	}
+}
 
+/// Information about the opaqueness of each block
+/// contained in a 1-block-thick cubic layer around a chunk.
+struct OpaquenessLayerAroundChunk {
+	/// The coords span of the chunk that is surrounded by the layer that this struct describes.
+	/// This is NOT the coords span of the layer. The layer is 1-block thick and encloses that
+	/// coords span.
+	surrounded_chunk_coords_span: ChunkCoordsSpan,
+	data: bitvec::vec::BitVec,
+}
+
+impl OpaquenessLayerAroundChunk {
+	fn new(surrounded_chunk_coords_span: ChunkCoordsSpan) -> OpaquenessLayerAroundChunk {
+		let data = bitvec::vec::BitVec::with_capacity(OpaquenessLayerAroundChunk::data_size(
+			surrounded_chunk_coords_span.cd,
+		));
+		OpaquenessLayerAroundChunk { surrounded_chunk_coords_span, data }
+	}
+
+	fn data_size(cd: ChunkDimensions) -> usize {
+		let face_size = cd.edge.pow(2);
+		let edge_size = cd.edge;
+		let corner_size = 1;
+		(face_size * 6 + edge_size * 12 + corner_size * 8) as usize
+	}
+
+	/// One of the functions of all times, ever!
+	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
+		// Ok so here the goal is to map the coords that are in the layer to a unique index.
+		if self.surrounded_chunk_coords_span.contains(coords) {
+			// If we fall in the chunk that thet layer encloses, then we are not in the layer
+			// but we are just in the hole in the middle of the layer.
+			return None;
+		}
+		// Get `inf` and `sup` to represent the cube that is the layer (if we ignore the hole
+		// in the middle that was already taken care of), `sup` is included.
+		let inf: BlockCoords =
+			self.surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
+		let sup: BlockCoords = self
+			.surrounded_chunk_coords_span
+			.block_coords_sup_excluded();
+		let contained_in_the_layer = inf.x <= coords.x
+			&& coords.x <= sup.x
+			&& inf.y <= coords.y
+			&& coords.y <= sup.y
+			&& inf.z <= coords.z
+			&& coords.z <= sup.z;
+		if !contained_in_the_layer {
+			// We are outside of the layer.
+			return None;
+		}
+		// If we get here, then it meas we are in the layer and a unique index has to be determined.
+		// `layer_edge` is the length in blocks of an edge of the layer.
+		let layer_edge = self.surrounded_chunk_coords_span.cd.edge + 2;
+		let ix = coords.x - inf.x;
+		let iy = coords.y - inf.y;
+		let iz = coords.z - inf.z;
+		if iz == 0 {
+			// Bottom face (lowest Z value).
+			Some((ix + iy * layer_edge) as usize)
+		} else if iz == layer_edge - 1 {
+			// Top face (higest Z value).
+			Some((layer_edge.pow(2) + (ix + iy * layer_edge)) as usize)
+		} else {
+			// One of the side faces that are not in the top/bottom faces.
+			// We consider horizontal slices of the layer which are just squares here,
+			// `sub_index` is just a unique index in the square we are in, and
+			// we have to add enough `square_size` to distinguish between the different squares
+			// (for different Z values).
+			// `square_size` is the number of blocks in the line of the square (no middle).
+			let square_size = (layer_edge - 1) * 4;
+			let sub_index = if ix == 0 {
+				iy
+			} else if ix == layer_edge - 1 {
+				layer_edge + iy
+			} else if iy == 0 {
+				layer_edge * 2 + (ix - 1)
+			} else if iy == layer_edge - 1 {
+				layer_edge * 2 + (layer_edge - 2) + (ix - 1)
+			} else {
+				unreachable!()
+			};
+			Some((layer_edge.pow(2) * 2 + (iz - 1) * square_size + sub_index) as usize)
+			// >w<
+		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	#[test]
+	fn indexing_of_the_funky_layer_data_structure() {
+		let cd = ChunkDimensions::from(18);
+		let chunk_coords_span = ChunkCoordsSpan { cd, chunk_coords: (2, -3, 0).into() };
+		let layer = OpaquenessLayerAroundChunk::new(chunk_coords_span);
+
+		let layer_size = OpaquenessLayerAroundChunk::data_size(cd);
+		let mut indices = vec![];
+
+		// We iterate over all the coords in the layer and in the layer hole.
+		let inf: BlockCoords = chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
+		let sup_excluded: BlockCoords =
+			chunk_coords_span.block_coords_sup_excluded() + cgmath::vec3(1, 1, 1);
+		for coords in iter_3d_rect_inf_sup_excluded(inf, sup_excluded) {
+			let index_opt = layer.coords_to_index_in_data(coords);
+			if let Some(index) = index_opt {
+				// The layer gave an index to the coords, which means we are supposed
+				// to be on the layer.
+				// Indices must be unique so we check for that.
+				assert!(!indices.contains(&index));
+				indices.push(index);
+			} else {
+				// The layer didn't give an index so it means we are not on the layer.
+				// We don't test for coords outside of the layer and its hole so we
+				// must be in the hole at the center of the layer.
+				assert!(chunk_coords_span.contains(coords));
+			}
+		}
+
+		// The indices must be unique, and we already checked for that.
+		// The indices also must cover all possible indices from 0 to the max expected index,
+		// we check for that here.
+		for expected_index in 0..layer_size {
+			assert!(indices.contains(&expected_index));
+		}
+	}
+}
+
+impl ChunkBlocks {
 	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
 		&self,
 		surrounded_by_opaque: bool,
