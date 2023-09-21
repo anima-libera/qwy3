@@ -30,63 +30,79 @@ impl ChunkDimensions {
 	pub fn number_of_blocks(self) -> usize {
 		self.edge.pow(3) as usize
 	}
-}
 
-/// TODO: REMOVE
-///
-/// Coordinates of a block inside a chunk
-/// (so relative to the negativeward corner of a chunk).
-pub type ChunkInternalBlockCoords = cgmath::Point3<i32>;
-
-pub fn internal_neighbor(
-	mut coords: ChunkInternalBlockCoords,
-	cd: ChunkDimensions,
-	direction: OrientedAxis,
-) -> Option<ChunkInternalBlockCoords> {
-	let new_coord_value = coords[direction.axis.index()] + direction.orientation.sign();
-	if new_coord_value < 0 || cd.edge <= new_coord_value {
-		None
-	} else {
-		coords[direction.axis.index()] = new_coord_value;
-		Some(coords)
+	pub fn dimensions(self) -> cgmath::Vector3<i32> {
+		(self.edge, self.edge, self.edge).into()
 	}
 }
 
-impl ChunkDimensions {
-	pub fn iter_internal_block_coords(self) -> impl Iterator<Item = ChunkInternalBlockCoords> {
-		iter_3d_cube_inf_edge((0, 0, 0).into(), self.edge)
+#[derive(Clone, Copy)]
+pub struct ChunkCoordsSpan {
+	pub cd: ChunkDimensions,
+	pub chunk_coords: ChunkCoords,
+}
+
+impl ChunkCoordsSpan {
+	pub fn block_coords_inf(self) -> BlockCoords {
+		self.chunk_coords * self.cd.edge
 	}
 
-	/// Iterates over the blocks in a chunk that are on the given face of the chunk.
-	pub fn iter_internal_block_coords_on_chunk_face(
+	pub fn block_coords_sup_excluded(self) -> BlockCoords {
+		self.chunk_coords.map(|x| x + 1) * self.cd.edge
+	}
+
+	pub fn iter_coords(self) -> impl Iterator<Item = cgmath::Point3<i32>> {
+		iter_3d_rect_inf_sup_excluded(self.block_coords_inf(), self.block_coords_sup_excluded())
+	}
+
+	pub fn contains(self, coords: BlockCoords) -> bool {
+		let inf = self.block_coords_inf();
+		let sup_excluded = self.block_coords_sup_excluded();
+		inf.x <= coords.x
+			&& coords.x < sup_excluded.x
+			&& inf.y <= coords.y
+			&& coords.y < sup_excluded.y
+			&& inf.z <= coords.z
+			&& coords.z < sup_excluded.z
+	}
+
+	/// Iterate over all the blocks (contained in the chunk) that touch the chunk face
+	/// that faces to the given direction.
+	pub fn iter_block_coords_on_chunk_face(
 		self,
 		face_orientation: OrientedAxis,
-	) -> impl Iterator<Item = ChunkInternalBlockCoords> {
-		let mut inf: cgmath::Point3<i32> = (0, 0, 0).into();
-		let mut dims: cgmath::Vector3<i32> = (self.edge, self.edge, self.edge).into();
-		if face_orientation.orientation == AxisOrientation::Positivewards {
-			inf[face_orientation.axis.index()] += self.edge - 1;
-		}
+	) -> impl Iterator<Item = BlockCoords> {
+		let mut inf = self.block_coords_inf();
+		let mut dims = self.cd.dimensions();
+		// We just flatten the area along the right axis.
 		dims[face_orientation.axis.index()] = 1;
+		// We also make sure the flatten area touches the right face.
+		if face_orientation.orientation == AxisOrientation::Positivewards {
+			inf[face_orientation.axis.index()] += self.cd.edge - 1;
+		}
 		iter_3d_rect_inf_dims(inf, dims)
 	}
 
-	pub fn internal_index(self, internal_coords: ChunkInternalBlockCoords) -> usize {
-		let ChunkInternalBlockCoords { x, y, z } = internal_coords;
-		(z * self.edge.pow(2) + y * self.edge + x) as usize
+	pub fn internal_index(self, coords: BlockCoords) -> Option<usize> {
+		self.contains(coords).then(|| {
+			let internal_coords = coords - self.block_coords_inf();
+			let (x, y, z) = internal_coords.into();
+			(z * self.cd.edge.pow(2) + y * self.cd.edge + x) as usize
+		})
 	}
 }
 
-/// Iterates over the 3D rectangle area `inf..sup` (`sup` not included).
-pub fn iter_3d_rect_inf_sup(
+/// Iterates over the 3D rectangle area `inf..sup_excluded` (`sup_excluded` not included).
+pub fn iter_3d_rect_inf_sup_excluded(
 	inf: cgmath::Point3<i32>,
-	sup: cgmath::Point3<i32>,
+	sup_excluded: cgmath::Point3<i32>,
 ) -> impl Iterator<Item = cgmath::Point3<i32>> {
-	debug_assert!(inf.x <= sup.x);
-	debug_assert!(inf.y <= sup.y);
-	debug_assert!(inf.z <= sup.z);
-	(inf.z..sup.z).flat_map(move |z| {
-		(inf.y..sup.y).flat_map(move |y| (inf.x..sup.x).map(move |x| (x, y, z).into()))
+	debug_assert!(inf.x <= sup_excluded.x);
+	debug_assert!(inf.y <= sup_excluded.y);
+	debug_assert!(inf.z <= sup_excluded.z);
+	(inf.z..sup_excluded.z).flat_map(move |z| {
+		(inf.y..sup_excluded.y)
+			.flat_map(move |y| (inf.x..sup_excluded.x).map(move |x| (x, y, z).into()))
 	})
 }
 
@@ -96,7 +112,7 @@ pub fn iter_3d_rect_inf_dims(
 	dims: cgmath::Vector3<i32>,
 ) -> impl Iterator<Item = cgmath::Point3<i32>> {
 	let sup = inf + dims;
-	iter_3d_rect_inf_sup(inf, sup)
+	iter_3d_rect_inf_sup_excluded(inf, sup)
 }
 
 /// Iterates over a 3D cubic area of negativewards corner at `inf` and edges of length `edge`.
@@ -164,37 +180,12 @@ pub fn direction_to_neighbor(
 }
 
 impl ChunkDimensions {
-	pub fn chunk_internal_coords_to_world_coords(
-		self,
-		chunk_coords: ChunkCoords,
-		internal_coords: ChunkInternalBlockCoords,
-	) -> BlockCoords {
-		BlockCoords {
-			x: internal_coords.x + chunk_coords.x * self.edge,
-			y: internal_coords.y + chunk_coords.y * self.edge,
-			z: internal_coords.z + chunk_coords.z * self.edge,
-		}
-	}
-
 	pub fn world_coords_to_containing_chunk_coords(self, coords: BlockCoords) -> ChunkCoords {
 		ChunkCoords {
 			x: coords.x.div_euclid(self.edge),
 			y: coords.y.div_euclid(self.edge),
 			z: coords.z.div_euclid(self.edge),
 		}
-	}
-
-	pub fn world_coords_to_chunk_internal_coords(
-		self,
-		coords: BlockCoords,
-	) -> (ChunkCoords, ChunkInternalBlockCoords) {
-		let chunk_coords = self.world_coords_to_containing_chunk_coords(coords);
-		let internal_coords = ChunkInternalBlockCoords {
-			x: coords.x.rem_euclid(self.edge),
-			y: coords.y.rem_euclid(self.edge),
-			z: coords.z.rem_euclid(self.edge),
-		};
-		(chunk_coords, internal_coords)
 	}
 }
 
