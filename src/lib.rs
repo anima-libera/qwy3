@@ -2,7 +2,7 @@ mod camera;
 mod coords;
 mod shaders;
 
-use std::{collections::HashMap, f32::consts::TAU};
+use std::{collections::HashMap, f32::consts::TAU, ops::Deref};
 
 use bytemuck::Zeroable;
 use cgmath::InnerSpace;
@@ -76,7 +76,7 @@ impl OpaquenessLayerAroundChunk {
 	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
 		// Ok so here the goal is to map the coords that are in the layer to a unique index.
 		if self.surrounded_chunk_coords_span.contains(coords) {
-			// If we fall in the chunk that thet layer encloses, then we are not in the layer
+			// If we fall in the chunk that the layer encloses, then we are not in the layer
 			// but we are just in the hole in the middle of the layer.
 			return None;
 		}
@@ -131,6 +131,16 @@ impl OpaquenessLayerAroundChunk {
 			Some((layer_edge.pow(2) * 2 + (iz - 1) * square_size + sub_index) as usize)
 			// >w<
 		}
+	}
+
+	fn set(&mut self, coords: BlockCoords, value: bool) {
+		let index = self.coords_to_index_in_data(coords).unwrap();
+		self.data.set(index, value);
+	}
+
+	fn get(&mut self, coords: BlockCoords) -> Option<bool> {
+		let index = self.coords_to_index_in_data(coords)?;
+		Some(*self.data.get(index).unwrap())
 	}
 }
 
@@ -390,6 +400,42 @@ impl ChunkGrid {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk = self.map.get(&chunk_coords)?;
 		Some(chunk.blocks.get(coords).unwrap())
+	}
+
+	fn get_opaqueness_layer_around_chunk(
+		&self,
+		chunk_coords: ChunkCoords,
+		default_to_opaque: bool,
+	) -> OpaquenessLayerAroundChunk {
+		let surrounded_chunk_coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+		let mut layer = OpaquenessLayerAroundChunk::new(surrounded_chunk_coords_span);
+
+		let inf = surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
+		let sup_excluded =
+			surrounded_chunk_coords_span.block_coords_sup_excluded() + cgmath::vec3(1, 1, 1);
+		for z in inf.z..sup_excluded.z {
+			for y in inf.y..sup_excluded.y {
+				let mut x = inf.x;
+				while x < sup_excluded.x {
+					let coords: BlockCoords = (x, y, z).into();
+					if surrounded_chunk_coords_span.contains(coords) {
+						// We skip over the chunk hole in the middle of the layer.
+						x = sup_excluded.x - 1;
+					} else {
+						{
+							let opaque = self
+								.get_block(coords)
+								.map(|block_type_id| block_type_id.is_not_air)
+								.unwrap_or(default_to_opaque);
+							layer.set(coords, opaque);
+						}
+						x += 1;
+					}
+				}
+			}
+		}
+
+		layer
 	}
 }
 
