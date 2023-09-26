@@ -5,7 +5,7 @@ mod shaders;
 use std::{collections::HashMap, f32::consts::TAU, ops::Deref};
 
 use bytemuck::Zeroable;
-use cgmath::InnerSpace;
+use cgmath::{EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
@@ -15,6 +15,93 @@ use winit::{
 use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
 use coords::*;
 use shaders::{block::BlockVertexPod, simple_line::SimpleLineVertexPod};
+
+/// An array of 27 boolean values stored in a `u32`.
+#[derive(Debug, Clone, Copy)]
+struct BitArray27 {
+	data: u32,
+}
+impl BitArray27 {
+	fn new_zero() -> BitArray27 {
+		BitArray27 { data: 0 }
+	}
+	fn get(self, index: usize) -> bool {
+		(self.data >> index) & 1 != 0
+	}
+	fn set(&mut self, index: usize, value: bool) {
+		self.data = (self.data & !(1 << index)) | ((value as u32) << index);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn bit_array() {
+		let mut bit_array = BitArray27::new_zero();
+		bit_array.set(3, true);
+		assert!(!bit_array.get(2));
+		assert!(bit_array.get(3));
+	}
+}
+
+/// Coords of a cell in a `BitCube3` ^^.
+#[derive(Debug, Clone, Copy)]
+struct BitCube3Coords {
+	x: i32,
+	y: i32,
+	z: i32,
+}
+
+impl From<cgmath::Point3<i32>> for BitCube3Coords {
+	fn from(coords: cgmath::Point3<i32>) -> BitCube3Coords {
+		assert!((-1..=1).contains(&coords.x));
+		assert!((-1..=1).contains(&coords.y));
+		assert!((-1..=1).contains(&coords.z));
+		BitCube3Coords { x: coords.x, y: coords.y, z: coords.z }
+	}
+}
+
+impl BitCube3Coords {
+	fn index(self) -> usize {
+		((self.x + 1) + (self.y + 1) * 3 + (self.z + 1) * 3 * 3) as usize
+	}
+
+	fn get(self, axis: NonOrientedAxis) -> i32 {
+		match axis {
+			NonOrientedAxis::X => self.x,
+			NonOrientedAxis::Y => self.y,
+			NonOrientedAxis::Z => self.z,
+		}
+	}
+
+	fn set(&mut self, axis: NonOrientedAxis, value: i32) {
+		assert!((-1..=1).contains(&value));
+		match axis {
+			NonOrientedAxis::X => self.x = value,
+			NonOrientedAxis::Y => self.y = value,
+			NonOrientedAxis::Z => self.z = value,
+		}
+	}
+}
+
+/// A 3x3x3 cube of boolean values.
+/// The (0, 0, 0) coords is the center of the cube (that spans from (-1, -1, -1) to (1, 1, 1)).
+#[derive(Debug, Clone, Copy)]
+struct BitCube3 {
+	data: BitArray27,
+}
+impl BitCube3 {
+	fn new_zero() -> BitCube3 {
+		BitCube3 { data: BitArray27::new_zero() }
+	}
+	fn get(self, coords: BitCube3Coords) -> bool {
+		self.data.get(coords.index())
+	}
+	fn set(&mut self, coords: BitCube3Coords, value: bool) {
+		self.data.set(coords.index(), value);
+	}
+}
 
 #[derive(Clone, Copy)]
 struct BlockTypeId {
@@ -193,6 +280,21 @@ impl ChunkBlocks {
 		let mut block_vertices = Vec::new();
 		for coords in self.coords_span.iter_coords() {
 			if self.get(coords).unwrap().is_not_air {
+				let opacity_bit_cube_3 = {
+					let mut cube = BitCube3::new_zero();
+					for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+						let neighboor = coords + delta.to_vec();
+						cube.set(
+							delta.into(),
+							if let Some(block) = self.get(neighboor) {
+								block.is_not_air
+							} else {
+								false
+							},
+						);
+					}
+					cube
+				};
 				for direction in OrientedAxis::all_the_six_possible_directions() {
 					let is_covered_by_neighbor = {
 						let neighbor_coords = coords + direction.delta();
@@ -207,6 +309,7 @@ impl ChunkBlocks {
 							&mut block_vertices,
 							direction,
 							coords.map(|x| x as f32),
+							opacity_bit_cube_3,
 						);
 					}
 				}
@@ -247,6 +350,9 @@ impl ChunkBlocks {
 						&mut chunk_mesh.block_vertices,
 						direction,
 						coords.map(|x| x as f32),
+						BitCube3::new_zero(),
+						// TODO: HANDLE AMBIANT OCCLUSION ON CHUNK BORDERS
+						// THIS WILL REQUIRE TO INCLUDE MORE FACES IN THIS FUNCTION
 					);
 				}
 			}
@@ -289,21 +395,20 @@ fn generate_block_face_mesh(
 	vertices: &mut Vec<BlockVertexPod>,
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
+	neighborhood_opaqueness: BitCube3,
 ) {
 	// NO EARLY OPTIMIZATION
 	// This shall remain in an unoptimized, unfactorized and flexible state for now!
 
 	// We are just meshing a single face, thus a square.
 	// We start by 4 points at the center of a block.
-	let mut a: cgmath::Point3<f32> = block_center;
-	let mut b: cgmath::Point3<f32> = block_center;
-	let mut c: cgmath::Point3<f32> = block_center;
-	let mut d: cgmath::Point3<f32> = block_center;
+	let mut coords_array: [cgmath::Point3<f32>; 4] =
+		[block_center, block_center, block_center, block_center];
 	// We move the 4 points to the center of the face we are meshing.
-	a[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	b[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	c[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
-	d[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	for coords in coords_array.iter_mut() {
+		coords[face_orientation.axis.index()] += 0.5 * face_orientation.orientation.sign() as f32;
+	}
+
 	// In doing so we moved the points along some axis.
 	// The two other axes are the ones that describe a plane in which the 4 points will be moved
 	// to make a square, so we get these two other axes.
@@ -313,15 +418,74 @@ fn generate_block_face_mesh(
 	let other_axis_a = other_axes.next().unwrap();
 	let other_axis_b = other_axes.next().unwrap();
 	assert!(other_axes.next().is_none());
+
 	// Now we move each point from the center of the face square to one of the square vertex.
-	a[other_axis_a.index()] -= 0.5;
-	a[other_axis_b.index()] -= 0.5;
-	b[other_axis_a.index()] -= 0.5;
-	b[other_axis_b.index()] += 0.5;
-	c[other_axis_a.index()] += 0.5;
-	c[other_axis_b.index()] -= 0.5;
-	d[other_axis_a.index()] += 0.5;
-	d[other_axis_b.index()] += 0.5;
+	coords_array[0][other_axis_a.index()] -= 0.5;
+	coords_array[0][other_axis_b.index()] -= 0.5;
+	coords_array[1][other_axis_a.index()] -= 0.5;
+	coords_array[1][other_axis_b.index()] += 0.5;
+	coords_array[2][other_axis_a.index()] += 0.5;
+	coords_array[2][other_axis_b.index()] -= 0.5;
+	coords_array[3][other_axis_a.index()] += 0.5;
+	coords_array[3][other_axis_b.index()] += 0.5;
+
+	let normal = {
+		let mut normal = [0.0, 0.0, 0.0];
+		normal[face_orientation.axis.index()] = face_orientation.orientation.sign() as f32;
+		normal
+	};
+
+	let color = [0.8, 0.8, 0.8];
+
+	// The ambiant occlusion trick used here was taken from
+	// https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/
+	// this cool blog post seem to be famous in the voxel engine scene.
+	let ambiant_occlusion_base_value = |side_a: bool, side_b: bool, corner_ab: bool| {
+		if side_a && side_b {
+			0
+		} else {
+			3 - (side_a as i32 + side_b as i32 + corner_ab as i32)
+		}
+	};
+	let ambiant_occlusion_uwu = |along_a: i32, along_b: i32| {
+		let mut coords: BitCube3Coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(face_orientation.axis, face_orientation.orientation.sign());
+		coords.set(other_axis_a, along_a);
+		let side_a = neighborhood_opaqueness.get(coords);
+
+		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(face_orientation.axis, face_orientation.orientation.sign());
+		coords.set(other_axis_b, along_b);
+		let side_b = neighborhood_opaqueness.get(coords);
+
+		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(face_orientation.axis, face_orientation.orientation.sign());
+		coords.set(other_axis_a, along_a);
+		coords.set(other_axis_b, along_b);
+		let corner_ab = neighborhood_opaqueness.get(coords);
+
+		ambiant_occlusion_base_value(side_a, side_b, corner_ab) as f32 / 3.0
+	};
+	let ambiant_occlusion_array = [
+		ambiant_occlusion_uwu(-1, -1),
+		ambiant_occlusion_uwu(-1, 1),
+		ambiant_occlusion_uwu(1, -1),
+		ambiant_occlusion_uwu(1, 1),
+	];
+
+	// The four vertices currently corming a square are now being given as two triangles.
+	// The diagonal of the square (aa-bb or ab-ba) that will be the "cut" in the square
+	// to form triangles is selected based on the ambiant occlusion values of the vertices.
+	// Depending on the diagonal picked, the ambiant occlusion behaves differently on the face,
+	// and we make sure that this behavior is consistent.
+	let other_triangle_cut = ambiant_occlusion_array[0] + ambiant_occlusion_array[3]
+		<= ambiant_occlusion_array[1] + ambiant_occlusion_array[2];
+	let indices = if other_triangle_cut {
+		[0, 2, 1, 1, 2, 3]
+	} else {
+		[1, 0, 3, 3, 0, 2]
+	};
+
 	// Face culling will discard triangles whose verices don't end up clipped to the screen in
 	// a counter-clockwise order. This means that triangles must be counter-clockwise when
 	// we look at their front and clockwise when we look at their back.
@@ -331,27 +495,24 @@ fn generate_block_face_mesh(
 		NonOrientedAxis::Y => face_orientation.orientation == AxisOrientation::Positivewards,
 		NonOrientedAxis::Z => face_orientation.orientation == AxisOrientation::Negativewards,
 	};
-	let normal = {
-		let mut normal = [0.0, 0.0, 0.0];
-		normal[face_orientation.axis.index()] = face_orientation.orientation.sign() as f32;
-		normal
+	let indices_indices_normal = [0, 1, 2, 3, 4, 5];
+	let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
+	let mut handle_index = |index: usize| {
+		vertices.push(BlockVertexPod {
+			position: coords_array[index].into(),
+			color,
+			normal,
+			ambiant_occlusion: ambiant_occlusion_array[index],
+		});
 	};
-	let color = [0.8, 0.8, 0.8];
-	let ambiant_occlusion = 0.0;
 	if !reverse_order {
-		vertices.push(BlockVertexPod { position: a.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: d.into(), color, normal, ambiant_occlusion });
+		for indices_index in indices_indices_normal {
+			handle_index(indices[indices_index]);
+		}
 	} else {
-		vertices.push(BlockVertexPod { position: a.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: d.into(), color, normal, ambiant_occlusion });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
+		for indices_index in indices_indices_reversed {
+			handle_index(indices[indices_index]);
+		}
 	}
 }
 
