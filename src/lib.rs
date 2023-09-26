@@ -146,9 +146,10 @@ struct OpaquenessLayerAroundChunk {
 
 impl OpaquenessLayerAroundChunk {
 	fn new(surrounded_chunk_coords_span: ChunkCoordsSpan) -> OpaquenessLayerAroundChunk {
-		let data = bitvec::vec::BitVec::with_capacity(OpaquenessLayerAroundChunk::data_size(
-			surrounded_chunk_coords_span.cd,
-		));
+		let data = bitvec::vec::BitVec::repeat(
+			false,
+			OpaquenessLayerAroundChunk::data_size(surrounded_chunk_coords_span.cd),
+		);
 		OpaquenessLayerAroundChunk { surrounded_chunk_coords_span, data }
 	}
 
@@ -160,7 +161,7 @@ impl OpaquenessLayerAroundChunk {
 	}
 
 	/// One of the functions of all times, ever!
-	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
+	fn coords_to_index_in_data_unchecked(&self, coords: BlockCoords) -> Option<usize> {
 		// Ok so here the goal is to map the coords that are in the layer to a unique index.
 		if self.surrounded_chunk_coords_span.contains(coords) {
 			// If we fall in the chunk that the layer encloses, then we are not in the layer
@@ -218,6 +219,14 @@ impl OpaquenessLayerAroundChunk {
 			Some((layer_edge.pow(2) * 2 + (iz - 1) * square_size + sub_index) as usize)
 			// >w<
 		}
+	}
+
+	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
+		let index_opt = self.coords_to_index_in_data_unchecked(coords);
+		if let Some(index) = index_opt {
+			assert!(index < self.data.len());
+		}
+		index_opt
 	}
 
 	fn set(&mut self, coords: BlockCoords, value: bool) {
@@ -358,6 +367,50 @@ impl ChunkBlocks {
 			}
 		}
 		chunk_mesh.cpu_to_gpu_update_required = true;
+	}
+
+	fn generate_mesh_given_surrounding_opaqueness(
+		&self,
+		mut opaqueness_layer: OpaquenessLayerAroundChunk,
+	) -> ChunkMesh {
+		let mut is_opaque = |coords: BlockCoords| {
+			if let Some(block) = self.get(coords) {
+				block.is_not_air
+			} else if let Some(opaque) = opaqueness_layer.get(coords) {
+				opaque
+			} else {
+				unreachable!()
+			}
+		};
+
+		let mut block_vertices = Vec::new();
+		for coords in self.coords_span.iter_coords() {
+			if self.get(coords).unwrap().is_not_air {
+				let opacity_bit_cube_3 = {
+					let mut cube = BitCube3::new_zero();
+					for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+						let neighbor_coords = coords + delta.to_vec();
+						cube.set(delta.into(), is_opaque(neighbor_coords));
+					}
+					cube
+				};
+				for direction in OrientedAxis::all_the_six_possible_directions() {
+					let is_covered_by_neighbor = {
+						let neighbor_coords = coords + direction.delta();
+						is_opaque(neighbor_coords)
+					};
+					if !is_covered_by_neighbor {
+						generate_block_face_mesh(
+							&mut block_vertices,
+							direction,
+							coords.map(|x| x as f32),
+							opacity_bit_cube_3,
+						);
+					}
+				}
+			}
+		}
+		ChunkMesh::from_vertices(block_vertices)
 	}
 }
 
@@ -533,6 +586,16 @@ impl Chunk {
 		let mesh = self
 			.blocks
 			.generate_mesh_assuming_surrounded_by_opaque_or_transparent(surrounded_by_opaque);
+		self.mesh = Some(mesh);
+	}
+
+	fn generate_mesh_given_surrounding_opaqueness(
+		&mut self,
+		opaqueness_layer: OpaquenessLayerAroundChunk,
+	) {
+		let mesh = self
+			.blocks
+			.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
 		self.mesh = Some(mesh);
 	}
 }
@@ -855,38 +918,12 @@ pub fn run() {
 		}
 	}
 
-	// It seems pretty hard (or at least it requires a trick that I didn't figure out yet)
-	// to iterate over pairs of values of a HashMap and be able to mutate them.
-	// The borrow checker is hard but fair, but here it is too hard.
-	// Borrowing the chunk map mutably in a more fine grained manner is necessary here,
-	// and iterating over the keys without borrowing it is the only way I could find.
-	// Also removing a chunk from the map to modify its mesh while iterating over other chunks
-	// in the map before putting the chunk back in is the only thing that worked (among the lots
-	// of things that I tried).
-	// TODO: Find a better way maybe?
-	// TODO: Definitely find something better here, this piece of code is highly questionable.
-	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().cloned().collect();
+	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().copied().collect();
 	for chunk_coords in chunk_coords_list {
-		// We are going to generate the mesh of the `chunk`. It will be inserted back in
-		// when we are done with it.
-		let mut chunk = chunk_grid.map.remove(&chunk_coords).unwrap();
-
-		chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(true);
-
-		for direction in OrientedAxis::all_the_six_possible_directions() {
-			let neighbor_chunk_coords = chunk_coords + direction.delta();
-			if chunk_grid.map.contains_key(&neighbor_chunk_coords) {
-				let neighbor_chunk = chunk_grid.map.get(&neighbor_chunk_coords).unwrap();
-				let Chunk { ref blocks, ref mut mesh, .. } = chunk;
-				blocks.generate_missing_faces_on_chunk_boarder_in_mesh(
-					mesh.as_mut().unwrap(),
-					&neighbor_chunk.blocks,
-				);
-			}
-		}
-
+		let opaqueness_layer = chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
+		let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
+		chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
 		chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
-		chunk_grid.map.insert(chunk_coords, chunk);
 	}
 
 	let mut sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
