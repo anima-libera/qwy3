@@ -337,20 +337,21 @@ fn generate_block_face_mesh(
 		normal
 	};
 	let color = [0.8, 0.8, 0.8];
+	let ambiant_occlusion = 0.0;
 	if !reverse_order {
-		vertices.push(BlockVertexPod { position: a.into(), color, normal });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal });
-		vertices.push(BlockVertexPod { position: d.into(), color, normal });
+		vertices.push(BlockVertexPod { position: a.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: d.into(), color, normal, ambiant_occlusion });
 	} else {
-		vertices.push(BlockVertexPod { position: a.into(), color, normal });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal });
-		vertices.push(BlockVertexPod { position: b.into(), color, normal });
-		vertices.push(BlockVertexPod { position: d.into(), color, normal });
-		vertices.push(BlockVertexPod { position: c.into(), color, normal });
+		vertices.push(BlockVertexPod { position: a.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: b.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: d.into(), color, normal, ambiant_occlusion });
+		vertices.push(BlockVertexPod { position: c.into(), color, normal, ambiant_occlusion });
 	}
 }
 

@@ -7,6 +7,7 @@ pub struct BlockVertexPod {
 	pub position: [f32; 3],
 	pub color: [f32; 3],
 	pub normal: [f32; 3],
+	pub ambiant_occlusion: f32,
 }
 
 pub fn render_pipeline(
@@ -34,6 +35,11 @@ pub fn render_pipeline(
 				offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress,
 				shader_location: 2,
 				format: wgpu::VertexFormat::Float32x3,
+			},
+			wgpu::VertexAttribute {
+				offset: (std::mem::size_of::<[f32; 3]>() * 3) as wgpu::BufferAddress,
+				shader_location: 3,
+				format: wgpu::VertexFormat::Float32,
 			},
 		],
 	};
