@@ -273,51 +273,6 @@ mod test {
 }
 
 impl ChunkBlocks {
-	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-		&self,
-		surrounded_by_opaque: bool,
-	) -> ChunkMesh {
-		let mut block_vertices = Vec::new();
-		for coords in self.coords_span.iter_coords() {
-			if self.get(coords).unwrap().is_not_air {
-				let opacity_bit_cube_3 = {
-					let mut cube = BitCube3::new_zero();
-					for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
-						let neighboor = coords + delta.to_vec();
-						cube.set(
-							delta.into(),
-							if let Some(block) = self.get(neighboor) {
-								block.is_not_air
-							} else {
-								false
-							},
-						);
-					}
-					cube
-				};
-				for direction in OrientedAxis::all_the_six_possible_directions() {
-					let is_covered_by_neighbor = {
-						let neighbor_coords = coords + direction.delta();
-						if self.coords_span.contains(neighbor_coords) {
-							self.get(neighbor_coords).unwrap().is_not_air
-						} else {
-							surrounded_by_opaque
-						}
-					};
-					if !is_covered_by_neighbor {
-						generate_block_face_mesh(
-							&mut block_vertices,
-							direction,
-							coords.map(|x| x as f32),
-							opacity_bit_cube_3,
-						);
-					}
-				}
-			}
-		}
-		ChunkMesh::from_vertices(block_vertices)
-	}
-
 	fn generate_mesh_given_surrounding_opaqueness(
 		&self,
 		mut opaqueness_layer: OpaquenessLayerAroundChunk,
@@ -526,16 +481,6 @@ struct Chunk {
 impl Chunk {
 	fn new_empty(coords: ChunkCoordsSpan) -> Chunk {
 		Chunk { blocks: ChunkBlocks::new(coords), mesh: None }
-	}
-
-	fn generate_mesh_assuming_surrounded_by_opaque_or_transparent(
-		&mut self,
-		surrounded_by_opaque: bool,
-	) {
-		let mesh = self
-			.blocks
-			.generate_mesh_assuming_surrounded_by_opaque_or_transparent(surrounded_by_opaque);
-		self.mesh = Some(mesh);
 	}
 
 	fn generate_mesh_given_surrounding_opaqueness(
@@ -1029,13 +974,22 @@ pub fn run() {
 							BlockTypeId { is_not_air: !block.is_not_air },
 						);
 
-						let chunk_coords =
-							cd.world_coords_to_containing_chunk_coords(player_bottom_block_coords);
-						let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-						chunk.generate_mesh_assuming_surrounded_by_opaque_or_transparent(true);
-						chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
-						// TODO: If the block is on the edge of a chunk we also need to update the
-						// meshes of these chunks.
+						let mut chunk_coords_to_update = vec![];
+						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+							let neighbor_coords = player_bottom_block_coords + delta.to_vec();
+							let chunk_coords = cd.world_coords_to_containing_chunk_coords(neighbor_coords);
+							chunk_coords_to_update.push(chunk_coords);
+						}
+
+						for chunk_coords in chunk_coords_to_update {
+							if chunk_grid.map.contains_key(&chunk_coords) {
+								let opaqueness_layer =
+									chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
+								let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
+								chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+								chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
+							}
+						}
 					}
 				},
 				_ => {},
