@@ -31,7 +31,7 @@ impl ChunkDimensions {
 		self.edge.pow(3) as usize
 	}
 
-	pub fn dimensions(self) -> cgmath::Vector3<i32> {
+	pub fn _dimensions(self) -> cgmath::Vector3<i32> {
 		(self.edge, self.edge, self.edge).into()
 	}
 }
@@ -68,12 +68,12 @@ impl ChunkCoordsSpan {
 
 	/// Iterate over all the blocks (contained in the chunk) that touch the chunk face
 	/// that faces to the given direction.
-	pub fn iter_block_coords_on_chunk_face(
+	pub fn _iter_block_coords_on_chunk_face(
 		self,
 		face_orientation: OrientedAxis,
 	) -> impl Iterator<Item = BlockCoords> {
 		let mut inf = self.block_coords_inf();
-		let mut dims = self.cd.dimensions();
+		let mut dims = self.cd._dimensions();
 		// We just flatten the area along the right axis.
 		dims[face_orientation.axis.index()] = 1;
 		// We also make sure the flatten area touches the right face.
@@ -146,38 +146,6 @@ pub fn iter_3d_cube_center_radius(
 /// Coordinates of a chunk in the 3D grid of chunks
 /// (which is not on the same scale as block coords, here we designate whole chunks).
 pub type ChunkCoords = cgmath::Point3<i32>;
-
-pub fn is_neighbor_with(a: cgmath::Point3<i32>, b: cgmath::Point3<i32>) -> bool {
-	a.x.abs_diff(b.x) + a.y.abs_diff(b.y) + a.z.abs_diff(b.z) == 1
-}
-
-/// This is supposed to return the direction to go from `a` to `b` if that takes
-/// just one move of one chunk (so if they are neighbors). Returns `None` if not neighbors.
-pub fn direction_to_neighbor(
-	a: cgmath::Point3<i32>,
-	b: cgmath::Point3<i32>,
-) -> Option<OrientedAxis> {
-	let dx = b.x - a.x;
-	let dy = b.y - a.y;
-	let dz = b.z - a.z;
-	let (axis, d) = if dx != 0 && dy == 0 && dz == 0 {
-		(NonOrientedAxis::X, dx)
-	} else if dx == 0 && dy != 0 && dz == 0 {
-		(NonOrientedAxis::Y, dy)
-	} else if dx == 0 && dy == 0 && dz != 0 {
-		(NonOrientedAxis::Z, dz)
-	} else {
-		return None;
-	};
-	let orientation = if d == -1 {
-		AxisOrientation::Negativewards
-	} else if d == 1 {
-		AxisOrientation::Positivewards
-	} else {
-		return None;
-	};
-	Some(OrientedAxis { axis, orientation })
-}
 
 impl ChunkDimensions {
 	pub fn world_coords_to_containing_chunk_coords(self, coords: BlockCoords) -> ChunkCoords {

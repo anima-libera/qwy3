@@ -2,7 +2,7 @@ mod camera;
 mod coords;
 mod shaders;
 
-use std::{collections::HashMap, f32::consts::TAU, ops::Deref};
+use std::{collections::HashMap, f32::consts::TAU};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace};
@@ -66,15 +66,6 @@ impl BitCube3Coords {
 	fn index(self) -> usize {
 		((self.x + 1) + (self.y + 1) * 3 + (self.z + 1) * 3 * 3) as usize
 	}
-
-	fn get(self, axis: NonOrientedAxis) -> i32 {
-		match axis {
-			NonOrientedAxis::X => self.x,
-			NonOrientedAxis::Y => self.y,
-			NonOrientedAxis::Z => self.z,
-		}
-	}
-
 	fn set(&mut self, axis: NonOrientedAxis, value: i32) {
 		assert!((-1..=1).contains(&value));
 		match axis {
@@ -325,48 +316,6 @@ impl ChunkBlocks {
 			}
 		}
 		ChunkMesh::from_vertices(block_vertices)
-	}
-
-	/// Generates the faces of blocks in the `self` chunk blocks that touch blocks in
-	/// the neighbor chunk blocks `neighbor_chunk` and that can be known to be visible
-	/// given the blocks in the neighbor chunk.
-	fn generate_missing_faces_on_chunk_boarder_in_mesh(
-		&self,
-		chunk_mesh: &mut ChunkMesh,
-		neighbor_chunk: &ChunkBlocks,
-	) {
-		assert!(is_neighbor_with(
-			self.coords_span.chunk_coords,
-			neighbor_chunk.coords_span.chunk_coords
-		));
-		// Note that this is redundent with the `unwrap` of the direction...
-		// TODO: Remove?
-		let direction = direction_to_neighbor(
-			self.coords_span.chunk_coords,
-			neighbor_chunk.coords_span.chunk_coords,
-		)
-		.unwrap();
-		for coords in self.coords_span.iter_block_coords_on_chunk_face(direction) {
-			if self.get(coords).unwrap().is_not_air {
-				let covering_block_coords = coords + direction.delta();
-				assert!(neighbor_chunk.coords_span.contains(covering_block_coords));
-				let covered = neighbor_chunk
-					.get(covering_block_coords)
-					.unwrap()
-					.is_not_air;
-				if !covered {
-					generate_block_face_mesh(
-						&mut chunk_mesh.block_vertices,
-						direction,
-						coords.map(|x| x as f32),
-						BitCube3::new_zero(),
-						// TODO: HANDLE AMBIANT OCCLUSION ON CHUNK BORDERS
-						// THIS WILL REQUIRE TO INCLUDE MORE FACES IN THIS FUNCTION
-					);
-				}
-			}
-		}
-		chunk_mesh.cpu_to_gpu_update_required = true;
 	}
 
 	fn generate_mesh_given_surrounding_opaqueness(
