@@ -5,7 +5,7 @@ mod shaders;
 use std::{collections::HashMap, f32::consts::TAU};
 
 use bytemuck::Zeroable;
-use cgmath::{EuclideanSpace, InnerSpace};
+use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
@@ -780,6 +780,8 @@ pub fn run() {
 		.unwrap();
 	window.set_cursor_visible(false);
 
+	//let mut targeted_block_coords: Option<BlockCoords> = None;
+
 	let mut walking_forward = false;
 	let mut walking_backward = false;
 	let mut walking_leftward = false;
@@ -1020,6 +1022,7 @@ pub fn run() {
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. }
 			if cursor_is_captured =>
 		{
+			// Move camera.
 			let sensitivity = 0.01;
 			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
 			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
@@ -1133,10 +1136,36 @@ pub fn run() {
 
 			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys.aligned_box);
 
+			let direction = camera_direction.to_vec3();
+			let first_person_camera_position = player_phys.aligned_box.pos
+				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0)) * 0.7;
+			let mut position = first_person_camera_position;
+			let targeted_block_coords = loop {
+				if first_person_camera_position.distance(position) > 6.0 {
+					break None;
+				}
+				let position_int = position.map(|x| x.round() as i32);
+				if chunk_grid
+					.get_block(position_int)
+					.is_some_and(|block| block.is_not_air)
+				{
+					break Some(position_int);
+				}
+				position += direction * 0.01;
+			};
+
+			let targeted_block_box_mesh_opt = targeted_block_coords.map(|coords| {
+				SimpleLineMesh::from_aligned_box(
+					&device,
+					&AlignedBox {
+						pos: coords.map(|x| x as f32),
+						dims: cgmath::vec3(1.01, 1.01, 1.01),
+					},
+				)
+			});
+
 			let camera_view_projection_matrix = {
-				let mut camera_position = player_phys.aligned_box.pos
-					+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0))
-						* 0.7;
+				let mut camera_position = first_person_camera_position;
 				let camera_direction_vector = camera_direction.to_vec3();
 				if enable_camera_third_person {
 					camera_position -= camera_direction_vector * 5.0;
@@ -1202,6 +1231,13 @@ pub fn run() {
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
 				render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
+			}
+
+			if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
+				render_pass.set_pipeline(&simple_line_render_pipeline);
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 			}
 
 			// Release `render_pass.parent` which is a ref mut to `encoder`.
