@@ -822,7 +822,7 @@ pub fn run() {
 		gravity_factor: 1.0,
 	};
 	let mut enable_physics = true;
-	let mut enable_display_phys_box = true;
+	let mut enable_display_phys_box = false;
 
 	let cd = ChunkDimensions::from(10);
 
@@ -1062,7 +1062,7 @@ pub fn run() {
 			if cursor_is_captured =>
 		{
 			// Move camera.
-			let sensitivity = 0.01;
+			let sensitivity = 0.005;
 			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
 			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
 			if camera_direction.angle_vertical < 0.0 {
@@ -1175,9 +1175,11 @@ pub fn run() {
 
 			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys.aligned_box);
 
-			let direction = camera_direction.to_vec3();
 			let first_person_camera_position = player_phys.aligned_box.pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0)) * 0.7;
+
+			// Targeted block coords update.
+			let direction = camera_direction.to_vec3();
 			let mut position = first_person_camera_position;
 			let mut last_position_int: Option<BlockCoords> = None;
 			targeted_block_coords = loop {
@@ -1198,6 +1200,8 @@ pub fn run() {
 				if last_position_int != Some(position_int) {
 					last_position_int = Some(position_int);
 				}
+				// TODO: Advance directly to the next block with exactly the right step distance,
+				// also do not skip blocks (even a small arbitrary step can be too big sometimes).
 				position += direction * 0.01;
 			};
 
