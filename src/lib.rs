@@ -500,7 +500,7 @@ struct ChunkGrid {
 }
 
 impl ChunkGrid {
-	fn set_block(&mut self, coords: BlockCoords, block: BlockTypeId) {
+	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		match self.map.get_mut(&chunk_coords) {
 			Some(chunk) => {
@@ -512,6 +512,33 @@ impl ChunkGrid {
 				// has to be set when loding the chunk.
 				unimplemented!()
 			},
+		}
+	}
+
+	fn set_block_and_update_meshes(
+		&mut self,
+		coords: BlockCoords,
+		block: BlockTypeId,
+		device: &wgpu::Device,
+	) {
+		self.set_block_but_do_not_update_meshes(coords, block);
+
+		let mut chunk_coords_to_update = vec![];
+		for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+			let neighbor_coords = coords + delta.to_vec();
+			let chunk_coords = self
+				.cd
+				.world_coords_to_containing_chunk_coords(neighbor_coords);
+			chunk_coords_to_update.push(chunk_coords);
+		}
+
+		for chunk_coords in chunk_coords_to_update {
+			if self.map.contains_key(&chunk_coords) {
+				let opaqueness_layer = self.get_opaqueness_layer_around_chunk(chunk_coords, false);
+				let chunk = self.map.get_mut(&chunk_coords).unwrap();
+				chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+				chunk.mesh.as_mut().unwrap().update_gpu_data(device);
+			}
 		}
 	}
 
@@ -780,7 +807,7 @@ pub fn run() {
 		.unwrap();
 	window.set_cursor_visible(false);
 
-	//let mut targeted_block_coords: Option<BlockCoords> = None;
+	let mut targeted_block_coords: Option<BlockCoords> = None;
 
 	let mut walking_forward = false;
 	let mut walking_backward = false;
@@ -971,29 +998,24 @@ pub fn run() {
 					let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 					let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
 					if let Some(block) = player_bottom_block_opt {
-						chunk_grid.set_block(
+						chunk_grid.set_block_and_update_meshes(
 							player_bottom_block_coords,
 							BlockTypeId { is_not_air: !block.is_not_air },
+							&device,
 						);
-
-						let mut chunk_coords_to_update = vec![];
-						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
-							let neighbor_coords = player_bottom_block_coords + delta.to_vec();
-							let chunk_coords = cd.world_coords_to_containing_chunk_coords(neighbor_coords);
-							chunk_coords_to_update.push(chunk_coords);
-						}
-
-						for chunk_coords in chunk_coords_to_update {
-							if chunk_grid.map.contains_key(&chunk_coords) {
-								let opaqueness_layer =
-									chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
-								let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-								chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
-								chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
-							}
-						}
 					}
 				},
+
+				(VirtualKeyCode::A, ElementState::Pressed) => {
+					if let Some(coords) = targeted_block_coords {
+						chunk_grid.set_block_and_update_meshes(
+							coords,
+							BlockTypeId { is_not_air: false },
+							&device,
+						);
+					}
+				},
+
 				_ => {},
 			},
 
@@ -1140,7 +1162,7 @@ pub fn run() {
 			let first_person_camera_position = player_phys.aligned_box.pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0)) * 0.7;
 			let mut position = first_person_camera_position;
-			let targeted_block_coords = loop {
+			targeted_block_coords = loop {
 				if first_person_camera_position.distance(position) > 6.0 {
 					break None;
 				}
