@@ -807,7 +807,9 @@ pub fn run() {
 		.unwrap();
 	window.set_cursor_visible(false);
 
-	let mut targeted_block_coords: Option<BlockCoords> = None;
+	// First is the block of matter that is targeted,
+	// second is the empty block near it that would be filled if a block was placed now.
+	let mut targeted_block_coords: Option<(BlockCoords, BlockCoords)> = None;
 
 	let mut walking_forward = false;
 	let mut walking_backward = false;
@@ -1007,10 +1009,10 @@ pub fn run() {
 				},
 
 				(VirtualKeyCode::A, ElementState::Pressed) => {
-					if let Some(coords) = targeted_block_coords {
+					if let Some((_, coords)) = targeted_block_coords {
 						chunk_grid.set_block_and_update_meshes(
 							coords,
-							BlockTypeId { is_not_air: false },
+							BlockTypeId { is_not_air: true },
 							&device,
 						);
 					}
@@ -1038,6 +1040,21 @@ pub fn run() {
 					.unwrap();
 				window.set_cursor_visible(false);
 			},
+
+			WindowEvent::MouseInput {
+				state: winit::event::ElementState::Pressed,
+				button: winit::event::MouseButton::Left,
+				..
+			} if cursor_is_captured => {
+				if let Some((coords, _)) = targeted_block_coords {
+					chunk_grid.set_block_and_update_meshes(
+						coords,
+						BlockTypeId { is_not_air: false },
+						&device,
+					);
+				}
+			},
+
 			_ => {},
 		},
 
@@ -1162,6 +1179,7 @@ pub fn run() {
 			let first_person_camera_position = player_phys.aligned_box.pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0)) * 0.7;
 			let mut position = first_person_camera_position;
+			let mut last_position_int: Option<BlockCoords> = None;
 			targeted_block_coords = loop {
 				if first_person_camera_position.distance(position) > 6.0 {
 					break None;
@@ -1171,12 +1189,19 @@ pub fn run() {
 					.get_block(position_int)
 					.is_some_and(|block| block.is_not_air)
 				{
-					break Some(position_int);
+					if let Some(last_position_int) = last_position_int {
+						break Some((position_int, last_position_int));
+					} else {
+						break None;
+					}
+				}
+				if last_position_int != Some(position_int) {
+					last_position_int = Some(position_int);
 				}
 				position += direction * 0.01;
 			};
 
-			let targeted_block_box_mesh_opt = targeted_block_coords.map(|coords| {
+			let targeted_block_box_mesh_opt = targeted_block_coords.map(|(coords, _)| {
 				SimpleLineMesh::from_aligned_box(
 					&device,
 					&AlignedBox {
