@@ -12,7 +12,7 @@ use winit::{
 	window::WindowBuilder,
 };
 
-use camera::{aspect_ratio, CameraPerspectiveSettings, Matrix4x4Pod};
+use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, Matrix4x4Pod};
 use coords::*;
 use shaders::{block::BlockVertexPod, simple_line::SimpleLineVertexPod};
 
@@ -880,6 +880,42 @@ pub fn run() {
 		label: Some("Sun Light Direction Bind Group"),
 	});
 
+	let sun_camera = CameraOrthographicSettings {
+		up_direction: (0.0, 0.0, 1.0).into(),
+		width: 100.0,
+		height: 100.0,
+		depth: 400.0,
+	};
+
+	// Shadow mapping stuff work in progress
+	if false {
+		let shadow_map_format = wgpu::TextureFormat::Depth32Float;
+
+		let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+			label: Some("Shadow Map Sampler"),
+			address_mode_u: wgpu::AddressMode::ClampToEdge,
+			address_mode_v: wgpu::AddressMode::ClampToEdge,
+			address_mode_w: wgpu::AddressMode::ClampToEdge,
+			mag_filter: wgpu::FilterMode::Linear,
+			min_filter: wgpu::FilterMode::Linear,
+			mipmap_filter: wgpu::FilterMode::Nearest,
+			compare: Some(wgpu::CompareFunction::LessEqual),
+			..Default::default()
+		});
+
+		let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
+			label: Some("Shadow Map Texture"),
+			size: wgpu::Extent3d { width: 4096, height: 4096, depth_or_array_layers: 1 },
+			mip_level_count: 1,
+			sample_count: 1,
+			dimension: wgpu::TextureDimension::D2,
+			format: shadow_map_format,
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+			view_formats: &[],
+		});
+		let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
+	}
+
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
 		format: wgpu::TextureFormat,
@@ -1222,7 +1258,13 @@ pub fn run() {
 					camera_position -= camera_direction_vector * 5.0;
 				}
 				let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
-				camera.view_projection_matrix(
+				//camera.view_projection_matrix(
+				//	camera_position,
+				//	camera_direction_vector,
+				//	camera_up_vector,
+				//)
+				println!("TODO: make this into a toggleable setting and fix the aspect ratio >w<");
+				sun_camera.view_projection_matrix(
 					camera_position,
 					camera_direction_vector,
 					camera_up_vector,

@@ -8,7 +8,7 @@ use cgmath::Zero;
 pub struct CameraPerspectiveSettings {
 	pub up_direction: cgmath::Vector3<f32>,
 	/// Width / height.
-	pub aspect_ratio: f32,
+	pub aspect_ratio: AspectRatio,
 	/// Angle (unsigned, in radians) of view on the vertical axis, "fovy".
 	pub field_of_view_y: f32,
 	pub near_plane: f32,
@@ -45,6 +45,67 @@ impl CameraPerspectiveSettings {
 			self.aspect_ratio,
 			self.near_plane,
 			self.far_plane,
+		);
+		let view_projection_matrix = projection_matrix * view_matrix;
+
+		// (https://sotrh.github.io/learn-wgpu/beginner/tutorial6-uniforms/#a-perspective-camera)
+		// suggests to use this `OPENGL_TO_WGPU_MATRIX` transformation to account for the fact that
+		// in OpenGL the view projection transformation should get the frustum to fit in the cube
+		// from (-1, -1, -1) to (1, 1, 1), but in Wgpu the frustum should fit in the rectangular
+		// area from (-1, -1, 0) to (1, 1, 1). The difference is that on the Z axis (depth) the
+		// range is not (-1, 1) but instead is (0, 1).
+		// `cgmath` assumes OpenGL-like conventions and here we correct these assumptions to Wgpu.
+		#[rustfmt::skip]
+		pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+			1.0, 0.0, 0.0, 0.0,
+			0.0, 1.0, 0.0, 0.0,
+			0.0, 0.0, 0.5, 0.0,
+			0.0, 0.0, 0.5, 1.0,
+		);
+		let view_projection_matrix = OPENGL_TO_WGPU_MATRIX * view_projection_matrix;
+
+		Matrix4x4Pod { values: view_projection_matrix.into() }
+	}
+}
+
+/// Camera settings with no perspective (orthographic).
+///
+/// It doesn't contain the camera direction and target position,
+/// it only contains all the other setting values used in the
+/// computation of the view projection matrix.
+pub struct CameraOrthographicSettings {
+	pub up_direction: cgmath::Vector3<f32>,
+	pub width: f32,
+	pub height: f32,
+	pub depth: f32,
+}
+
+impl CameraOrthographicSettings {
+	/// Get the view projection matrix that can be sent to the GPU.
+	///
+	/// The `up_head` parameter does not represent the world's upwards direction
+	/// but instead represents the vector from the bottom to the top of the screen
+	/// but in 3D world coordinates. It helps when the `direction` is exactly vertical
+	/// (because in this case there would be no way to know how to angle the camera).
+	pub fn view_projection_matrix(
+		&self,
+		position: cgmath::Point3<f32>,
+		direction: cgmath::Vector3<f32>,
+		up_head: cgmath::Vector3<f32>,
+	) -> Matrix4x4Pod {
+		let up = if direction.x.is_zero() && direction.y.is_zero() {
+			up_head
+		} else {
+			self.up_direction
+		};
+		let view_matrix = cgmath::Matrix4::look_to_rh(position, direction, up);
+		let projection_matrix = cgmath::ortho(
+			-self.width / 2.0,
+			self.width / 2.0,
+			-self.height / 2.0,
+			self.height / 2.0,
+			-self.depth / 2.0,
+			self.depth / 2.0,
 		);
 		let view_projection_matrix = projection_matrix * view_matrix;
 
