@@ -12,7 +12,10 @@ use winit::{
 	window::WindowBuilder,
 };
 
-use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, Matrix4x4Pod};
+use camera::{
+	aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, CameraSettings,
+	Matrix4x4Pod,
+};
 use coords::*;
 use shaders::{block::BlockVertexPod, simple_line::SimpleLineVertexPod};
 
@@ -886,12 +889,13 @@ pub fn run() {
 		height: 100.0,
 		depth: 400.0,
 	};
+	let mut use_sun_camera_to_render = false;
 
 	// Shadow mapping stuff work in progress
 	if false {
 		let shadow_map_format = wgpu::TextureFormat::Depth32Float;
 
-		let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		let _shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 			label: Some("Shadow Map Sampler"),
 			address_mode_u: wgpu::AddressMode::ClampToEdge,
 			address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -913,7 +917,7 @@ pub fn run() {
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
 			view_formats: &[],
 		});
-		let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
+		let _shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
 	}
 
 	fn make_z_buffer_texture_view(
@@ -998,14 +1002,20 @@ pub fn run() {
 					*moving_in_some_direction = *state == ElementState::Pressed;
 				},
 
-				(VirtualKeyCode::P, ElementState::Pressed) => enable_physics = !enable_physics,
+				(VirtualKeyCode::P, ElementState::Pressed) => {
+					enable_physics = !enable_physics;
+				},
 
 				(VirtualKeyCode::M, ElementState::Pressed) => {
-					enable_camera_third_person = !enable_camera_third_person
+					enable_camera_third_person = !enable_camera_third_person;
 				},
 
 				(VirtualKeyCode::L, ElementState::Pressed) => {
-					enable_display_phys_box = !enable_display_phys_box
+					enable_display_phys_box = !enable_display_phys_box;
+				},
+
+				(VirtualKeyCode::J, ElementState::Pressed) => {
+					use_sun_camera_to_render = !use_sun_camera_to_render;
 				},
 
 				(VirtualKeyCode::K, ElementState::Pressed) => {
@@ -1258,17 +1268,19 @@ pub fn run() {
 					camera_position -= camera_direction_vector * 5.0;
 				}
 				let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
-				//camera.view_projection_matrix(
-				//	camera_position,
-				//	camera_direction_vector,
-				//	camera_up_vector,
-				//)
-				println!("TODO: make this into a toggleable setting and fix the aspect ratio >w<");
-				sun_camera.view_projection_matrix(
-					camera_position,
-					camera_direction_vector,
-					camera_up_vector,
-				)
+				if use_sun_camera_to_render {
+					sun_camera.view_projection_matrix(
+						camera_position,
+						camera_direction_vector,
+						camera_up_vector,
+					)
+				} else {
+					camera.view_projection_matrix(
+						camera_position,
+						camera_direction_vector,
+						camera_up_vector,
+					)
+				}
 			};
 			queue.write_buffer(
 				&camera_matrix_buffer,
@@ -1307,6 +1319,15 @@ pub fn run() {
 					stencil_ops: None,
 				}),
 			});
+
+			if use_sun_camera_to_render {
+				let scale = config.height as f32 / sun_camera.height;
+				let w = sun_camera.width * scale;
+				let h = sun_camera.height * scale;
+				let x = config.width as f32 / 2.0 - w / 2.0;
+				let y = config.height as f32 / 2.0 - h / 2.0;
+				render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
+			}
 
 			render_pass.set_pipeline(&block_render_pipeline);
 			render_pass.set_bind_group(0, &camera_bind_group, &[]);
