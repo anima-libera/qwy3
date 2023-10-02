@@ -1261,20 +1261,27 @@ pub fn run() {
 				)
 			});
 
+			let sun_camera_view_projection_matrix = {
+				let camera_position = first_person_camera_position;
+				let camera_direction_vector = -sun_position_in_sky.to_vec3();
+				let camera_up_vector = (0.0, 0.0, 1.0).into();
+				sun_camera.view_projection_matrix(
+					camera_position,
+					camera_direction_vector,
+					camera_up_vector,
+				)
+			};
+
 			let camera_view_projection_matrix = {
-				let mut camera_position = first_person_camera_position;
-				let camera_direction_vector = camera_direction.to_vec3();
-				if enable_camera_third_person {
-					camera_position -= camera_direction_vector * 5.0;
-				}
-				let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
 				if use_sun_camera_to_render {
-					sun_camera.view_projection_matrix(
-						camera_position,
-						camera_direction_vector,
-						camera_up_vector,
-					)
+					sun_camera_view_projection_matrix
 				} else {
+					let mut camera_position = first_person_camera_position;
+					let camera_direction_vector = camera_direction.to_vec3();
+					if enable_camera_third_person {
+						camera_position -= camera_direction_vector * 5.0;
+					}
+					let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
 					camera.view_projection_matrix(
 						camera_position,
 						camera_direction_vector,
