@@ -3,7 +3,6 @@ use super::block::BlockVertexPod;
 pub fn render_pipeline(
 	device: &wgpu::Device,
 	sun_camera_bind_group_layout: &wgpu::BindGroupLayout,
-	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
 	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {

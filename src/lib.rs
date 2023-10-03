@@ -943,6 +943,37 @@ pub fn run() {
 	});
 	let shadow_map_view = shadow_map_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+	let shadow_map_bind_group_layout =
+		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Shadow Map Bind Group Layout"),
+			entries: &[
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						sample_type: (),
+						view_dimension: (),
+						multisampled: (),
+					},
+					count: None,
+				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Sampler(()),
+					count: None,
+				},
+			],
+		});
+	let shadow_map_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Shadow Map Bind Group"),
+		layout: &shadow_map_bind_group_layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding: 0,
+			resource: shadow_map_matrix_buffer.as_entire_binding(),
+		}],
+	});
+
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
 		format: wgpu::TextureFormat,
@@ -969,7 +1000,6 @@ pub fn run() {
 	let block_shadow_render_pipeline = shaders::block_shadow::render_pipeline(
 		&device,
 		&sun_camera_bind_group_layout,
-		config.format,
 		shadow_map_format,
 	);
 
@@ -1349,7 +1379,7 @@ pub fn run() {
 					label: Some("Render Pass for Shadow Map"),
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &z_buffer_view,
+						view: &shadow_map_view,
 						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
 						stencil_ops: None,
 					}),
