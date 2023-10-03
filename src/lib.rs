@@ -780,6 +780,7 @@ pub fn run() {
 	});
 	let camera_bind_group_layout =
 		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Camera Bind Group Layout"),
 			entries: &[wgpu::BindGroupLayoutEntry {
 				binding: 0,
 				visibility: wgpu::ShaderStages::VERTEX,
@@ -790,15 +791,14 @@ pub fn run() {
 				},
 				count: None,
 			}],
-			label: Some("Camera Bind Group Layout"),
 		});
 	let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Camera Bind Group"),
 		layout: &camera_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding: 0,
 			resource: camera_matrix_buffer.as_entire_binding(),
 		}],
-		label: Some("Camera Bind Group"),
 	});
 
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
@@ -862,6 +862,7 @@ pub fn run() {
 	});
 	let sun_light_direction_bind_group_layout =
 		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Sun Light Direction Bind Group Layout"),
 			entries: &[wgpu::BindGroupLayoutEntry {
 				binding: 0,
 				visibility: wgpu::ShaderStages::VERTEX,
@@ -872,15 +873,14 @@ pub fn run() {
 				},
 				count: None,
 			}],
-			label: Some("Sun Light Direction Bind Group Layout"),
 		});
 	let sun_light_direction_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Sun Light Direction Bind Group"),
 		layout: &sun_light_direction_bind_group_layout,
 		entries: &[wgpu::BindGroupEntry {
 			binding: 0,
 			resource: sun_light_direction_buffer.as_entire_binding(),
 		}],
-		label: Some("Sun Light Direction Bind Group"),
 	});
 
 	let sun_camera = CameraOrthographicSettings {
@@ -889,36 +889,59 @@ pub fn run() {
 		height: 100.0,
 		depth: 400.0,
 	};
+	let sun_camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Sun Camera Buffer"),
+		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let sun_camera_bind_group_layout =
+		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Sun Camera Bind Group Layout"),
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::VERTEX,
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Uniform,
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+			}],
+		});
+	let sun_camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Sun Camera Bind Group"),
+		layout: &sun_camera_bind_group_layout,
+		entries: &[wgpu::BindGroupEntry {
+			binding: 0,
+			resource: sun_camera_matrix_buffer.as_entire_binding(),
+		}],
+	});
+
 	let mut use_sun_camera_to_render = false;
 
-	// Shadow mapping stuff work in progress
-	if false {
-		let shadow_map_format = wgpu::TextureFormat::Depth32Float;
-
-		let _shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-			label: Some("Shadow Map Sampler"),
-			address_mode_u: wgpu::AddressMode::ClampToEdge,
-			address_mode_v: wgpu::AddressMode::ClampToEdge,
-			address_mode_w: wgpu::AddressMode::ClampToEdge,
-			mag_filter: wgpu::FilterMode::Linear,
-			min_filter: wgpu::FilterMode::Linear,
-			mipmap_filter: wgpu::FilterMode::Nearest,
-			compare: Some(wgpu::CompareFunction::LessEqual),
-			..Default::default()
-		});
-
-		let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
-			label: Some("Shadow Map Texture"),
-			size: wgpu::Extent3d { width: 4096, height: 4096, depth_or_array_layers: 1 },
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format: shadow_map_format,
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-			view_formats: &[],
-		});
-		let _shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
-	}
+	let shadow_map_format = wgpu::TextureFormat::Depth32Float;
+	let shadow_map_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		label: Some("Shadow Map Sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		compare: Some(wgpu::CompareFunction::LessEqual),
+		..Default::default()
+	});
+	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
+		label: Some("Shadow Map Texture"),
+		size: wgpu::Extent3d { width: 4096, height: 4096, depth_or_array_layers: 1 },
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format: shadow_map_format,
+		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+		view_formats: &[],
+	});
+	let shadow_map_view = shadow_map_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
@@ -942,6 +965,13 @@ pub fn run() {
 	let z_buffer_format = wgpu::TextureFormat::Depth32Float;
 	let mut z_buffer_view =
 		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
+
+	let block_shadow_render_pipeline = shaders::block_shadow::render_pipeline(
+		&device,
+		&sun_camera_bind_group_layout,
+		config.format,
+		shadow_map_format,
+	);
 
 	let block_render_pipeline = shaders::block::render_pipeline(
 		&device,
@@ -1261,6 +1291,8 @@ pub fn run() {
 				)
 			});
 
+			sun_position_in_sky.angle_horizontal += (TAU / 30.0) * dt.as_secs_f32();
+
 			let sun_camera_view_projection_matrix = {
 				let camera_position = first_person_camera_position;
 				let camera_direction_vector = -sun_position_in_sky.to_vec3();
@@ -1271,6 +1303,11 @@ pub fn run() {
 					camera_up_vector,
 				)
 			};
+			queue.write_buffer(
+				&sun_camera_matrix_buffer,
+				0,
+				bytemuck::cast_slice(&[sun_camera_view_projection_matrix]),
+			);
 
 			let camera_view_projection_matrix = {
 				if use_sun_camera_to_render {
@@ -1295,74 +1332,97 @@ pub fn run() {
 				bytemuck::cast_slice(&[camera_view_projection_matrix]),
 			);
 
-			sun_position_in_sky.angle_horizontal += (TAU / 30.0) * dt.as_secs_f32();
-			let sun_light_direction = Vector3Pod { values: sun_position_in_sky.to_vec3().into() };
+			let sun_light_direction = Vector3Pod { values: (-sun_position_in_sky.to_vec3()).into() };
 			queue.write_buffer(
 				&sun_light_direction_buffer,
 				0,
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
 
-			let window_texture = window_surface.get_current_texture().unwrap();
-			let window_texture_view = window_texture
-				.texture
-				.create_view(&wgpu::TextureViewDescriptor::default());
 			let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
 				label: Some("Render Encoder"),
 			});
-			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("Render Pass"),
-				color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-					view: &window_texture_view,
-					resolve_target: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
-						store: true,
-					},
-				})],
-				depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-					view: &z_buffer_view,
-					depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
-					stencil_ops: None,
-				}),
-			});
 
-			if use_sun_camera_to_render {
-				let scale = config.height as f32 / sun_camera.height;
-				let w = sun_camera.width * scale;
-				let h = sun_camera.height * scale;
-				let x = config.width as f32 / 2.0 - w / 2.0;
-				let y = config.height as f32 / 2.0 - h / 2.0;
-				render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
-			}
+			// Render pass to generate the shadow map.
+			{
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass for Shadow Map"),
+					color_attachments: &[],
+					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+						view: &z_buffer_view,
+						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						stencil_ops: None,
+					}),
+				});
 
-			render_pass.set_pipeline(&block_render_pipeline);
-			render_pass.set_bind_group(0, &camera_bind_group, &[]);
-			render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
-			for chunk in chunk_grid.map.values() {
-				if let Some(ref mesh) = chunk.mesh {
-					render_pass
-						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+				render_pass.set_pipeline(&block_shadow_render_pipeline);
+				render_pass.set_bind_group(0, &sun_camera_bind_group, &[]);
+				for chunk in chunk_grid.map.values() {
+					if let Some(ref mesh) = chunk.mesh {
+						render_pass
+							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
+						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+					}
 				}
 			}
 
-			if enable_display_phys_box {
-				render_pass.set_pipeline(&simple_line_render_pipeline);
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
-			}
+			// Render pass to render the world to the screen.
+			let window_texture = window_surface.get_current_texture().unwrap();
+			{
+				let window_texture_view = window_texture
+					.texture
+					.create_view(&wgpu::TextureViewDescriptor::default());
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass"),
+					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+						view: &window_texture_view,
+						resolve_target: None,
+						ops: wgpu::Operations {
+							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
+							store: true,
+						},
+					})],
+					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+						view: &z_buffer_view,
+						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						stencil_ops: None,
+					}),
+				});
 
-			if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
-				render_pass.set_pipeline(&simple_line_render_pipeline);
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
-			}
+				if use_sun_camera_to_render {
+					let scale = config.height as f32 / sun_camera.height;
+					let w = sun_camera.width * scale;
+					let h = sun_camera.height * scale;
+					let x = config.width as f32 / 2.0 - w / 2.0;
+					let y = config.height as f32 / 2.0 - h / 2.0;
+					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
+				}
 
-			// Release `render_pass.parent` which is a ref mut to `encoder`.
-			drop(render_pass);
+				render_pass.set_pipeline(&block_render_pipeline);
+				render_pass.set_bind_group(0, &camera_bind_group, &[]);
+				render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
+				for chunk in chunk_grid.map.values() {
+					if let Some(ref mesh) = chunk.mesh {
+						render_pass
+							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
+						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+					}
+				}
+
+				if enable_display_phys_box {
+					render_pass.set_pipeline(&simple_line_render_pipeline);
+					render_pass.set_bind_group(0, &camera_bind_group, &[]);
+					render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
+				}
+
+				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
+					render_pass.set_pipeline(&simple_line_render_pipeline);
+					render_pass.set_bind_group(0, &camera_bind_group, &[]);
+					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
+				}
+			}
 
 			queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();

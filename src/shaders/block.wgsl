@@ -17,7 +17,7 @@ struct VertexOutput {
 fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 	var vertex_output: VertexOutput;
 	vertex_output.screen_position = uniform_camera * vec4<f32>(vertex_input.position, 1.0);
-	var shade = dot(vertex_input.normal, uniform_sun_light_direction) * 0.5 + 0.5;
+	var shade = dot(vertex_input.normal, -uniform_sun_light_direction) * 0.5 + 0.5;
 	shade = clamp(shade, 0.0, 1.0);
 	shade *= vertex_input.ambiant_occlusion * 0.5 + 0.5;
 	vertex_output.color = vec4<f32>(vertex_input.color * shade, 1.0);
