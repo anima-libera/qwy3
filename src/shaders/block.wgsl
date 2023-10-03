@@ -34,6 +34,7 @@ fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
+	// Use the shadow map to know if the fragment is in shadows from other geometries.
 	var position_in_sun_screen = uniform_sun_camera * vec4<f32>(the.world_position, 1.0);
 	// Stealing some stuff from
 	// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
@@ -42,12 +43,26 @@ fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	var not_in_shadow = textureSampleCompare(
 		uniform_shadow_map_texture, uniform_shadow_map_sampler,
 		position_in_shadow_map, position_in_sun_screen.z);
-	if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x || position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y {
+	if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+		position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y
+	{
+		// If we are outside of the shadow map then we get sun light.
 		not_in_shadow = 1.0;
 	}
+
+	// Apply the darkenning due to the shadows and ambiant occlusion.
 	var shade = the.shade * not_in_shadow;
 	var out_color_rgb = the.color.rgb;
-	out_color_rgb *= shade * 0.5 + 0.5;
-	out_color_rgb *= the.ambiant_occlusion * 0.5 + 0.5;
+	let shade_ratio = 0.7; // How dark can in get in the shadows.
+	out_color_rgb *= shade * shade_ratio + (1.0 - shade_ratio);
+	let ambiant_occlusion_ratio = 0.7; // How dark can it get in the corners.
+	out_color_rgb *= the.ambiant_occlusion * ambiant_occlusion_ratio + (1.0 - ambiant_occlusion_ratio);
+
+	// Apply a touch of the sun light color over exposed surfaces.
+	let sun_light_color = vec3<f32>(0.5, 0.35, 0.0) * 0.8;
+	out_color_rgb = mix(
+		out_color_rgb * (vec3<f32>(1.0, 1.0, 1.0) + sun_light_color), out_color_rgb,
+		1.0 - shade);
+
 	return vec4<f32>(out_color_rgb, the.color.a);
 }
