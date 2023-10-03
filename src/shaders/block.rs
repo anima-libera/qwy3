@@ -14,6 +14,8 @@ pub fn render_pipeline(
 	device: &wgpu::Device,
 	camera_bind_group_layout: &wgpu::BindGroupLayout,
 	sun_light_direction_bind_group_layout: &wgpu::BindGroupLayout,
+	sun_camera_bind_group_layout: &wgpu::BindGroupLayout,
+	shadow_map_bind_group_layout: &wgpu::BindGroupLayout,
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
@@ -54,6 +56,8 @@ pub fn render_pipeline(
 			bind_group_layouts: &[
 				camera_bind_group_layout,
 				sun_light_direction_bind_group_layout,
+				sun_camera_bind_group_layout,
+				shadow_map_bind_group_layout,
 			],
 			push_constant_ranges: &[],
 		});

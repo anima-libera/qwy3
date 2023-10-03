@@ -885,9 +885,9 @@ pub fn run() {
 
 	let sun_camera = CameraOrthographicSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
-		width: 100.0,
-		height: 100.0,
-		depth: 400.0,
+		width: 85.0,
+		height: 85.0,
+		depth: 200.0,
 	};
 	let sun_camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Sun Camera Buffer"),
@@ -899,7 +899,7 @@ pub fn run() {
 			label: Some("Sun Camera Bind Group Layout"),
 			entries: &[wgpu::BindGroupLayoutEntry {
 				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
+				visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
 				ty: wgpu::BindingType::Buffer {
 					ty: wgpu::BufferBindingType::Uniform,
 					has_dynamic_offset: false,
@@ -933,7 +933,7 @@ pub fn run() {
 	});
 	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("Shadow Map Texture"),
-		size: wgpu::Extent3d { width: 4096, height: 4096, depth_or_array_layers: 1 },
+		size: wgpu::Extent3d { width: 8192, height: 8192, depth_or_array_layers: 1 },
 		mip_level_count: 1,
 		sample_count: 1,
 		dimension: wgpu::TextureDimension::D2,
@@ -951,16 +951,16 @@ pub fn run() {
 					binding: 0,
 					visibility: wgpu::ShaderStages::FRAGMENT,
 					ty: wgpu::BindingType::Texture {
-						sample_type: (),
-						view_dimension: (),
-						multisampled: (),
+						sample_type: wgpu::TextureSampleType::Depth,
+						view_dimension: wgpu::TextureViewDimension::D2,
+						multisampled: false,
 					},
 					count: None,
 				},
 				wgpu::BindGroupLayoutEntry {
 					binding: 1,
 					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(()),
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
 					count: None,
 				},
 			],
@@ -968,10 +968,16 @@ pub fn run() {
 	let shadow_map_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Shadow Map Bind Group"),
 		layout: &shadow_map_bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: shadow_map_matrix_buffer.as_entire_binding(),
-		}],
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding: 0,
+				resource: wgpu::BindingResource::TextureView(&shadow_map_view),
+			},
+			wgpu::BindGroupEntry {
+				binding: 1,
+				resource: wgpu::BindingResource::Sampler(&shadow_map_sampler),
+			},
+		],
 	});
 
 	fn make_z_buffer_texture_view(
@@ -1007,6 +1013,8 @@ pub fn run() {
 		&device,
 		&camera_bind_group_layout,
 		&sun_light_direction_bind_group_layout,
+		&sun_camera_bind_group_layout,
+		&shadow_map_bind_group_layout,
 		config.format,
 		z_buffer_format,
 	);
@@ -1321,7 +1329,7 @@ pub fn run() {
 				)
 			});
 
-			sun_position_in_sky.angle_horizontal += (TAU / 30.0) * dt.as_secs_f32();
+			sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
 
 			let sun_camera_view_projection_matrix = {
 				let camera_position = first_person_camera_position;
@@ -1431,6 +1439,8 @@ pub fn run() {
 				render_pass.set_pipeline(&block_render_pipeline);
 				render_pass.set_bind_group(0, &camera_bind_group, &[]);
 				render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
+				render_pass.set_bind_group(2, &sun_camera_bind_group, &[]);
+				render_pass.set_bind_group(3, &shadow_map_bind_group, &[]);
 				for chunk in chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass
