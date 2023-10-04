@@ -1503,8 +1503,11 @@ pub fn run() {
 				});
 
 				render_pass.set_pipeline(&simple_line_2d_render_pipeline);
-				render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
+
+				if !use_sun_camera_to_render {
+					render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
+				}
 			}
 
 			queue.submit(std::iter::once(encoder.finish()));
