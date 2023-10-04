@@ -670,6 +670,19 @@ impl SimpleLineMesh {
 		vertices.push(SimpleLineVertexPod { position: dh.into(), color });
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
+
+	fn interface_2d_cursor(device: &wgpu::Device, window_size: (u32, u32)) -> SimpleLineMesh {
+		let color = [1.0, 1.0, 1.0];
+		let w = 20.0 / window_size.0 as f32;
+		let h = 20.0 / window_size.1 as f32;
+		let vertices = vec![
+			SimpleLineVertexPod { position: [-w, 0.0, 0.5], color },
+			SimpleLineVertexPod { position: [w, 0.0, 0.5], color },
+			SimpleLineVertexPod { position: [0.0, -h, 0.5], color },
+			SimpleLineVertexPod { position: [0.0, h, 0.5], color },
+		];
+		SimpleLineMesh::from_vertices(device, vertices)
+	}
 }
 
 /// Vector in 3D.
@@ -1026,6 +1039,9 @@ pub fn run() {
 		z_buffer_format,
 	);
 
+	let simple_line_2d_render_pipeline =
+		shaders::simple_line_2d::render_pipeline(&device, config.format, z_buffer_format);
+
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();
 
@@ -1377,6 +1393,9 @@ pub fn run() {
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
 
+			let cursor_mesh =
+				SimpleLineMesh::interface_2d_cursor(&device, (config.width, config.height));
+
 			let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
 				label: Some("Render Encoder"),
 			});
@@ -1411,7 +1430,7 @@ pub fn run() {
 					.texture
 					.create_view(&wgpu::TextureViewDescriptor::default());
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass"),
+					label: Some("Render Pass to render the world"),
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
@@ -1462,6 +1481,30 @@ pub fn run() {
 					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 				}
+			}
+
+			// Render pass to draw the interface.
+			{
+				let window_texture_view = window_texture
+					.texture
+					.create_view(&wgpu::TextureViewDescriptor::default());
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass to render "),
+					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+						view: &window_texture_view,
+						resolve_target: None,
+						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+					})],
+					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+						view: &z_buffer_view,
+						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						stencil_ops: None,
+					}),
+				});
+
+				render_pass.set_pipeline(&simple_line_2d_render_pipeline);
+				render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
 			}
 
 			queue.submit(std::iter::once(encoder.finish()));
