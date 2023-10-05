@@ -2,7 +2,7 @@ mod camera;
 mod coords;
 mod shaders;
 
-use std::{collections::HashMap, f32::consts::TAU};
+use std::{borrow::BorrowMut, collections::HashMap, f32::consts::TAU, io::Write};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
@@ -1094,6 +1094,14 @@ pub fn run() {
 	let mut control_bindings: HashMap<Control, Action> = HashMap::new();
 
 	let command_file_path = "controls.qwy3_controls";
+	if !std::path::Path::new(command_file_path).is_file() {
+		let mut file =
+			std::fs::File::create(command_file_path).expect("count not create config file");
+		file
+			.write_all(include_str!("default_controls.qwy3_controls").as_bytes())
+			.expect("could not fill the default config in the new config file");
+	}
+
 	if let Ok(controls_config_string) = std::fs::read_to_string(command_file_path) {
 		for (line_number, line) in controls_config_string.lines().enumerate() {
 			let mut words = line.split_whitespace();
