@@ -1079,7 +1079,7 @@ pub fn run() {
 		WalkBackward,
 		WalkLeftward,
 		WalkRightward,
-
+		Jump,
 		TogglePhysics,
 		ToggleThirdPersonView,
 		ToggleDisplayPlayerBox,
@@ -1150,6 +1150,16 @@ pub fn run() {
 					"walk_backward" => Action::WalkBackward,
 					"walk_leftward" => Action::WalkLeftward,
 					"walk_rightward" => Action::WalkRightward,
+					"jump" => Action::Jump,
+					"toggle_physics" => Action::TogglePhysics,
+					"toggle_third_person_view" => Action::ToggleThirdPersonView,
+					"toggle_display_player_box" => Action::ToggleDisplayPlayerBox,
+					"toggle_sun_view" => Action::ToggleSunView,
+					"toggle_cursor_captured" => Action::ToggleCursorCaptured,
+					"print_coords" => Action::PrintCoords,
+					"place_or_remove_block_under_player" => Action::PlaceOrRemoveBlockUnderPlayer,
+					"place_block_at_target" => Action::PlaceBlockAtTarget,
+					"remove_block_at_target" => Action::RemoveBlockAtTarget,
 					unknown_action_name => panic!("unknown action name \"{unknown_action_name}\""),
 				};
 				control_bindings.insert(control, action);
@@ -1163,6 +1173,12 @@ pub fn run() {
 	} else {
 		println!("Couldn't read file \"{command_file_path}\"");
 	}
+
+	struct ControlEvent {
+		control: Control,
+		pressed: bool,
+	}
+	let mut controls_to_trigger: Vec<ControlEvent> = vec![];
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
@@ -1187,123 +1203,6 @@ pub fn run() {
 				camera.aspect_ratio = aspect_ratio(width, height);
 			},
 
-			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
-				..
-			} => {
-				if let Some(action) = control_bindings.get(&Control::KeyboardKey(*key)) {
-					match action {
-						Action::WalkForward => {
-							walking_forward = *state == ElementState::Pressed;
-						},
-						Action::WalkBackward => {
-							walking_backward = *state == ElementState::Pressed;
-						},
-						Action::WalkLeftward => {
-							walking_leftward = *state == ElementState::Pressed;
-						},
-						Action::WalkRightward => {
-							walking_rightward = *state == ElementState::Pressed;
-						},
-						_ => unimplemented!(),
-					}
-				}
-
-				match (key, state) {
-					/*
-					(VirtualKeyCode::Z, _)
-					| (VirtualKeyCode::S, _)
-					| (VirtualKeyCode::Q, _)
-					| (VirtualKeyCode::D, _) => {
-						let moving_in_some_direction = match key {
-							VirtualKeyCode::Z => &mut walking_forward,
-							VirtualKeyCode::S => &mut walking_backward,
-							VirtualKeyCode::Q => &mut walking_leftward,
-							VirtualKeyCode::D => &mut walking_rightward,
-							_ => unreachable!(),
-						};
-						*moving_in_some_direction = *state == ElementState::Pressed;
-					},
-					*/
-					(VirtualKeyCode::P, ElementState::Pressed) => {
-						enable_physics = !enable_physics;
-					},
-
-					(VirtualKeyCode::M, ElementState::Pressed) => {
-						enable_camera_third_person = !enable_camera_third_person;
-					},
-
-					(VirtualKeyCode::L, ElementState::Pressed) => {
-						enable_display_phys_box = !enable_display_phys_box;
-					},
-
-					(VirtualKeyCode::J, ElementState::Pressed) => {
-						use_sun_camera_to_render = !use_sun_camera_to_render;
-					},
-
-					(VirtualKeyCode::K, ElementState::Pressed) => {
-						cursor_is_captured = !cursor_is_captured;
-						if cursor_is_captured {
-							window
-								.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-								.unwrap();
-							window.set_cursor_visible(false);
-						} else {
-							window
-								.set_cursor_grab(winit::window::CursorGrabMode::None)
-								.unwrap();
-							window.set_cursor_visible(true);
-						}
-					},
-
-					(VirtualKeyCode::H, ElementState::Pressed) => {
-						dbg!(player_phys.aligned_box.pos);
-						let player_bottom = player_phys.aligned_box.pos
-							- cgmath::Vector3::<f32>::from((
-								0.0,
-								0.0,
-								player_phys.aligned_box.dims.z / 2.0,
-							));
-						dbg!(player_bottom);
-					},
-
-					(VirtualKeyCode::O, ElementState::Pressed) => {
-						let player_bottom = player_phys.aligned_box.pos
-							- cgmath::Vector3::<f32>::unit_z()
-								* (player_phys.aligned_box.dims.z / 2.0 + 0.1);
-						let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-						let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
-						if let Some(block) = player_bottom_block_opt {
-							chunk_grid.set_block_and_update_meshes(
-								player_bottom_block_coords,
-								BlockTypeId { is_not_air: !block.is_not_air },
-								&device,
-							);
-						}
-					},
-
-					(VirtualKeyCode::A, ElementState::Pressed) => {
-						if let Some((_, coords)) = targeted_block_coords {
-							chunk_grid.set_block_and_update_meshes(
-								coords,
-								BlockTypeId { is_not_air: true },
-								&device,
-							);
-						}
-					},
-
-					_ => {},
-				}
-			},
-
-			WindowEvent::MouseInput {
-				state: winit::event::ElementState::Pressed,
-				button: winit::event::MouseButton::Right,
-				..
-			} if cursor_is_captured => {
-				player_phys.motion.z = 0.1;
-			},
-
 			WindowEvent::MouseInput {
 				state: winit::event::ElementState::Pressed,
 				button: winit::event::MouseButton::Left,
@@ -1316,18 +1215,21 @@ pub fn run() {
 				window.set_cursor_visible(false);
 			},
 
-			WindowEvent::MouseInput {
-				state: winit::event::ElementState::Pressed,
-				button: winit::event::MouseButton::Left,
+			WindowEvent::KeyboardInput {
+				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
 				..
-			} if cursor_is_captured => {
-				if let Some((coords, _)) = targeted_block_coords {
-					chunk_grid.set_block_and_update_meshes(
-						coords,
-						BlockTypeId { is_not_air: false },
-						&device,
-					);
-				}
+			} => {
+				controls_to_trigger.push(ControlEvent {
+					control: Control::KeyboardKey(*key),
+					pressed: *state == ElementState::Pressed,
+				});
+			},
+
+			WindowEvent::MouseInput { state, button, .. } if cursor_is_captured => {
+				controls_to_trigger.push(ControlEvent {
+					control: Control::MouseButton(*button),
+					pressed: *state == ElementState::Pressed,
+				});
 			},
 
 			_ => {},
@@ -1349,6 +1251,8 @@ pub fn run() {
 		},
 
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseWheel { delta }, .. } => {
+			// Wheel moves the player along the vertical axis.
+			// Useful when physics are disabled.
 			let (dx, dy) = match delta {
 				MouseScrollDelta::LineDelta(horizontal, vertical) => (horizontal, vertical),
 				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
@@ -1367,6 +1271,100 @@ pub fn run() {
 			let now = std::time::Instant::now();
 			let dt = now - time_from_last_iteration;
 			time_from_last_iteration = now;
+
+			// Perform actions triggered by controls.
+			for control_event in controls_to_trigger.iter() {
+				let pressed = control_event.pressed;
+				if let Some(action) = control_bindings.get(&control_event.control) {
+					match (action, pressed) {
+						(Action::WalkForward, pressed) => {
+							walking_forward = pressed;
+						},
+						(Action::WalkBackward, pressed) => {
+							walking_backward = pressed;
+						},
+						(Action::WalkLeftward, pressed) => {
+							walking_leftward = pressed;
+						},
+						(Action::WalkRightward, pressed) => {
+							walking_rightward = pressed;
+						},
+						(Action::Jump, true) => {
+							player_phys.motion.z = 0.1;
+						},
+						(Action::TogglePhysics, true) => {
+							enable_physics = !enable_physics;
+						},
+						(Action::ToggleThirdPersonView, true) => {
+							enable_camera_third_person = !enable_camera_third_person;
+						},
+						(Action::ToggleDisplayPlayerBox, true) => {
+							enable_display_phys_box = !enable_display_phys_box;
+						},
+						(Action::ToggleSunView, true) => {
+							use_sun_camera_to_render = !use_sun_camera_to_render;
+						},
+						(Action::ToggleCursorCaptured, true) => {
+							cursor_is_captured = !cursor_is_captured;
+							if cursor_is_captured {
+								window
+									.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+									.unwrap();
+								window.set_cursor_visible(false);
+							} else {
+								window
+									.set_cursor_grab(winit::window::CursorGrabMode::None)
+									.unwrap();
+								window.set_cursor_visible(true);
+							}
+						},
+						(Action::PrintCoords, true) => {
+							dbg!(player_phys.aligned_box.pos);
+							let player_bottom = player_phys.aligned_box.pos
+								- cgmath::Vector3::<f32>::from((
+									0.0,
+									0.0,
+									player_phys.aligned_box.dims.z / 2.0,
+								));
+							dbg!(player_bottom);
+						},
+						(Action::PlaceOrRemoveBlockUnderPlayer, true) => {
+							let player_bottom = player_phys.aligned_box.pos
+								- cgmath::Vector3::<f32>::unit_z()
+									* (player_phys.aligned_box.dims.z / 2.0 + 0.1);
+							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
+							let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
+							if let Some(block) = player_bottom_block_opt {
+								chunk_grid.set_block_and_update_meshes(
+									player_bottom_block_coords,
+									BlockTypeId { is_not_air: !block.is_not_air },
+									&device,
+								);
+							}
+						},
+						(Action::PlaceBlockAtTarget, true) => {
+							if let Some((_, coords)) = targeted_block_coords {
+								chunk_grid.set_block_and_update_meshes(
+									coords,
+									BlockTypeId { is_not_air: true },
+									&device,
+								);
+							}
+						},
+						(Action::RemoveBlockAtTarget, true) => {
+							if let Some((coords, _)) = targeted_block_coords {
+								chunk_grid.set_block_and_update_meshes(
+									coords,
+									BlockTypeId { is_not_air: false },
+									&device,
+								);
+							}
+						},
+						(_, false) => {},
+					}
+				}
+			}
+			controls_to_trigger.clear();
 
 			let walking_vector = {
 				let walking_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
