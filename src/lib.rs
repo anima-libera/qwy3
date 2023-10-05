@@ -1,3 +1,5 @@
+#![allow(clippy::items_after_test_module)]
+
 mod camera;
 mod coords;
 mod shaders;
