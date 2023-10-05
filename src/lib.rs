@@ -2,7 +2,7 @@ mod camera;
 mod coords;
 mod shaders;
 
-use std::{borrow::BorrowMut, collections::HashMap, f32::consts::TAU, io::Write};
+use std::{collections::HashMap, f32::consts::TAU, io::Write};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
