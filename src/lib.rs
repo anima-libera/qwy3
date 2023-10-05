@@ -694,6 +694,30 @@ pub struct Vector3Pod {
 	values: [f32; 3],
 }
 
+fn letter_to_keycode(letter: char) -> winit::event::VirtualKeyCode {
+	use winit::event::VirtualKeyCode as K;
+	#[rustfmt::skip]
+	let keycode = match letter.to_ascii_uppercase() {
+		'A' => K::A, 'B' => K::B, 'C' => K::C, 'D' => K::D, 'E' => K::E, 'F' => K::F, 'G' => K::G,
+		'H' => K::H, 'I' => K::I, 'J' => K::J, 'K' => K::K, 'L' => K::L, 'M' => K::M, 'N' => K::N,
+		'O' => K::O, 'P' => K::P, 'Q' => K::Q, 'R' => K::R, 'S' => K::S, 'T' => K::T, 'U' => K::U,
+		'V' => K::V, 'W' => K::W, 'X' => K::X, 'Y' => K::Y, 'Z' => K::Z,
+		not_a_letter => panic!("can't convert \"{not_a_letter}\" to an ascii letter keycode"),
+	};
+	keycode
+}
+
+fn digit_to_keycode(digit: char) -> winit::event::VirtualKeyCode {
+	use winit::event::VirtualKeyCode as K;
+	#[rustfmt::skip]
+	let keycode = match digit {
+		'0' => K::Key0, '1' => K::Key1, '2' => K::Key2, '3' => K::Key3, '4' => K::Key4,
+		'5' => K::Key5, '6' => K::Key6, '7' => K::Key7, '8' => K::Key8, '9' => K::Key9,
+		not_a_digit => panic!("can't convert \"{not_a_digit}\" to an digit keycode"),
+	};
+	keycode
+}
+
 pub fn run() {
 	// Wgpu uses the `log`/`env_logger` crates to log errors and stuff,
 	// and we do want to see the errors very much.
@@ -1045,6 +1069,101 @@ pub fn run() {
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();
 
+	#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+	enum Control {
+		KeyboardKey(VirtualKeyCode),
+		MouseButton(MouseButton),
+	}
+	enum Action {
+		WalkForward,
+		WalkBackward,
+		WalkLeftward,
+		WalkRightward,
+
+		TogglePhysics,
+		ToggleThirdPersonView,
+		ToggleDisplayPlayerBox,
+		ToggleSunView,
+		ToggleCursorCaptured,
+		PrintCoords,
+		PlaceOrRemoveBlockUnderPlayer,
+		PlaceBlockAtTarget,
+		RemoveBlockAtTarget,
+	}
+
+	let mut control_bindings: HashMap<Control, Action> = HashMap::new();
+
+	let command_file_path = "controls.qwy3_controls";
+	if let Ok(controls_config_string) = std::fs::read_to_string(command_file_path) {
+		for (line_number, line) in controls_config_string.lines().enumerate() {
+			let mut words = line.split_whitespace();
+			let command_name = words.next();
+			if command_name == Some("bind_control") {
+				let control_name = words.next().expect("expected control name");
+				let action_name = words.next().expect("expected action name");
+
+				let control = if let Some(key_name) = control_name.strip_prefix("key:") {
+					if key_name.chars().count() == 1 {
+						let signle_char_key_name = key_name.chars().next().unwrap();
+						if signle_char_key_name.is_ascii_alphabetic() {
+							Control::KeyboardKey(letter_to_keycode(signle_char_key_name))
+						} else if signle_char_key_name.is_ascii_digit() {
+							Control::KeyboardKey(digit_to_keycode(signle_char_key_name))
+						} else {
+							panic!("unknown signle character key name \"{signle_char_key_name}\"")
+						}
+					} else {
+						match key_name {
+							"up" => Control::KeyboardKey(VirtualKeyCode::Up),
+							"down" => Control::KeyboardKey(VirtualKeyCode::Down),
+							"left" => Control::KeyboardKey(VirtualKeyCode::Left),
+							"right" => Control::KeyboardKey(VirtualKeyCode::Right),
+							"space" => Control::KeyboardKey(VirtualKeyCode::Space),
+							"left_shift" => Control::KeyboardKey(VirtualKeyCode::LShift),
+							"right_shift" => Control::KeyboardKey(VirtualKeyCode::RShift),
+							"tab" => Control::KeyboardKey(VirtualKeyCode::Tab),
+							"return" | "enter" => Control::KeyboardKey(VirtualKeyCode::Return),
+							unknown_key_name => panic!("unknown key name \"{unknown_key_name}\""),
+						}
+					}
+				} else if let Some(button_name) = control_name.strip_prefix("mouse_button:") {
+					if button_name == "left" {
+						Control::MouseButton(MouseButton::Left)
+					} else if button_name == "right" {
+						Control::MouseButton(MouseButton::Right)
+					} else if button_name == "middle" {
+						Control::MouseButton(MouseButton::Middle)
+					} else if let Ok(number) = button_name.parse() {
+						Control::MouseButton(MouseButton::Other(number))
+					} else {
+						panic!("unknown mouse button name \"{button_name}\"")
+					}
+				} else {
+					panic!(
+						"unknown control \"{control_name}\" \
+					(it must start with \"key:\" or \"mouse_button:\")"
+					)
+				};
+
+				let action = match action_name {
+					"walk_forward" => Action::WalkForward,
+					"walk_backward" => Action::WalkBackward,
+					"walk_leftward" => Action::WalkLeftward,
+					"walk_rightward" => Action::WalkRightward,
+					unknown_action_name => panic!("unknown action name \"{unknown_action_name}\""),
+				};
+				control_bindings.insert(control, action);
+			} else if let Some(unknown_command_name) = command_name {
+				println!(
+					"Error in file \"{command_file_path}\" at line {line_number}: \
+					Command name \"{unknown_command_name}\" is unknown"
+				);
+			}
+		}
+	} else {
+		println!("Couldn't read file \"{command_file_path}\"");
+	}
+
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
 		Event::WindowEvent { ref event, window_id } if window_id == window.id() => match event {
@@ -1071,84 +1190,110 @@ pub fn run() {
 			WindowEvent::KeyboardInput {
 				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
 				..
-			} => match (key, state) {
-				(VirtualKeyCode::Z, _)
-				| (VirtualKeyCode::S, _)
-				| (VirtualKeyCode::Q, _)
-				| (VirtualKeyCode::D, _) => {
-					let moving_in_some_direction = match key {
-						VirtualKeyCode::Z => &mut walking_forward,
-						VirtualKeyCode::S => &mut walking_backward,
-						VirtualKeyCode::Q => &mut walking_leftward,
-						VirtualKeyCode::D => &mut walking_rightward,
-						_ => unreachable!(),
-					};
-					*moving_in_some_direction = *state == ElementState::Pressed;
-				},
-
-				(VirtualKeyCode::P, ElementState::Pressed) => {
-					enable_physics = !enable_physics;
-				},
-
-				(VirtualKeyCode::M, ElementState::Pressed) => {
-					enable_camera_third_person = !enable_camera_third_person;
-				},
-
-				(VirtualKeyCode::L, ElementState::Pressed) => {
-					enable_display_phys_box = !enable_display_phys_box;
-				},
-
-				(VirtualKeyCode::J, ElementState::Pressed) => {
-					use_sun_camera_to_render = !use_sun_camera_to_render;
-				},
-
-				(VirtualKeyCode::K, ElementState::Pressed) => {
-					cursor_is_captured = !cursor_is_captured;
-					if cursor_is_captured {
-						window
-							.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-							.unwrap();
-						window.set_cursor_visible(false);
-					} else {
-						window
-							.set_cursor_grab(winit::window::CursorGrabMode::None)
-							.unwrap();
-						window.set_cursor_visible(true);
+			} => {
+				if let Some(action) = control_bindings.get(&Control::KeyboardKey(*key)) {
+					match action {
+						Action::WalkForward => {
+							walking_forward = *state == ElementState::Pressed;
+						},
+						Action::WalkBackward => {
+							walking_backward = *state == ElementState::Pressed;
+						},
+						Action::WalkLeftward => {
+							walking_leftward = *state == ElementState::Pressed;
+						},
+						Action::WalkRightward => {
+							walking_rightward = *state == ElementState::Pressed;
+						},
+						_ => unimplemented!(),
 					}
-				},
+				}
 
-				(VirtualKeyCode::H, ElementState::Pressed) => {
-					dbg!(player_phys.aligned_box.pos);
-					let player_bottom = player_phys.aligned_box.pos
-						- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
-					dbg!(player_bottom);
-				},
+				match (key, state) {
+					/*
+					(VirtualKeyCode::Z, _)
+					| (VirtualKeyCode::S, _)
+					| (VirtualKeyCode::Q, _)
+					| (VirtualKeyCode::D, _) => {
+						let moving_in_some_direction = match key {
+							VirtualKeyCode::Z => &mut walking_forward,
+							VirtualKeyCode::S => &mut walking_backward,
+							VirtualKeyCode::Q => &mut walking_leftward,
+							VirtualKeyCode::D => &mut walking_rightward,
+							_ => unreachable!(),
+						};
+						*moving_in_some_direction = *state == ElementState::Pressed;
+					},
+					*/
+					(VirtualKeyCode::P, ElementState::Pressed) => {
+						enable_physics = !enable_physics;
+					},
 
-				(VirtualKeyCode::O, ElementState::Pressed) => {
-					let player_bottom = player_phys.aligned_box.pos
-						- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1);
-					let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-					let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
-					if let Some(block) = player_bottom_block_opt {
-						chunk_grid.set_block_and_update_meshes(
-							player_bottom_block_coords,
-							BlockTypeId { is_not_air: !block.is_not_air },
-							&device,
-						);
-					}
-				},
+					(VirtualKeyCode::M, ElementState::Pressed) => {
+						enable_camera_third_person = !enable_camera_third_person;
+					},
 
-				(VirtualKeyCode::A, ElementState::Pressed) => {
-					if let Some((_, coords)) = targeted_block_coords {
-						chunk_grid.set_block_and_update_meshes(
-							coords,
-							BlockTypeId { is_not_air: true },
-							&device,
-						);
-					}
-				},
+					(VirtualKeyCode::L, ElementState::Pressed) => {
+						enable_display_phys_box = !enable_display_phys_box;
+					},
 
-				_ => {},
+					(VirtualKeyCode::J, ElementState::Pressed) => {
+						use_sun_camera_to_render = !use_sun_camera_to_render;
+					},
+
+					(VirtualKeyCode::K, ElementState::Pressed) => {
+						cursor_is_captured = !cursor_is_captured;
+						if cursor_is_captured {
+							window
+								.set_cursor_grab(winit::window::CursorGrabMode::Confined)
+								.unwrap();
+							window.set_cursor_visible(false);
+						} else {
+							window
+								.set_cursor_grab(winit::window::CursorGrabMode::None)
+								.unwrap();
+							window.set_cursor_visible(true);
+						}
+					},
+
+					(VirtualKeyCode::H, ElementState::Pressed) => {
+						dbg!(player_phys.aligned_box.pos);
+						let player_bottom = player_phys.aligned_box.pos
+							- cgmath::Vector3::<f32>::from((
+								0.0,
+								0.0,
+								player_phys.aligned_box.dims.z / 2.0,
+							));
+						dbg!(player_bottom);
+					},
+
+					(VirtualKeyCode::O, ElementState::Pressed) => {
+						let player_bottom = player_phys.aligned_box.pos
+							- cgmath::Vector3::<f32>::unit_z()
+								* (player_phys.aligned_box.dims.z / 2.0 + 0.1);
+						let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
+						let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
+						if let Some(block) = player_bottom_block_opt {
+							chunk_grid.set_block_and_update_meshes(
+								player_bottom_block_coords,
+								BlockTypeId { is_not_air: !block.is_not_air },
+								&device,
+							);
+						}
+					},
+
+					(VirtualKeyCode::A, ElementState::Pressed) => {
+						if let Some((_, coords)) = targeted_block_coords {
+							chunk_grid.set_block_and_update_meshes(
+								coords,
+								BlockTypeId { is_not_air: true },
+								&device,
+							);
+						}
+					},
+
+					_ => {},
+				}
 			},
 
 			WindowEvent::MouseInput {

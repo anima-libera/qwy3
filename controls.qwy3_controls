@@ -1,0 +1,4 @@
+bind_control key:z walk_forward
+bind_control key:s walk_backward
+bind_control key:q walk_leftward
+bind_control key:d walk_rightward
