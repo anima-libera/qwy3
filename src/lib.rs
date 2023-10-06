@@ -979,33 +979,6 @@ pub fn run() {
 	let mut enable_physics = true;
 	let mut enable_display_phys_box = false;
 
-	let cd = ChunkDimensions::from(10);
-
-	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
-	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
-		let chunk = Chunk::new_empty(ChunkCoordsSpan { cd, chunk_coords });
-		chunk_grid.map.insert(chunk_coords, chunk);
-	}
-
-	for (_chunk_coords, chunk) in chunk_grid.map.iter_mut() {
-		for coords in chunk.blocks.coords_span.iter_coords() {
-			// Test chunk generation.
-			let ground = coords.z as f32
-				- f32::cos(coords.x as f32 * 0.3)
-				- f32::cos(coords.y as f32 * 0.3)
-				- 3.0 < 0.0;
-			*chunk.blocks.get_mut(coords).unwrap() = BlockTypeId { is_not_air: ground };
-		}
-	}
-
-	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().copied().collect();
-	for chunk_coords in chunk_coords_list {
-		let opaqueness_layer = chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
-		let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-		chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
-		chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
-	}
-
 	let mut sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Sun Light Direction Buffer"),
@@ -1305,6 +1278,33 @@ pub fn run() {
 		pressed: bool,
 	}
 	let mut controls_to_trigger: Vec<ControlEvent> = vec![];
+
+	let cd = ChunkDimensions::from(10);
+
+	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
+	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
+		let chunk = Chunk::new_empty(ChunkCoordsSpan { cd, chunk_coords });
+		chunk_grid.map.insert(chunk_coords, chunk);
+	}
+
+	for (_chunk_coords, chunk) in chunk_grid.map.iter_mut() {
+		for coords in chunk.blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords.z as f32
+				- f32::cos(coords.x as f32 * 0.3)
+				- f32::cos(coords.y as f32 * 0.3)
+				- 3.0 < 0.0;
+			*chunk.blocks.get_mut(coords).unwrap() = BlockTypeId { is_not_air: ground };
+		}
+	}
+
+	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().copied().collect();
+	for chunk_coords in chunk_coords_list {
+		let opaqueness_layer = chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
+		let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
+		chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+		chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
+	}
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
