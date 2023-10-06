@@ -8,6 +8,7 @@ use std::{collections::HashMap, f32::consts::TAU, io::Write};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
+use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::{
 	event_loop::{ControlFlow, EventLoop},
@@ -828,12 +829,15 @@ pub fn run() {
 	for y in 0..16 {
 		for x in 0..16 {
 			let index = 4 * (y * ATLAS_DIMS.0 + x);
-			atlas_data[index..(index + 4)].clone_from_slice(&[
-				(y * 255 / 16) as u8,
-				255,
-				(x * 255 / 16) as u8,
-				255,
-			]);
+			let grey = rand::thread_rng().gen_range(240..=255);
+			atlas_data[index..(index + 4)].clone_from_slice(&[grey, grey, grey, 255]);
+			// Kinda grass:
+			// atlas_data[index..(index + 4)].clone_from_slice(&[
+			// 	rand::thread_rng().gen_range(80..100),
+			// 	rand::thread_rng().gen_range(230..=255),
+			// 	rand::thread_rng().gen_range(10..30),
+			// 	255,
+			// ]);
 		}
 	}
 
