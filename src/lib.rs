@@ -805,6 +805,97 @@ pub fn run() {
 	};
 	window_surface.configure(&device, &config);
 
+	const ATLAS_DIMS: (usize, usize) = (512, 512);
+	let mut atlas_data: [u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1] = [0; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1];
+	for y in 0..16 {
+		for x in 0..16 {
+			let index = 4 * (y * ATLAS_DIMS.0 + x);
+			atlas_data[index..(index + 4)].clone_from_slice(&[
+				(y * 255 / 16) as u8,
+				255,
+				(x * 255 / 16) as u8,
+				255,
+			]);
+		}
+	}
+
+	let atlas_texture_size = wgpu::Extent3d {
+		width: ATLAS_DIMS.0 as u32,
+		height: ATLAS_DIMS.1 as u32,
+		depth_or_array_layers: 1,
+	};
+	let atlas_texture = device.create_texture(&wgpu::TextureDescriptor {
+		label: Some("Atlas Texture"),
+		size: atlas_texture_size,
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format: wgpu::TextureFormat::Rgba8UnormSrgb,
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		view_formats: &[],
+	});
+	queue.write_texture(
+		wgpu::ImageCopyTexture {
+			texture: &atlas_texture,
+			mip_level: 0,
+			origin: wgpu::Origin3d::ZERO,
+			aspect: wgpu::TextureAspect::All,
+		},
+		&atlas_data,
+		wgpu::ImageDataLayout {
+			offset: 0,
+			bytes_per_row: Some(4 * ATLAS_DIMS.0 as u32),
+			rows_per_image: Some(ATLAS_DIMS.1 as u32),
+		},
+		atlas_texture_size,
+	);
+	let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor::default());
+	let atlas_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Nearest,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		..Default::default()
+	});
+	let atlas_texture_bind_group_layout =
+		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			label: Some("Atlas Texture Bind Group Layout"),
+			entries: &[
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Texture {
+						multisampled: false,
+						view_dimension: wgpu::TextureViewDimension::D2,
+						sample_type: wgpu::TextureSampleType::Float { filterable: true },
+					},
+					count: None,
+				},
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::FRAGMENT,
+					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+					count: None,
+				},
+			],
+		});
+	let atlas_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Atlas Texture Bind Group"),
+		layout: &atlas_texture_bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding: 0,
+				resource: wgpu::BindingResource::TextureView(&atlas_texture_view),
+			},
+			wgpu::BindGroupEntry {
+				binding: 1,
+				resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
+			},
+		],
+	});
+
 	let mut camera = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: config.width as f32 / config.height as f32,
