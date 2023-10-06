@@ -397,7 +397,24 @@ fn generate_block_face_mesh(
 		normal
 	};
 
-	let color = [0.8, 0.8, 0.8];
+	// Texture moment ^^.
+	let texture_rect_in_atlas_xy: cgmath::Point2<f32> = (0.0, 0.0).into();
+	let texture_rect_in_atlas_wh: cgmath::Vector2<f32> = (16.0, 16.0).into();
+	let texture_rect_in_atlas_wh = texture_rect_in_atlas_wh * (1.0 / 512.0);
+	let mut coords_in_atlas_array: [cgmath::Point2<f32>; 4] = [
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+	];
+	coords_in_atlas_array[0].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[0].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[1].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[1].y += texture_rect_in_atlas_wh.y * 1.0;
+	coords_in_atlas_array[2].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[2].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[3].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[3].y += texture_rect_in_atlas_wh.y * 1.0;
 
 	// The ambiant occlusion trick used here was taken from
 	// https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/
@@ -462,7 +479,7 @@ fn generate_block_face_mesh(
 	let mut handle_index = |index: usize| {
 		vertices.push(BlockVertexPod {
 			position: coords_array[index].into(),
-			color,
+			coords_in_atlas: coords_in_atlas_array[index].into(),
 			normal,
 			ambiant_occlusion: ambiant_occlusion_array[index],
 		});
@@ -765,6 +782,7 @@ pub fn run() {
 	println!("AVAILABLE ADAPTERS:");
 	for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
 		dbg!(adapter.get_info());
+		dbg!(adapter.limits().max_bind_groups);
 	}
 	println!("SELECTED ADAPTER:");
 	dbg!(adapter.get_info());
@@ -774,7 +792,7 @@ pub fn run() {
 			.request_device(
 				&wgpu::DeviceDescriptor {
 					features: wgpu::Features::empty(),
-					limits: wgpu::Limits::default(),
+					limits: wgpu::Limits { max_bind_groups: 8, ..wgpu::Limits::default() },
 					label: None,
 				},
 				None,
@@ -854,7 +872,7 @@ pub fn run() {
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
 		address_mode_v: wgpu::AddressMode::ClampToEdge,
 		address_mode_w: wgpu::AddressMode::ClampToEdge,
-		mag_filter: wgpu::FilterMode::Linear,
+		mag_filter: wgpu::FilterMode::Nearest,
 		min_filter: wgpu::FilterMode::Nearest,
 		mipmap_filter: wgpu::FilterMode::Nearest,
 		..Default::default()
@@ -1141,10 +1159,13 @@ pub fn run() {
 
 	let block_render_pipeline = shaders::block::render_pipeline(
 		&device,
-		&camera_bind_group_layout,
-		&sun_light_direction_bind_group_layout,
-		&sun_camera_bind_group_layout,
-		&shadow_map_bind_group_layout,
+		shaders::block::BindGroupLayouts {
+			camera_bind_group_layout: &camera_bind_group_layout,
+			sun_light_direction_bind_group_layout: &sun_light_direction_bind_group_layout,
+			sun_camera_bind_group_layout: &sun_camera_bind_group_layout,
+			shadow_map_bind_group_layout: &shadow_map_bind_group_layout,
+			atlas_texture_bind_group_layout: &atlas_texture_bind_group_layout,
+		},
 		config.format,
 		z_buffer_format,
 	);
@@ -1704,6 +1725,7 @@ pub fn run() {
 				render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
 				render_pass.set_bind_group(2, &sun_camera_bind_group, &[]);
 				render_pass.set_bind_group(3, &shadow_map_bind_group, &[]);
+				render_pass.set_bind_group(4, &atlas_texture_bind_group, &[]);
 				for chunk in chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass

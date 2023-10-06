@@ -5,17 +5,22 @@
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
 pub struct BlockVertexPod {
 	pub position: [f32; 3],
-	pub color: [f32; 3],
+	pub coords_in_atlas: [f32; 2],
 	pub normal: [f32; 3],
 	pub ambiant_occlusion: f32,
 }
 
+pub struct BindGroupLayouts<'a, 'b, 'c, 'd, 'e> {
+	pub camera_bind_group_layout: &'a wgpu::BindGroupLayout,
+	pub sun_light_direction_bind_group_layout: &'b wgpu::BindGroupLayout,
+	pub sun_camera_bind_group_layout: &'c wgpu::BindGroupLayout,
+	pub shadow_map_bind_group_layout: &'d wgpu::BindGroupLayout,
+	pub atlas_texture_bind_group_layout: &'e wgpu::BindGroupLayout,
+}
+
 pub fn render_pipeline(
 	device: &wgpu::Device,
-	camera_bind_group_layout: &wgpu::BindGroupLayout,
-	sun_light_direction_bind_group_layout: &wgpu::BindGroupLayout,
-	sun_camera_bind_group_layout: &wgpu::BindGroupLayout,
-	shadow_map_bind_group_layout: &wgpu::BindGroupLayout,
+	bind_broup_layouts: BindGroupLayouts,
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
@@ -29,17 +34,17 @@ pub fn render_pipeline(
 				format: wgpu::VertexFormat::Float32x3,
 			},
 			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+				offset: (std::mem::size_of::<f32>() * 3) as wgpu::BufferAddress,
 				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x3,
+				format: wgpu::VertexFormat::Float32x2,
 			},
 			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<[f32; 3]>() * 2) as wgpu::BufferAddress,
+				offset: (std::mem::size_of::<f32>() * 5) as wgpu::BufferAddress,
 				shader_location: 2,
 				format: wgpu::VertexFormat::Float32x3,
 			},
 			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<[f32; 3]>() * 3) as wgpu::BufferAddress,
+				offset: (std::mem::size_of::<f32>() * 8) as wgpu::BufferAddress,
 				shader_location: 3,
 				format: wgpu::VertexFormat::Float32,
 			},
@@ -54,10 +59,11 @@ pub fn render_pipeline(
 		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Block Render Pipeline Layout"),
 			bind_group_layouts: &[
-				camera_bind_group_layout,
-				sun_light_direction_bind_group_layout,
-				sun_camera_bind_group_layout,
-				shadow_map_bind_group_layout,
+				bind_broup_layouts.camera_bind_group_layout,
+				bind_broup_layouts.sun_light_direction_bind_group_layout,
+				bind_broup_layouts.sun_camera_bind_group_layout,
+				bind_broup_layouts.shadow_map_bind_group_layout,
+				bind_broup_layouts.atlas_texture_bind_group_layout,
 			],
 			push_constant_ranges: &[],
 		});
