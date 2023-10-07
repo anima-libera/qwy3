@@ -1246,6 +1246,7 @@ pub fn run() {
 		WalkRightward,
 		Jump,
 		TogglePhysics,
+		ToggleWorldGeneration,
 		ToggleThirdPersonView,
 		ToggleDisplayPlayerBox,
 		ToggleSunView,
@@ -1325,6 +1326,7 @@ pub fn run() {
 					"walk_rightward" => Action::WalkRightward,
 					"jump" => Action::Jump,
 					"toggle_physics" => Action::TogglePhysics,
+					"toggle_world_generation" => Action::ToggleWorldGeneration,
 					"toggle_third_person_view" => Action::ToggleThirdPersonView,
 					"toggle_display_player_box" => Action::ToggleDisplayPlayerBox,
 					"toggle_sun_view" => Action::ToggleSunView,
@@ -1359,6 +1361,8 @@ pub fn run() {
 		chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
 	}
 	chunk_grid.remesh_all_chunks_that_require_it(&device);
+
+	let mut enable_world_generation = true;
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
@@ -1496,6 +1500,9 @@ pub fn run() {
 						(Action::TogglePhysics, true) => {
 							enable_physics = !enable_physics;
 						},
+						(Action::ToggleWorldGeneration, true) => {
+							enable_world_generation = !enable_world_generation;
+						},
 						(Action::ToggleThirdPersonView, true) => {
 							enable_camera_third_person = !enable_camera_third_person;
 						},
@@ -1566,6 +1573,18 @@ pub fn run() {
 				}
 			}
 			controls_to_trigger.clear();
+
+			if enable_world_generation {
+				let player_block_coords = (player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
+					.map(|x| x.round() as i32);
+				let player_chunk_coords =
+					cd.world_coords_to_containing_chunk_coords(player_block_coords);
+				for chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 3) {
+					chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
+				}
+				chunk_grid.remesh_all_chunks_that_require_it(&device);
+			}
 
 			let walking_vector = {
 				let walking_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
