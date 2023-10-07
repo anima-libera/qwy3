@@ -1440,7 +1440,7 @@ pub fn run() {
 			if cursor_is_captured =>
 		{
 			// Move camera.
-			let sensitivity = 0.005;
+			let sensitivity = 0.0025;
 			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
 			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
 			if camera_direction.angle_vertical < 0.0 {
