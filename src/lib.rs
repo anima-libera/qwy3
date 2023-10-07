@@ -4,7 +4,11 @@ mod camera;
 mod coords;
 mod shaders;
 
-use std::{collections::HashMap, f32::consts::TAU, io::Write};
+use std::{
+	collections::{hash_map::Entry, HashMap},
+	f32::consts::TAU,
+	io::Write,
+};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
@@ -497,13 +501,15 @@ fn generate_block_face_mesh(
 }
 
 struct Chunk {
-	blocks: ChunkBlocks,
+	coords_span: ChunkCoordsSpan,
+	blocks: Option<ChunkBlocks>,
+	remeshing_required: bool,
 	mesh: Option<ChunkMesh>,
 }
 
 impl Chunk {
-	fn new_empty(coords: ChunkCoordsSpan) -> Chunk {
-		Chunk { blocks: ChunkBlocks::new(coords), mesh: None }
+	fn new_empty(coords_span: ChunkCoordsSpan) -> Chunk {
+		Chunk { coords_span, blocks: None, remeshing_required: false, mesh: None }
 	}
 
 	fn generate_mesh_given_surrounding_opaqueness(
@@ -512,6 +518,8 @@ impl Chunk {
 	) {
 		let mesh = self
 			.blocks
+			.as_ref()
+			.unwrap()
 			.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
 		self.mesh = Some(mesh);
 	}
@@ -527,7 +535,7 @@ impl ChunkGrid {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		match self.map.get_mut(&chunk_coords) {
 			Some(chunk) => {
-				let block_dst = chunk.blocks.get_mut(coords).unwrap();
+				let block_dst = chunk.blocks.as_mut().unwrap().get_mut(coords).unwrap();
 				*block_dst = block;
 			},
 			None => {
@@ -568,7 +576,7 @@ impl ChunkGrid {
 	fn get_block(&self, coords: BlockCoords) -> Option<BlockTypeId> {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk = self.map.get(&chunk_coords)?;
-		Some(chunk.blocks.get(coords).unwrap())
+		Some(chunk.blocks.as_ref().unwrap().get(coords).unwrap())
 	}
 
 	fn get_opaqueness_layer_around_chunk(
@@ -605,6 +613,72 @@ impl ChunkGrid {
 		}
 
 		layer
+	}
+
+	fn make_sure_that_a_chunk_exists(&mut self, chunk_coords: ChunkCoords) {
+		if let Entry::Vacant(entry) = self.map.entry(chunk_coords) {
+			let chunk = Chunk::new_empty(ChunkCoordsSpan { cd: self.cd, chunk_coords });
+			entry.insert(chunk);
+		}
+	}
+
+	fn generate_blocks(&mut self, chunk_coords: ChunkCoords, chunk_generator: ChunkGenerator) {
+		self.make_sure_that_a_chunk_exists(chunk_coords);
+		let chunk = self.map.get_mut(&chunk_coords).unwrap();
+		chunk.blocks = Some(chunk_generator.generate_chunk_blocks(chunk.coords_span));
+
+		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 3) {
+			if let Some(neighbor_chunk) = self.map.get_mut(&neighbor_chunk_coords) {
+				neighbor_chunk.remeshing_required = true;
+			}
+		}
+	}
+
+	fn make_sure_that_a_chunk_has_blocks(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		chunk_generator: ChunkGenerator,
+	) {
+		self.make_sure_that_a_chunk_exists(chunk_coords);
+		let chunk = self.map.get(&chunk_coords).unwrap();
+		if chunk.blocks.is_none() {
+			self.generate_blocks(chunk_coords, chunk_generator);
+		}
+	}
+
+	fn remesh_all_chunks_that_require_it(&mut self, device: &wgpu::Device) {
+		let chunk_coords_list: Vec<_> = self.map.keys().copied().collect();
+		for chunk_coords in chunk_coords_list {
+			if self
+				.map
+				.get(&chunk_coords)
+				.as_ref()
+				.is_some_and(|chunk| chunk.remeshing_required)
+			{
+				let opaqueness_layer = self.get_opaqueness_layer_around_chunk(chunk_coords, false);
+				let chunk = self.map.get_mut(&chunk_coords).unwrap();
+				chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+				chunk.mesh.as_mut().unwrap().update_gpu_data(device);
+				chunk.remeshing_required = false;
+			}
+		}
+	}
+}
+
+struct ChunkGenerator {}
+
+impl ChunkGenerator {
+	fn generate_chunk_blocks(self, coords_span: ChunkCoordsSpan) -> ChunkBlocks {
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords.z as f32
+				- f32::cos(coords.x as f32 * 0.3)
+				- f32::cos(coords.y as f32 * 0.3)
+				- 3.0 < 0.0;
+			*chunk_blocks.get_mut(coords).unwrap() = BlockTypeId { is_not_air: ground };
+		}
+		chunk_blocks
 	}
 }
 
@@ -1279,32 +1353,12 @@ pub fn run() {
 	}
 	let mut controls_to_trigger: Vec<ControlEvent> = vec![];
 
-	let cd = ChunkDimensions::from(10);
-
+	let cd = ChunkDimensions::from(16);
 	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
 	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
-		let chunk = Chunk::new_empty(ChunkCoordsSpan { cd, chunk_coords });
-		chunk_grid.map.insert(chunk_coords, chunk);
+		chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
 	}
-
-	for (_chunk_coords, chunk) in chunk_grid.map.iter_mut() {
-		for coords in chunk.blocks.coords_span.iter_coords() {
-			// Test chunk generation.
-			let ground = coords.z as f32
-				- f32::cos(coords.x as f32 * 0.3)
-				- f32::cos(coords.y as f32 * 0.3)
-				- 3.0 < 0.0;
-			*chunk.blocks.get_mut(coords).unwrap() = BlockTypeId { is_not_air: ground };
-		}
-	}
-
-	let chunk_coords_list: Vec<_> = chunk_grid.map.keys().copied().collect();
-	for chunk_coords in chunk_coords_list {
-		let opaqueness_layer = chunk_grid.get_opaqueness_layer_around_chunk(chunk_coords, false);
-		let chunk = chunk_grid.map.get_mut(&chunk_coords).unwrap();
-		chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
-		chunk.mesh.as_mut().unwrap().update_gpu_data(&device);
-	}
+	chunk_grid.remesh_all_chunks_that_require_it(&device);
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
@@ -1339,6 +1393,27 @@ pub fn run() {
 					.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 					.unwrap();
 				window.set_cursor_visible(false);
+			},
+
+			WindowEvent::KeyboardInput {
+				input:
+					KeyboardInput {
+						state: ElementState::Pressed,
+						virtual_keycode: Some(VirtualKeyCode::Return),
+						..
+					},
+				..
+			} => {
+				let player_block_coords = (player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
+					.map(|x| x.round() as i32);
+				let player_chunk_coords =
+					cd.world_coords_to_containing_chunk_coords(player_block_coords);
+
+				for chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 6) {
+					chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
+				}
+				chunk_grid.remesh_all_chunks_that_require_it(&device);
 			},
 
 			WindowEvent::KeyboardInput {
