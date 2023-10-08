@@ -1,3 +1,6 @@
+use crate::BindingResourceable;
+pub(crate) use crate::BindingThingy;
+
 /// Vertex type used in chunk block meshes.
 #[derive(Copy, Clone, Debug)]
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
@@ -10,20 +13,22 @@ pub struct BlockVertexPod {
 	pub ambiant_occlusion: f32,
 }
 
-pub struct BindGroupLayouts<'a, 'b, 'c, 'd, 'e> {
-	pub camera_bind_group_layout: &'a wgpu::BindGroupLayout,
-	pub sun_light_direction_bind_group_layout: &'b wgpu::BindGroupLayout,
-	pub sun_camera_bind_group_layout: &'c wgpu::BindGroupLayout,
-	pub shadow_map_bind_group_layout: &'d wgpu::BindGroupLayout,
-	pub atlas_texture_bind_group_layout: &'e wgpu::BindGroupLayout,
+pub struct BindingThingies<'a> {
+	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
+	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
+	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
-pub fn render_pipeline(
+pub fn render_pipeline_and_bind_group(
 	device: &wgpu::Device,
-	bind_broup_layouts: BindGroupLayouts,
+	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
-) -> wgpu::RenderPipeline {
+) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
 	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
@@ -51,6 +56,95 @@ pub fn render_pipeline(
 		],
 	};
 
+	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+		label: Some("Block Shader Bind Group Layout"),
+		entries: &[
+			binding_thingies
+				.camera_matrix_thingy
+				.binding_type
+				.layout_entry(0, wgpu::ShaderStages::VERTEX),
+			binding_thingies
+				.sun_light_direction_thingy
+				.binding_type
+				.layout_entry(1, wgpu::ShaderStages::VERTEX),
+			binding_thingies
+				.sun_camera_matrix_thingy
+				.binding_type
+				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.shadow_map_view_thingy
+				.binding_type
+				.layout_entry(3, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.shadow_map_sampler_thingy
+				.binding_type
+				.layout_entry(4, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.atlas_texture_view_thingy
+				.binding_type
+				.layout_entry(5, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.atlas_texture_sampler_thingy
+				.binding_type
+				.layout_entry(6, wgpu::ShaderStages::FRAGMENT),
+		],
+	});
+	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+		label: Some("Block Shader Bind Group"),
+		layout: &bind_group_layout,
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding: 0,
+				resource: binding_thingies
+					.camera_matrix_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 1,
+				resource: binding_thingies
+					.sun_light_direction_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 2,
+				resource: binding_thingies
+					.sun_camera_matrix_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 3,
+				resource: binding_thingies
+					.shadow_map_view_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 4,
+				resource: binding_thingies
+					.shadow_map_sampler_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 5,
+				resource: binding_thingies
+					.atlas_texture_view_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 6,
+				resource: binding_thingies
+					.atlas_texture_sampler_thingy
+					.resource
+					.as_binding_resource(),
+			},
+		],
+	});
+
 	let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Block Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("block.wgsl").into()),
@@ -58,17 +152,11 @@ pub fn render_pipeline(
 	let block_render_pipeline_layout =
 		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Block Render Pipeline Layout"),
-			bind_group_layouts: &[
-				bind_broup_layouts.camera_bind_group_layout,
-				bind_broup_layouts.sun_light_direction_bind_group_layout,
-				bind_broup_layouts.sun_camera_bind_group_layout,
-				bind_broup_layouts.shadow_map_bind_group_layout,
-				bind_broup_layouts.atlas_texture_bind_group_layout,
-			],
+			bind_group_layouts: &[&bind_group_layout],
 			push_constant_ranges: &[],
 		});
 
-	device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Block Render Pipeline"),
 		layout: Some(&block_render_pipeline_layout),
 		vertex: wgpu::VertexState {
@@ -103,5 +191,7 @@ pub fn render_pipeline(
 		}),
 		multisample: wgpu::MultisampleState { count: 1, mask: !0, alpha_to_coverage_enabled: false },
 		multiview: None,
-	})
+	});
+
+	(render_pipeline, bind_group)
 }

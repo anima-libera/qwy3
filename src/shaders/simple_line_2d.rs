@@ -1,7 +1,10 @@
 use super::simple_line::SimpleLineVertexPod;
 
+pub struct BindingThingies {}
+
 pub fn render_pipeline(
 	device: &wgpu::Device,
+	_binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {

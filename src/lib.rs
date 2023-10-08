@@ -812,6 +812,48 @@ fn digit_to_keycode(digit: char) -> winit::event::VirtualKeyCode {
 	keycode
 }
 
+/// Type representation for the `ty` and `count` fields of a `wgpu::BindGroupLayoutEntry`.
+struct BindingType {
+	ty: wgpu::BindingType,
+	count: Option<std::num::NonZeroU32>,
+}
+
+impl BindingType {
+	fn layout_entry(
+		&self,
+		binding: u32,
+		visibility: wgpu::ShaderStages,
+	) -> wgpu::BindGroupLayoutEntry {
+		wgpu::BindGroupLayoutEntry { binding, visibility, ty: self.ty, count: self.count }
+	}
+}
+
+trait BindingResourceable {
+	fn as_binding_resource(&self) -> wgpu::BindingResource;
+}
+impl BindingResourceable for wgpu::Buffer {
+	fn as_binding_resource(&self) -> wgpu::BindingResource {
+		self.as_entire_binding()
+	}
+}
+impl BindingResourceable for wgpu::TextureView {
+	fn as_binding_resource(&self) -> wgpu::BindingResource {
+		wgpu::BindingResource::TextureView(self)
+	}
+}
+impl BindingResourceable for wgpu::Sampler {
+	fn as_binding_resource(&self) -> wgpu::BindingResource {
+		wgpu::BindingResource::Sampler(self)
+	}
+}
+
+/// Resource and associated information required for creations of both
+/// a `wgpu::BindGroupLayoutEntry` and a `wgpu::BindGroupEntry`.
+struct BindingThingy<T: BindingResourceable> {
+	binding_type: BindingType,
+	resource: T,
+}
+
 pub fn run() {
 	// Wgpu uses the `log`/`env_logger` crates to log errors and stuff,
 	// and we do want to see the errors very much.
@@ -946,6 +988,18 @@ pub fn run() {
 		atlas_texture_size,
 	);
 	let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor::default());
+	let atlas_texture_view_binding_type = BindingType {
+		ty: wgpu::BindingType::Texture {
+			multisampled: false,
+			view_dimension: wgpu::TextureViewDimension::D2,
+			sample_type: wgpu::TextureSampleType::Float { filterable: true },
+		},
+		count: None,
+	};
+	let atlas_texture_view_thingy = BindingThingy {
+		binding_type: atlas_texture_view_binding_type,
+		resource: atlas_texture_view,
+	};
 	let atlas_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
 		address_mode_u: wgpu::AddressMode::ClampToEdge,
 		address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -955,42 +1009,14 @@ pub fn run() {
 		mipmap_filter: wgpu::FilterMode::Nearest,
 		..Default::default()
 	});
-	let atlas_texture_bind_group_layout =
-		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Atlas Texture Bind Group Layout"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						multisampled: false,
-						view_dimension: wgpu::TextureViewDimension::D2,
-						sample_type: wgpu::TextureSampleType::Float { filterable: true },
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-					count: None,
-				},
-			],
-		});
-	let atlas_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("Atlas Texture Bind Group"),
-		layout: &atlas_texture_bind_group_layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: wgpu::BindingResource::TextureView(&atlas_texture_view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
-			},
-		],
-	});
+	let atlas_texture_sampler_binding_type = BindingType {
+		ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+		count: None,
+	};
+	let atlas_texture_sampler_thingy = BindingThingy {
+		binding_type: atlas_texture_sampler_binding_type,
+		resource: atlas_texture_sampler,
+	};
 
 	let mut camera = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
@@ -1004,28 +1030,18 @@ pub fn run() {
 		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 	});
-	let camera_bind_group_layout =
-		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Camera Bind Group Layout"),
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-		});
-	let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("Camera Bind Group"),
-		layout: &camera_bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: camera_matrix_buffer.as_entire_binding(),
-		}],
-	});
+	let camera_matrix_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	let camera_matrix_thingy = BindingThingy {
+		binding_type: camera_matrix_binding_type,
+		resource: camera_matrix_buffer,
+	};
 
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
 	let mut enable_camera_third_person = false;
@@ -1059,28 +1075,18 @@ pub fn run() {
 		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 	});
-	let sun_light_direction_bind_group_layout =
-		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Sun Light Direction Bind Group Layout"),
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-		});
-	let sun_light_direction_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("Sun Light Direction Bind Group"),
-		layout: &sun_light_direction_bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: sun_light_direction_buffer.as_entire_binding(),
-		}],
-	});
+	let sun_light_direction_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	let sun_light_direction_thingy = BindingThingy {
+		binding_type: sun_light_direction_binding_type,
+		resource: sun_light_direction_buffer,
+	};
 
 	let sun_camera = CameraOrthographicSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
@@ -1093,43 +1099,22 @@ pub fn run() {
 		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
 	});
-	let sun_camera_bind_group_layout =
-		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Sun Camera Bind Group Layout"),
-			entries: &[wgpu::BindGroupLayoutEntry {
-				binding: 0,
-				visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-				ty: wgpu::BindingType::Buffer {
-					ty: wgpu::BufferBindingType::Uniform,
-					has_dynamic_offset: false,
-					min_binding_size: None,
-				},
-				count: None,
-			}],
-		});
-	let sun_camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("Sun Camera Bind Group"),
-		layout: &sun_camera_bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: sun_camera_matrix_buffer.as_entire_binding(),
-		}],
-	});
+	let sun_camera_matrix_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	let sun_camera_matrix_thingy = BindingThingy {
+		binding_type: sun_camera_matrix_binding_type,
+		resource: sun_camera_matrix_buffer,
+	};
 
 	let mut use_sun_camera_to_render = false;
 
 	let shadow_map_format = wgpu::TextureFormat::Depth32Float;
-	let shadow_map_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-		label: Some("Shadow Map Sampler"),
-		address_mode_u: wgpu::AddressMode::ClampToEdge,
-		address_mode_v: wgpu::AddressMode::ClampToEdge,
-		address_mode_w: wgpu::AddressMode::ClampToEdge,
-		mag_filter: wgpu::FilterMode::Linear,
-		min_filter: wgpu::FilterMode::Linear,
-		mipmap_filter: wgpu::FilterMode::Nearest,
-		compare: Some(wgpu::CompareFunction::LessEqual),
-		..Default::default()
-	});
 	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("Shadow Map Texture"),
 		size: wgpu::Extent3d { width: 8192, height: 8192, depth_or_array_layers: 1 },
@@ -1141,43 +1126,37 @@ pub fn run() {
 		view_formats: &[],
 	});
 	let shadow_map_view = shadow_map_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-	let shadow_map_bind_group_layout =
-		device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-			label: Some("Shadow Map Bind Group Layout"),
-			entries: &[
-				wgpu::BindGroupLayoutEntry {
-					binding: 0,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Texture {
-						sample_type: wgpu::TextureSampleType::Depth,
-						view_dimension: wgpu::TextureViewDimension::D2,
-						multisampled: false,
-					},
-					count: None,
-				},
-				wgpu::BindGroupLayoutEntry {
-					binding: 1,
-					visibility: wgpu::ShaderStages::FRAGMENT,
-					ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-					count: None,
-				},
-			],
-		});
-	let shadow_map_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-		label: Some("Shadow Map Bind Group"),
-		layout: &shadow_map_bind_group_layout,
-		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: wgpu::BindingResource::TextureView(&shadow_map_view),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: wgpu::BindingResource::Sampler(&shadow_map_sampler),
-			},
-		],
+	let shadow_map_view_binding_type = BindingType {
+		ty: wgpu::BindingType::Texture {
+			sample_type: wgpu::TextureSampleType::Depth,
+			view_dimension: wgpu::TextureViewDimension::D2,
+			multisampled: false,
+		},
+		count: None,
+	};
+	let shadow_map_view_thingy = BindingThingy {
+		binding_type: shadow_map_view_binding_type,
+		resource: shadow_map_view,
+	};
+	let shadow_map_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		label: Some("Shadow Map Sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Linear,
+		min_filter: wgpu::FilterMode::Linear,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		compare: Some(wgpu::CompareFunction::LessEqual),
+		..Default::default()
 	});
+	let shadow_map_sampler_binding_type = BindingType {
+		ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+		count: None,
+	};
+	let shadow_map_sampler_thingy = BindingThingy {
+		binding_type: shadow_map_sampler_binding_type,
+		resource: shadow_map_sampler,
+	};
 
 	fn make_z_buffer_texture_view(
 		device: &wgpu::Device,
@@ -1202,34 +1181,44 @@ pub fn run() {
 	let mut z_buffer_view =
 		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
 
-	let block_shadow_render_pipeline = shaders::block_shadow::render_pipeline(
-		&device,
-		&sun_camera_bind_group_layout,
-		shadow_map_format,
-	);
+	let (block_shadow_render_pipeline, block_shadow_bind_group) =
+		shaders::block_shadow::render_pipeline_and_bind_group(
+			&device,
+			shaders::block_shadow::BindingThingies {
+				sun_camera_matrix_thingy: &sun_camera_matrix_thingy,
+			},
+			shadow_map_format,
+		);
 
-	let block_render_pipeline = shaders::block::render_pipeline(
+	let (block_render_pipeline, block_bind_group) = shaders::block::render_pipeline_and_bind_group(
 		&device,
-		shaders::block::BindGroupLayouts {
-			camera_bind_group_layout: &camera_bind_group_layout,
-			sun_light_direction_bind_group_layout: &sun_light_direction_bind_group_layout,
-			sun_camera_bind_group_layout: &sun_camera_bind_group_layout,
-			shadow_map_bind_group_layout: &shadow_map_bind_group_layout,
-			atlas_texture_bind_group_layout: &atlas_texture_bind_group_layout,
+		shaders::block::BindingThingies {
+			camera_matrix_thingy: &camera_matrix_thingy,
+			sun_light_direction_thingy: &sun_light_direction_thingy,
+			sun_camera_matrix_thingy: &sun_camera_matrix_thingy,
+			shadow_map_view_thingy: &shadow_map_view_thingy,
+			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
+			atlas_texture_view_thingy: &atlas_texture_view_thingy,
+			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
 		},
 		config.format,
 		z_buffer_format,
 	);
 
-	let simple_line_render_pipeline = shaders::simple_line::render_pipeline(
+	let (simple_line_render_pipeline, simple_line_render_bind_group) =
+		shaders::simple_line::render_pipeline_and_bind_group(
+			&device,
+			shaders::simple_line::BindingThingies { camera_matrix_thingy: &camera_matrix_thingy },
+			config.format,
+			z_buffer_format,
+		);
+
+	let simple_line_2d_render_pipeline = shaders::simple_line_2d::render_pipeline(
 		&device,
-		&camera_bind_group_layout,
+		shaders::simple_line_2d::BindingThingies {},
 		config.format,
 		z_buffer_format,
 	);
-
-	let simple_line_2d_render_pipeline =
-		shaders::simple_line_2d::render_pipeline(&device, config.format, z_buffer_format);
 
 	let time_beginning = std::time::Instant::now();
 	let mut time_from_last_iteration = std::time::Instant::now();
@@ -1721,7 +1710,7 @@ pub fn run() {
 				)
 			};
 			queue.write_buffer(
-				&sun_camera_matrix_buffer,
+				&sun_camera_matrix_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[sun_camera_view_projection_matrix]),
 			);
@@ -1744,14 +1733,14 @@ pub fn run() {
 				}
 			};
 			queue.write_buffer(
-				&camera_matrix_buffer,
+				&camera_matrix_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[camera_view_projection_matrix]),
 			);
 
 			let sun_light_direction = Vector3Pod { values: (-sun_position_in_sky.to_vec3()).into() };
 			queue.write_buffer(
-				&sun_light_direction_buffer,
+				&sun_light_direction_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
@@ -1769,14 +1758,14 @@ pub fn run() {
 					label: Some("Render Pass for Shadow Map"),
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &shadow_map_view,
+						view: &shadow_map_view_thingy.resource,
 						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
 						stencil_ops: None,
 					}),
 				});
 
 				render_pass.set_pipeline(&block_shadow_render_pipeline);
-				render_pass.set_bind_group(0, &sun_camera_bind_group, &[]);
+				render_pass.set_bind_group(0, &block_shadow_bind_group, &[]);
 				for chunk in chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass
@@ -1819,11 +1808,7 @@ pub fn run() {
 				}
 
 				render_pass.set_pipeline(&block_render_pipeline);
-				render_pass.set_bind_group(0, &camera_bind_group, &[]);
-				render_pass.set_bind_group(1, &sun_light_direction_bind_group, &[]);
-				render_pass.set_bind_group(2, &sun_camera_bind_group, &[]);
-				render_pass.set_bind_group(3, &shadow_map_bind_group, &[]);
-				render_pass.set_bind_group(4, &atlas_texture_bind_group, &[]);
+				render_pass.set_bind_group(0, &block_bind_group, &[]);
 				for chunk in chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass
@@ -1834,14 +1819,14 @@ pub fn run() {
 
 				if enable_display_phys_box {
 					render_pass.set_pipeline(&simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &camera_bind_group, &[]);
+					render_pass.set_bind_group(0, &simple_line_render_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
 				}
 
 				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
 					render_pass.set_pipeline(&simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &camera_bind_group, &[]);
+					render_pass.set_bind_group(0, &simple_line_render_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 				}
@@ -1867,7 +1852,6 @@ pub fn run() {
 				});
 
 				render_pass.set_pipeline(&simple_line_2d_render_pipeline);
-
 				if !use_sun_camera_to_render {
 					render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
