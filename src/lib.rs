@@ -909,7 +909,7 @@ pub fn run() {
 			.request_device(
 				&wgpu::DeviceDescriptor {
 					features: wgpu::Features::empty(),
-					limits: wgpu::Limits { max_bind_groups: 8, ..wgpu::Limits::default() },
+					limits: wgpu::Limits { ..wgpu::Limits::default() },
 					label: None,
 				},
 				None,
