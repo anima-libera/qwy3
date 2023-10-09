@@ -14,10 +14,7 @@ use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
 use rand::Rng;
 use wgpu::util::DeviceExt;
-use winit::{
-	event_loop::{ControlFlow, EventLoop},
-	window::WindowBuilder,
-};
+use winit::event_loop::ControlFlow;
 
 use camera::{
 	aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, CameraSettings,
@@ -854,13 +851,115 @@ struct BindingThingy<T: BindingResourceable> {
 	resource: T,
 }
 
-pub fn run() {
+fn make_z_buffer_texture_view(
+	device: &wgpu::Device,
+	format: wgpu::TextureFormat,
+	width: u32,
+	height: u32,
+) -> wgpu::TextureView {
+	let z_buffer_texture_description = wgpu::TextureDescriptor {
+		label: Some("Z Buffer"),
+		size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format,
+		view_formats: &[],
+		usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+	};
+	let z_buffer_texture = device.create_texture(&z_buffer_texture_description);
+	z_buffer_texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+enum WhichCameraToUse {
+	FirstPerson,
+	ThirdPersonNear,
+	ThirdPersonFar,
+	ThirdPersonVeryFar,
+	Sun,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Control {
+	KeyboardKey(winit::event::VirtualKeyCode),
+	MouseButton(winit::event::MouseButton),
+}
+struct ControlEvent {
+	control: Control,
+	pressed: bool,
+}
+enum Action {
+	WalkForward,
+	WalkBackward,
+	WalkLeftward,
+	WalkRightward,
+	Jump,
+	TogglePhysics,
+	ToggleWorldGeneration,
+	CycleFirstAndThirdPersonViews,
+	ToggleDisplayPlayerBox,
+	ToggleSunView,
+	ToggleCursorCaptured,
+	PrintCoords,
+	PlaceOrRemoveBlockUnderPlayer,
+	PlaceBlockAtTarget,
+	RemoveBlockAtTarget,
+}
+
+struct Game {
+	window: winit::window::Window,
+	window_surface: wgpu::Surface,
+	device: wgpu::Device,
+	queue: wgpu::Queue,
+	window_surface_config: wgpu::SurfaceConfiguration,
+	z_buffer_view: wgpu::TextureView,
+	z_buffer_format: wgpu::TextureFormat,
+	camera_direction: AngularDirection,
+	camera_settings: CameraPerspectiveSettings,
+	camera_matrix_thingy: BindingThingy<wgpu::Buffer>,
+	sun_position_in_sky: AngularDirection,
+	sun_light_direction_thingy: BindingThingy<wgpu::Buffer>,
+	sun_camera: CameraOrthographicSettings,
+	sun_camera_matrix_thingy: BindingThingy<wgpu::Buffer>,
+	shadow_map_view_thingy: BindingThingy<wgpu::TextureView>,
+	/// First is the block of matter that is targeted,
+	/// second is the empty block near it that would be filled if a block was placed now.
+	targeted_block_coords: Option<(BlockCoords, BlockCoords)>,
+	player_phys: AlignedPhysBox,
+	cd: ChunkDimensions,
+	chunk_grid: ChunkGrid,
+	controls_to_trigger: Vec<ControlEvent>,
+	control_bindings: HashMap<Control, Action>,
+
+	block_shadow_render_pipeline: wgpu::RenderPipeline,
+	block_shadow_bind_group: wgpu::BindGroup,
+	block_render_pipeline: wgpu::RenderPipeline,
+	block_bind_group: wgpu::BindGroup,
+	simple_line_render_pipeline: wgpu::RenderPipeline,
+	simple_line_render_bind_group: wgpu::BindGroup,
+	simple_line_2d_render_pipeline: wgpu::RenderPipeline,
+
+	time_beginning: std::time::Instant,
+	time_from_last_iteration: std::time::Instant,
+
+	walking_forward: bool,
+	walking_backward: bool,
+	walking_leftward: bool,
+	walking_rightward: bool,
+	enable_physics: bool,
+	enable_world_generation: bool,
+	selected_camera: WhichCameraToUse,
+	enable_display_phys_box: bool,
+	cursor_is_captured: bool,
+}
+
+fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	// Wgpu uses the `log`/`env_logger` crates to log errors and stuff,
 	// and we do want to see the errors very much.
 	env_logger::init();
 
-	let event_loop = EventLoop::new();
-	let window = WindowBuilder::new()
+	let event_loop = winit::event_loop::EventLoop::new();
+	let window = winit::window::WindowBuilder::new()
 		.with_title("Qwy3")
 		.with_maximized(true)
 		.with_resizable(true)
@@ -929,7 +1028,7 @@ pub fn run() {
 		.present_modes
 		.contains(&wgpu::PresentMode::Fifo));
 	let size = window.inner_size();
-	let mut config = wgpu::SurfaceConfiguration {
+	let window_surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format: surface_format,
 		width: size.width,
@@ -938,7 +1037,7 @@ pub fn run() {
 		alpha_mode: surface_capabilities.alpha_modes[0],
 		view_formats: vec![],
 	};
-	window_surface.configure(&device, &config);
+	window_surface.configure(&device, &window_surface_config);
 
 	const ATLAS_DIMS: (usize, usize) = (512, 512);
 	let mut atlas_data: [u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1] = [0; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1];
@@ -1018,9 +1117,9 @@ pub fn run() {
 		resource: atlas_texture_sampler,
 	};
 
-	let mut camera = CameraPerspectiveSettings {
+	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
-		aspect_ratio: config.width as f32 / config.height as f32,
+		aspect_ratio: window_surface_config.width as f32 / window_surface_config.height as f32,
 		field_of_view_y: TAU / 4.0,
 		near_plane: 0.001,
 		far_plane: 400.0,
@@ -1043,18 +1142,11 @@ pub fn run() {
 		resource: camera_matrix_buffer,
 	};
 
-	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
+	let camera_direction = AngularDirection::from_angle_horizontal(0.0);
 
-	enum WhichCameraToUse {
-		FirstPerson,
-		ThirdPersonNear,
-		ThirdPersonFar,
-		ThirdPersonVeryFar,
-		Sun,
-	}
-	let mut selected_camera = WhichCameraToUse::FirstPerson;
+	let selected_camera = WhichCameraToUse::FirstPerson;
 
-	let mut cursor_is_captured = true;
+	let cursor_is_captured = true;
 	window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 		.unwrap();
@@ -1062,22 +1154,22 @@ pub fn run() {
 
 	// First is the block of matter that is targeted,
 	// second is the empty block near it that would be filled if a block was placed now.
-	let mut targeted_block_coords: Option<(BlockCoords, BlockCoords)> = None;
+	let targeted_block_coords: Option<(BlockCoords, BlockCoords)> = None;
 
-	let mut walking_forward = false;
-	let mut walking_backward = false;
-	let mut walking_leftward = false;
-	let mut walking_rightward = false;
+	let walking_forward = false;
+	let walking_backward = false;
+	let walking_leftward = false;
+	let walking_rightward = false;
 
-	let mut player_phys = AlignedPhysBox {
+	let player_phys = AlignedPhysBox {
 		aligned_box: AlignedBox { pos: (5.5, 5.5, 5.5).into(), dims: (0.8, 0.8, 1.8).into() },
 		motion: (0.0, 0.0, 0.0).into(),
 		gravity_factor: 1.0,
 	};
-	let mut enable_physics = true;
-	let mut enable_display_phys_box = false;
+	let enable_physics = true;
+	let enable_display_phys_box = false;
 
-	let mut sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
+	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Sun Light Direction Buffer"),
 		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
@@ -1164,28 +1256,13 @@ pub fn run() {
 		resource: shadow_map_sampler,
 	};
 
-	fn make_z_buffer_texture_view(
-		device: &wgpu::Device,
-		format: wgpu::TextureFormat,
-		width: u32,
-		height: u32,
-	) -> wgpu::TextureView {
-		let z_buffer_texture_description = wgpu::TextureDescriptor {
-			label: Some("Z Buffer"),
-			size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
-			mip_level_count: 1,
-			sample_count: 1,
-			dimension: wgpu::TextureDimension::D2,
-			format,
-			view_formats: &[],
-			usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-		};
-		let z_buffer_texture = device.create_texture(&z_buffer_texture_description);
-		z_buffer_texture.create_view(&wgpu::TextureViewDescriptor::default())
-	}
 	let z_buffer_format = wgpu::TextureFormat::Depth32Float;
-	let mut z_buffer_view =
-		make_z_buffer_texture_view(&device, z_buffer_format, config.width, config.height);
+	let z_buffer_view = make_z_buffer_texture_view(
+		&device,
+		z_buffer_format,
+		window_surface_config.width,
+		window_surface_config.height,
+	);
 
 	let (block_shadow_render_pipeline, block_shadow_bind_group) =
 		shaders::block_shadow::render_pipeline_and_bind_group(
@@ -1207,7 +1284,7 @@ pub fn run() {
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
 			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
 		},
-		config.format,
+		window_surface_config.format,
 		z_buffer_format,
 	);
 
@@ -1215,42 +1292,19 @@ pub fn run() {
 		shaders::simple_line::render_pipeline_and_bind_group(
 			&device,
 			shaders::simple_line::BindingThingies { camera_matrix_thingy: &camera_matrix_thingy },
-			config.format,
+			window_surface_config.format,
 			z_buffer_format,
 		);
 
 	let simple_line_2d_render_pipeline = shaders::simple_line_2d::render_pipeline(
 		&device,
 		shaders::simple_line_2d::BindingThingies {},
-		config.format,
+		window_surface_config.format,
 		z_buffer_format,
 	);
 
 	let time_beginning = std::time::Instant::now();
-	let mut time_from_last_iteration = std::time::Instant::now();
-
-	#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-	enum Control {
-		KeyboardKey(VirtualKeyCode),
-		MouseButton(MouseButton),
-	}
-	enum Action {
-		WalkForward,
-		WalkBackward,
-		WalkLeftward,
-		WalkRightward,
-		Jump,
-		TogglePhysics,
-		ToggleWorldGeneration,
-		CycleFirstAndThirdPersonViews,
-		ToggleDisplayPlayerBox,
-		ToggleSunView,
-		ToggleCursorCaptured,
-		PrintCoords,
-		PlaceOrRemoveBlockUnderPlayer,
-		PlaceBlockAtTarget,
-		RemoveBlockAtTarget,
-	}
+	let time_from_last_iteration = std::time::Instant::now();
 
 	let mut control_bindings: HashMap<Control, Action> = HashMap::new();
 
@@ -1263,6 +1317,7 @@ pub fn run() {
 			.expect("could not fill the default config in the new config file");
 	}
 
+	use winit::event::*;
 	if let Ok(controls_config_string) = std::fs::read_to_string(command_file_path) {
 		for (line_index, line) in controls_config_string.lines().enumerate() {
 			let line_number = line_index + 1;
@@ -1354,11 +1409,7 @@ pub fn run() {
 		println!("Couldn't read file \"{command_file_path}\"");
 	}
 
-	struct ControlEvent {
-		control: Control,
-		pressed: bool,
-	}
-	let mut controls_to_trigger: Vec<ControlEvent> = vec![];
+	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
 	let cd = ChunkDimensions::from(16);
 	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
@@ -1367,11 +1418,61 @@ pub fn run() {
 	}
 	chunk_grid.remesh_all_chunks_that_require_it(&device);
 
-	let mut enable_world_generation = true;
+	let enable_world_generation = true;
+
+	let game = Game {
+		window,
+		window_surface,
+		device,
+		queue,
+		window_surface_config,
+		z_buffer_format,
+		z_buffer_view,
+		camera_direction,
+		camera_settings,
+		camera_matrix_thingy,
+		sun_position_in_sky,
+		sun_light_direction_thingy,
+		sun_camera,
+		sun_camera_matrix_thingy,
+		shadow_map_view_thingy,
+		targeted_block_coords,
+		player_phys,
+		cd,
+		chunk_grid,
+		controls_to_trigger,
+		control_bindings,
+
+		block_shadow_render_pipeline,
+		block_shadow_bind_group,
+		block_render_pipeline,
+		block_bind_group,
+		simple_line_render_pipeline,
+		simple_line_render_bind_group,
+		simple_line_2d_render_pipeline,
+
+		time_beginning,
+		time_from_last_iteration,
+
+		walking_forward,
+		walking_backward,
+		walking_leftward,
+		walking_rightward,
+		enable_physics,
+		enable_world_generation,
+		selected_camera,
+		enable_display_phys_box,
+		cursor_is_captured,
+	};
+	(game, event_loop)
+}
+
+pub fn run() {
+	let (mut game, event_loop) = init_game();
 
 	use winit::event::*;
 	event_loop.run(move |event, _, control_flow| match event {
-		Event::WindowEvent { ref event, window_id } if window_id == window.id() => match event {
+		Event::WindowEvent { ref event, window_id } if window_id == game.window.id() => match event {
 			WindowEvent::CloseRequested
 			| WindowEvent::KeyboardInput {
 				input:
@@ -1385,23 +1486,27 @@ pub fn run() {
 
 			WindowEvent::Resized(new_size) => {
 				let winit::dpi::PhysicalSize { width, height } = *new_size;
-				config.width = width;
-				config.height = height;
-				window_surface.configure(&device, &config);
-				z_buffer_view = make_z_buffer_texture_view(&device, z_buffer_format, width, height);
-				camera.aspect_ratio = aspect_ratio(width, height);
+				game.window_surface_config.width = width;
+				game.window_surface_config.height = height;
+				game
+					.window_surface
+					.configure(&game.device, &game.window_surface_config);
+				game.z_buffer_view =
+					make_z_buffer_texture_view(&game.device, game.z_buffer_format, width, height);
+				game.camera_settings.aspect_ratio = aspect_ratio(width, height);
 			},
 
 			WindowEvent::MouseInput {
 				state: winit::event::ElementState::Pressed,
 				button: winit::event::MouseButton::Left,
 				..
-			} if !cursor_is_captured => {
-				cursor_is_captured = true;
-				window
+			} if !game.cursor_is_captured => {
+				game.cursor_is_captured = true;
+				game
+					.window
 					.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 					.unwrap();
-				window.set_cursor_visible(false);
+				game.window.set_cursor_visible(false);
 			},
 
 			WindowEvent::KeyboardInput {
@@ -1413,30 +1518,36 @@ pub fn run() {
 					},
 				..
 			} => {
-				let player_block_coords = (player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
+				let player_block_coords = (game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z()
+						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
 					.map(|x| x.round() as i32);
-				let player_chunk_coords =
-					cd.world_coords_to_containing_chunk_coords(player_block_coords);
+				let player_chunk_coords = game
+					.cd
+					.world_coords_to_containing_chunk_coords(player_block_coords);
 
 				for chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 6) {
-					chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
+					game
+						.chunk_grid
+						.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
 				}
-				chunk_grid.remesh_all_chunks_that_require_it(&device);
+				game
+					.chunk_grid
+					.remesh_all_chunks_that_require_it(&game.device);
 			},
 
 			WindowEvent::KeyboardInput {
 				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
 				..
 			} => {
-				controls_to_trigger.push(ControlEvent {
+				game.controls_to_trigger.push(ControlEvent {
 					control: Control::KeyboardKey(*key),
 					pressed: *state == ElementState::Pressed,
 				});
 			},
 
-			WindowEvent::MouseInput { state, button, .. } if cursor_is_captured => {
-				controls_to_trigger.push(ControlEvent {
+			WindowEvent::MouseInput { state, button, .. } if game.cursor_is_captured => {
+				game.controls_to_trigger.push(ControlEvent {
 					control: Control::MouseButton(*button),
 					pressed: *state == ElementState::Pressed,
 				});
@@ -1446,17 +1557,17 @@ pub fn run() {
 		},
 
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseMotion { delta }, .. }
-			if cursor_is_captured =>
+			if game.cursor_is_captured =>
 		{
 			// Move camera.
 			let sensitivity = 0.0025;
-			camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
-			camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
-			if camera_direction.angle_vertical < 0.0 {
-				camera_direction.angle_vertical = 0.0;
+			game.camera_direction.angle_horizontal += -1.0 * delta.0 as f32 * sensitivity;
+			game.camera_direction.angle_vertical += delta.1 as f32 * sensitivity;
+			if game.camera_direction.angle_vertical < 0.0 {
+				game.camera_direction.angle_vertical = 0.0;
 			}
-			if TAU / 2.0 < camera_direction.angle_vertical {
-				camera_direction.angle_vertical = TAU / 2.0;
+			if TAU / 2.0 < game.camera_direction.angle_vertical {
+				game.camera_direction.angle_vertical = TAU / 2.0;
 			}
 		},
 
@@ -1468,48 +1579,49 @@ pub fn run() {
 				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
 			};
 			let sensitivity = 0.01;
-			let direction_left_or_right = camera_direction
+			let direction_left_or_right = game
+				.camera_direction
 				.to_horizontal()
 				.add_to_horizontal_angle(TAU / 4.0 * dx.signum());
-			player_phys.aligned_box.pos.z -= dy * sensitivity;
-			player_phys.aligned_box.pos +=
+			game.player_phys.aligned_box.pos.z -= dy * sensitivity;
+			game.player_phys.aligned_box.pos +=
 				direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
 		},
 
 		Event::MainEventsCleared => {
-			let _time_since_beginning = time_beginning.elapsed();
+			let _time_since_beginning = game.time_beginning.elapsed();
 			let now = std::time::Instant::now();
-			let dt = now - time_from_last_iteration;
-			time_from_last_iteration = now;
+			let dt = now - game.time_from_last_iteration;
+			game.time_from_last_iteration = now;
 
 			// Perform actions triggered by controls.
-			for control_event in controls_to_trigger.iter() {
+			for control_event in game.controls_to_trigger.iter() {
 				let pressed = control_event.pressed;
-				if let Some(action) = control_bindings.get(&control_event.control) {
+				if let Some(action) = game.control_bindings.get(&control_event.control) {
 					match (action, pressed) {
 						(Action::WalkForward, pressed) => {
-							walking_forward = pressed;
+							game.walking_forward = pressed;
 						},
 						(Action::WalkBackward, pressed) => {
-							walking_backward = pressed;
+							game.walking_backward = pressed;
 						},
 						(Action::WalkLeftward, pressed) => {
-							walking_leftward = pressed;
+							game.walking_leftward = pressed;
 						},
 						(Action::WalkRightward, pressed) => {
-							walking_rightward = pressed;
+							game.walking_rightward = pressed;
 						},
 						(Action::Jump, true) => {
-							player_phys.motion.z = 0.1;
+							game.player_phys.motion.z = 0.1;
 						},
 						(Action::TogglePhysics, true) => {
-							enable_physics = !enable_physics;
+							game.enable_physics = !game.enable_physics;
 						},
 						(Action::ToggleWorldGeneration, true) => {
-							enable_world_generation = !enable_world_generation;
+							game.enable_world_generation = !game.enable_world_generation;
 						},
 						(Action::CycleFirstAndThirdPersonViews, true) => {
-							selected_camera = match selected_camera {
+							game.selected_camera = match game.selected_camera {
 								WhichCameraToUse::FirstPerson => WhichCameraToUse::ThirdPersonNear,
 								WhichCameraToUse::ThirdPersonNear => WhichCameraToUse::ThirdPersonFar,
 								WhichCameraToUse::ThirdPersonFar => WhichCameraToUse::ThirdPersonVeryFar,
@@ -1518,67 +1630,70 @@ pub fn run() {
 							};
 						},
 						(Action::ToggleDisplayPlayerBox, true) => {
-							enable_display_phys_box = !enable_display_phys_box;
+							game.enable_display_phys_box = !game.enable_display_phys_box;
 						},
 						(Action::ToggleSunView, true) => {
-							selected_camera = match selected_camera {
+							game.selected_camera = match game.selected_camera {
 								WhichCameraToUse::Sun => WhichCameraToUse::FirstPerson,
 								_ => WhichCameraToUse::Sun,
 							};
 						},
 						(Action::ToggleCursorCaptured, true) => {
-							cursor_is_captured = !cursor_is_captured;
-							if cursor_is_captured {
-								window
+							game.cursor_is_captured = !game.cursor_is_captured;
+							if game.cursor_is_captured {
+								game
+									.window
 									.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 									.unwrap();
-								window.set_cursor_visible(false);
+								game.window.set_cursor_visible(false);
 							} else {
-								window
+								game
+									.window
 									.set_cursor_grab(winit::window::CursorGrabMode::None)
 									.unwrap();
-								window.set_cursor_visible(true);
+								game.window.set_cursor_visible(true);
 							}
 						},
 						(Action::PrintCoords, true) => {
-							dbg!(player_phys.aligned_box.pos);
-							let player_bottom = player_phys.aligned_box.pos
+							dbg!(game.player_phys.aligned_box.pos);
+							let player_bottom = game.player_phys.aligned_box.pos
 								- cgmath::Vector3::<f32>::from((
 									0.0,
 									0.0,
-									player_phys.aligned_box.dims.z / 2.0,
+									game.player_phys.aligned_box.dims.z / 2.0,
 								));
 							dbg!(player_bottom);
 						},
 						(Action::PlaceOrRemoveBlockUnderPlayer, true) => {
-							let player_bottom = player_phys.aligned_box.pos
+							let player_bottom = game.player_phys.aligned_box.pos
 								- cgmath::Vector3::<f32>::unit_z()
-									* (player_phys.aligned_box.dims.z / 2.0 + 0.1);
+									* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1);
 							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-							let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
+							let player_bottom_block_opt =
+								game.chunk_grid.get_block(player_bottom_block_coords);
 							if let Some(block) = player_bottom_block_opt {
-								chunk_grid.set_block_and_update_meshes(
+								game.chunk_grid.set_block_and_update_meshes(
 									player_bottom_block_coords,
 									BlockTypeId { is_not_air: !block.is_not_air },
-									&device,
+									&game.device,
 								);
 							}
 						},
 						(Action::PlaceBlockAtTarget, true) => {
-							if let Some((_, coords)) = targeted_block_coords {
-								chunk_grid.set_block_and_update_meshes(
+							if let Some((_, coords)) = game.targeted_block_coords {
+								game.chunk_grid.set_block_and_update_meshes(
 									coords,
 									BlockTypeId { is_not_air: true },
-									&device,
+									&game.device,
 								);
 							}
 						},
 						(Action::RemoveBlockAtTarget, true) => {
-							if let Some((coords, _)) = targeted_block_coords {
-								chunk_grid.set_block_and_update_meshes(
+							if let Some((coords, _)) = game.targeted_block_coords {
+								game.chunk_grid.set_block_and_update_meshes(
 									coords,
 									BlockTypeId { is_not_air: false },
-									&device,
+									&game.device,
 								);
 							}
 						},
@@ -1586,29 +1701,36 @@ pub fn run() {
 					}
 				}
 			}
-			controls_to_trigger.clear();
+			game.controls_to_trigger.clear();
 
-			if enable_world_generation {
-				let player_block_coords = (player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
+			if game.enable_world_generation {
+				let player_block_coords = (game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z()
+						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
 					.map(|x| x.round() as i32);
-				let player_chunk_coords =
-					cd.world_coords_to_containing_chunk_coords(player_block_coords);
+				let player_chunk_coords = game
+					.cd
+					.world_coords_to_containing_chunk_coords(player_block_coords);
 				for chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 3) {
-					chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
+					game
+						.chunk_grid
+						.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
 				}
-				chunk_grid.remesh_all_chunks_that_require_it(&device);
+				game
+					.chunk_grid
+					.remesh_all_chunks_that_require_it(&game.device);
 			}
 
 			let walking_vector = {
-				let walking_factor = if enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
-				let walking_forward_factor =
-					if walking_forward { 1 } else { 0 } + if walking_backward { -1 } else { 0 };
-				let walking_rightward_factor =
-					if walking_rightward { 1 } else { 0 } + if walking_leftward { -1 } else { 0 };
+				let walking_factor = if game.enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
+				let walking_forward_factor = if game.walking_forward { 1 } else { 0 }
+					+ if game.walking_backward { -1 } else { 0 };
+				let walking_rightward_factor = if game.walking_rightward { 1 } else { 0 }
+					+ if game.walking_leftward { -1 } else { 0 };
 				let walking_forward_direction =
-					camera_direction.to_horizontal().to_vec3() * walking_forward_factor as f32;
-				let walking_rightward_direction = camera_direction
+					game.camera_direction.to_horizontal().to_vec3() * walking_forward_factor as f32;
+				let walking_rightward_direction = game
+					.camera_direction
 					.to_horizontal()
 					.add_to_horizontal_angle(-TAU / 4.0)
 					.to_vec3() * walking_rightward_factor as f32;
@@ -1619,31 +1741,36 @@ pub fn run() {
 					walking_vector_direction.normalize()
 				} * walking_factor)
 			};
-			player_phys.aligned_box.pos += walking_vector;
+			game.player_phys.aligned_box.pos += walking_vector;
 
-			if enable_physics {
+			if game.enable_physics {
 				// TODO: Work out something better here,
 				// although it is not very important at the moment.
-				let player_bottom = player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0));
-				let player_bottom_below = player_phys.aligned_box.pos
+				let player_bottom = game.player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::from((
 						0.0,
 						0.0,
-						player_phys.aligned_box.dims.z / 2.0 + 0.01,
+						game.player_phys.aligned_box.dims.z / 2.0,
+					));
+				let player_bottom_below = game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::from((
+						0.0,
+						0.0,
+						game.player_phys.aligned_box.dims.z / 2.0 + 0.01,
 					));
 				let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 				let player_bottom_block_coords_below = player_bottom_below.map(|x| x.round() as i32);
-				let player_bottom_block_opt = chunk_grid.get_block(player_bottom_block_coords);
+				let player_bottom_block_opt = game.chunk_grid.get_block(player_bottom_block_coords);
 				let player_bottom_block_opt_below =
-					chunk_grid.get_block(player_bottom_block_coords_below);
-				let is_on_ground = if player_phys.motion.z <= 0.0 {
+					game.chunk_grid.get_block(player_bottom_block_coords_below);
+				let is_on_ground = if game.player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt_below {
 						if block.is_not_air {
 							// The player is on the ground, so we make sure we are not overlapping it.
-							player_phys.motion.z = 0.0;
-							player_phys.aligned_box.pos.z = player_bottom_block_coords_below.z as f32
-								+ 0.5 + player_phys.aligned_box.dims.z / 2.0;
+							game.player_phys.motion.z = 0.0;
+							game.player_phys.aligned_box.pos.z =
+								player_bottom_block_coords_below.z as f32
+									+ 0.5 + game.player_phys.aligned_box.dims.z / 2.0;
 							true
 						} else {
 							false
@@ -1654,13 +1781,14 @@ pub fn run() {
 				} else {
 					false
 				};
-				let is_in_ground = if player_phys.motion.z <= 0.0 {
+				let is_in_ground = if game.player_phys.motion.z <= 0.0 {
 					if let Some(block) = player_bottom_block_opt {
 						if block.is_not_air {
 							// The player is inside the ground, so we uuh.. do something?
-							player_phys.motion.z = 0.0;
-							player_phys.aligned_box.pos.z = player_bottom_block_coords.z as f32
-								+ 0.5 + player_phys.aligned_box.dims.z / 2.0;
+							game.player_phys.motion.z = 0.0;
+							game.player_phys.aligned_box.pos.z =
+								player_bottom_block_coords.z as f32
+									+ 0.5 + game.player_phys.aligned_box.dims.z / 2.0;
 							true
 						} else {
 							false
@@ -1671,30 +1799,34 @@ pub fn run() {
 				} else {
 					false
 				};
-				player_phys.aligned_box.pos += player_phys.motion;
+				game.player_phys.aligned_box.pos += game.player_phys.motion;
 				if !is_on_ground {
-					player_phys.motion.z -= player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
+					game.player_phys.motion.z -=
+						game.player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
 				}
 				if is_in_ground {
-					player_phys.aligned_box.pos.z += 0.01;
+					game.player_phys.aligned_box.pos.z += 0.01;
 				}
 			}
 
-			let player_box_mesh = SimpleLineMesh::from_aligned_box(&device, &player_phys.aligned_box);
+			let player_box_mesh =
+				SimpleLineMesh::from_aligned_box(&game.device, &game.player_phys.aligned_box);
 
-			let first_person_camera_position = player_phys.aligned_box.pos
-				+ cgmath::Vector3::<f32>::from((0.0, 0.0, player_phys.aligned_box.dims.z / 2.0)) * 0.7;
+			let first_person_camera_position = game.player_phys.aligned_box.pos
+				+ cgmath::Vector3::<f32>::from((0.0, 0.0, game.player_phys.aligned_box.dims.z / 2.0))
+					* 0.7;
 
 			// Targeted block coords update.
-			let direction = camera_direction.to_vec3();
+			let direction = game.camera_direction.to_vec3();
 			let mut position = first_person_camera_position;
 			let mut last_position_int: Option<BlockCoords> = None;
-			targeted_block_coords = loop {
+			game.targeted_block_coords = loop {
 				if first_person_camera_position.distance(position) > 6.0 {
 					break None;
 				}
 				let position_int = position.map(|x| x.round() as i32);
-				if chunk_grid
+				if game
+					.chunk_grid
 					.get_block(position_int)
 					.is_some_and(|block| block.is_not_air)
 				{
@@ -1712,9 +1844,9 @@ pub fn run() {
 				position += direction * 0.01;
 			};
 
-			let targeted_block_box_mesh_opt = targeted_block_coords.map(|(coords, _)| {
+			let targeted_block_box_mesh_opt = game.targeted_block_coords.map(|(coords, _)| {
 				SimpleLineMesh::from_aligned_box(
-					&device,
+					&game.device,
 					&AlignedBox {
 						pos: coords.map(|x| x as f32),
 						dims: cgmath::vec3(1.01, 1.01, 1.01),
@@ -1722,64 +1854,75 @@ pub fn run() {
 				)
 			});
 
-			sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
+			game.sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
 
 			let sun_camera_view_projection_matrix = {
 				let camera_position = first_person_camera_position;
-				let camera_direction_vector = -sun_position_in_sky.to_vec3();
+				let camera_direction_vector = -game.sun_position_in_sky.to_vec3();
 				let camera_up_vector = (0.0, 0.0, 1.0).into();
-				sun_camera.view_projection_matrix(
+				game.sun_camera.view_projection_matrix(
 					camera_position,
 					camera_direction_vector,
 					camera_up_vector,
 				)
 			};
-			queue.write_buffer(
-				&sun_camera_matrix_thingy.resource,
+			game.queue.write_buffer(
+				&game.sun_camera_matrix_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[sun_camera_view_projection_matrix]),
 			);
 
 			let camera_view_projection_matrix = {
-				if matches!(selected_camera, WhichCameraToUse::Sun) {
+				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
 					sun_camera_view_projection_matrix
 				} else {
 					let mut camera_position = first_person_camera_position;
-					let camera_direction_vector = camera_direction.to_vec3();
-					if matches!(selected_camera, WhichCameraToUse::ThirdPersonNear) {
+					let camera_direction_vector = game.camera_direction.to_vec3();
+					if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonNear) {
 						camera_position -= camera_direction_vector * 5.0;
-					} else if matches!(selected_camera, WhichCameraToUse::ThirdPersonFar) {
+					} else if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonFar) {
 						camera_position -= camera_direction_vector * 40.0;
-					} else if matches!(selected_camera, WhichCameraToUse::ThirdPersonVeryFar) {
+					} else if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonVeryFar) {
 						camera_position -= camera_direction_vector * 200.0;
 					}
-					let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
-					camera.view_projection_matrix(
+					let camera_up_vector = game
+						.camera_direction
+						.add_to_vertical_angle(-TAU / 4.0)
+						.to_vec3();
+					game.camera_settings.view_projection_matrix(
 						camera_position,
 						camera_direction_vector,
 						camera_up_vector,
 					)
 				}
 			};
-			queue.write_buffer(
-				&camera_matrix_thingy.resource,
+			game.queue.write_buffer(
+				&game.camera_matrix_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[camera_view_projection_matrix]),
 			);
 
-			let sun_light_direction = Vector3Pod { values: (-sun_position_in_sky.to_vec3()).into() };
-			queue.write_buffer(
-				&sun_light_direction_thingy.resource,
+			let sun_light_direction =
+				Vector3Pod { values: (-game.sun_position_in_sky.to_vec3()).into() };
+			game.queue.write_buffer(
+				&game.sun_light_direction_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
 
-			let cursor_mesh =
-				SimpleLineMesh::interface_2d_cursor(&device, (config.width, config.height));
+			let cursor_mesh = SimpleLineMesh::interface_2d_cursor(
+				&game.device,
+				(
+					game.window_surface_config.width,
+					game.window_surface_config.height,
+				),
+			);
 
-			let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("Render Encoder"),
-			});
+			let mut encoder = game
+				.device
+				.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+					label: Some("Render Encoder"),
+				});
 
 			// Render pass to generate the shadow map.
 			{
@@ -1787,15 +1930,15 @@ pub fn run() {
 					label: Some("Render Pass for Shadow Map"),
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &shadow_map_view_thingy.resource,
+						view: &game.shadow_map_view_thingy.resource,
 						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
 						stencil_ops: None,
 					}),
 				});
 
-				render_pass.set_pipeline(&block_shadow_render_pipeline);
-				render_pass.set_bind_group(0, &block_shadow_bind_group, &[]);
-				for chunk in chunk_grid.map.values() {
+				render_pass.set_pipeline(&game.block_shadow_render_pipeline);
+				render_pass.set_bind_group(0, &game.block_shadow_bind_group, &[]);
+				for chunk in game.chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass
 							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
@@ -1805,7 +1948,7 @@ pub fn run() {
 			}
 
 			// Render pass to render the world to the screen.
-			let window_texture = window_surface.get_current_texture().unwrap();
+			let window_texture = game.window_surface.get_current_texture().unwrap();
 			{
 				let window_texture_view = window_texture
 					.texture
@@ -1821,24 +1964,24 @@ pub fn run() {
 						},
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &z_buffer_view,
+						view: &game.z_buffer_view,
 						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
 						stencil_ops: None,
 					}),
 				});
 
-				if matches!(selected_camera, WhichCameraToUse::Sun) {
-					let scale = config.height as f32 / sun_camera.height;
-					let w = sun_camera.width * scale;
-					let h = sun_camera.height * scale;
-					let x = config.width as f32 / 2.0 - w / 2.0;
-					let y = config.height as f32 / 2.0 - h / 2.0;
+				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
+					let scale = game.window_surface_config.height as f32 / game.sun_camera.height;
+					let w = game.sun_camera.width * scale;
+					let h = game.sun_camera.height * scale;
+					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
+					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
 					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
 				}
 
-				render_pass.set_pipeline(&block_render_pipeline);
-				render_pass.set_bind_group(0, &block_bind_group, &[]);
-				for chunk in chunk_grid.map.values() {
+				render_pass.set_pipeline(&game.block_render_pipeline);
+				render_pass.set_bind_group(0, &game.block_bind_group, &[]);
+				for chunk in game.chunk_grid.map.values() {
 					if let Some(ref mesh) = chunk.mesh {
 						render_pass
 							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
@@ -1846,16 +1989,16 @@ pub fn run() {
 					}
 				}
 
-				if enable_display_phys_box {
-					render_pass.set_pipeline(&simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &simple_line_render_bind_group, &[]);
+				if game.enable_display_phys_box {
+					render_pass.set_pipeline(&game.simple_line_render_pipeline);
+					render_pass.set_bind_group(0, &game.simple_line_render_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
 				}
 
 				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
-					render_pass.set_pipeline(&simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &simple_line_render_bind_group, &[]);
+					render_pass.set_pipeline(&game.simple_line_render_pipeline);
+					render_pass.set_bind_group(0, &game.simple_line_render_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 				}
@@ -1874,20 +2017,20 @@ pub fn run() {
 						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &z_buffer_view,
+						view: &game.z_buffer_view,
 						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
 						stencil_ops: None,
 					}),
 				});
 
-				render_pass.set_pipeline(&simple_line_2d_render_pipeline);
-				if !matches!(selected_camera, WhichCameraToUse::Sun) {
+				render_pass.set_pipeline(&game.simple_line_2d_render_pipeline);
+				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
 					render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 
-			queue.submit(std::iter::once(encoder.finish()));
+			game.queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();
 		},
 		_ => {},
