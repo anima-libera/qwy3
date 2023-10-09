@@ -1044,7 +1044,15 @@ pub fn run() {
 	};
 
 	let mut camera_direction = AngularDirection::from_angle_horizontal(0.0);
-	let mut enable_camera_third_person = false;
+
+	enum WhichCameraToUse {
+		FirstPerson,
+		ThirdPersonNear,
+		ThirdPersonFar,
+		ThirdPersonVeryFar,
+		Sun,
+	}
+	let mut selected_camera = WhichCameraToUse::FirstPerson;
 
 	let mut cursor_is_captured = true;
 	window
@@ -1111,8 +1119,6 @@ pub fn run() {
 		binding_type: sun_camera_matrix_binding_type,
 		resource: sun_camera_matrix_buffer,
 	};
-
-	let mut use_sun_camera_to_render = false;
 
 	let shadow_map_format = wgpu::TextureFormat::Depth32Float;
 	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -1236,7 +1242,7 @@ pub fn run() {
 		Jump,
 		TogglePhysics,
 		ToggleWorldGeneration,
-		ToggleThirdPersonView,
+		CycleFirstAndThirdPersonViews,
 		ToggleDisplayPlayerBox,
 		ToggleSunView,
 		ToggleCursorCaptured,
@@ -1258,7 +1264,8 @@ pub fn run() {
 	}
 
 	if let Ok(controls_config_string) = std::fs::read_to_string(command_file_path) {
-		for (line_number, line) in controls_config_string.lines().enumerate() {
+		for (line_index, line) in controls_config_string.lines().enumerate() {
+			let line_number = line_index + 1;
 			let mut words = line.split_whitespace();
 			let command_name = words.next();
 			if command_name == Some("bind_control") {
@@ -1304,7 +1311,7 @@ pub fn run() {
 				} else {
 					panic!(
 						"unknown control \"{control_name}\" \
-					(it must start with \"key:\" or \"mouse_button:\")"
+						(it must start with \"key:\" or \"mouse_button:\")"
 					)
 				};
 
@@ -1316,7 +1323,7 @@ pub fn run() {
 					"jump" => Action::Jump,
 					"toggle_physics" => Action::TogglePhysics,
 					"toggle_world_generation" => Action::ToggleWorldGeneration,
-					"toggle_third_person_view" => Action::ToggleThirdPersonView,
+					"cycle_first_and_third_person_views" => Action::CycleFirstAndThirdPersonViews,
 					"toggle_display_player_box" => Action::ToggleDisplayPlayerBox,
 					"toggle_sun_view" => Action::ToggleSunView,
 					"toggle_cursor_captured" => Action::ToggleCursorCaptured,
@@ -1324,6 +1331,15 @@ pub fn run() {
 					"place_or_remove_block_under_player" => Action::PlaceOrRemoveBlockUnderPlayer,
 					"place_block_at_target" => Action::PlaceBlockAtTarget,
 					"remove_block_at_target" => Action::RemoveBlockAtTarget,
+					"toggle_third_person_view" => {
+						println!(
+							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \
+							The \"toggle_third_person_view\" action name is deprecated \
+							and should be replaced by \"cycle_first_and_third_person_views\" to better \
+							express the new behavior of this action\x1b[39m"
+						);
+						Action::CycleFirstAndThirdPersonViews
+					},
 					unknown_action_name => panic!("unknown action name \"{unknown_action_name}\""),
 				};
 				control_bindings.insert(control, action);
@@ -1492,14 +1508,23 @@ pub fn run() {
 						(Action::ToggleWorldGeneration, true) => {
 							enable_world_generation = !enable_world_generation;
 						},
-						(Action::ToggleThirdPersonView, true) => {
-							enable_camera_third_person = !enable_camera_third_person;
+						(Action::CycleFirstAndThirdPersonViews, true) => {
+							selected_camera = match selected_camera {
+								WhichCameraToUse::FirstPerson => WhichCameraToUse::ThirdPersonNear,
+								WhichCameraToUse::ThirdPersonNear => WhichCameraToUse::ThirdPersonFar,
+								WhichCameraToUse::ThirdPersonFar => WhichCameraToUse::ThirdPersonVeryFar,
+								WhichCameraToUse::ThirdPersonVeryFar => WhichCameraToUse::FirstPerson,
+								WhichCameraToUse::Sun => WhichCameraToUse::FirstPerson,
+							};
 						},
 						(Action::ToggleDisplayPlayerBox, true) => {
 							enable_display_phys_box = !enable_display_phys_box;
 						},
 						(Action::ToggleSunView, true) => {
-							use_sun_camera_to_render = !use_sun_camera_to_render;
+							selected_camera = match selected_camera {
+								WhichCameraToUse::Sun => WhichCameraToUse::FirstPerson,
+								_ => WhichCameraToUse::Sun,
+							};
 						},
 						(Action::ToggleCursorCaptured, true) => {
 							cursor_is_captured = !cursor_is_captured;
@@ -1716,13 +1741,17 @@ pub fn run() {
 			);
 
 			let camera_view_projection_matrix = {
-				if use_sun_camera_to_render {
+				if matches!(selected_camera, WhichCameraToUse::Sun) {
 					sun_camera_view_projection_matrix
 				} else {
 					let mut camera_position = first_person_camera_position;
 					let camera_direction_vector = camera_direction.to_vec3();
-					if enable_camera_third_person {
+					if matches!(selected_camera, WhichCameraToUse::ThirdPersonNear) {
 						camera_position -= camera_direction_vector * 5.0;
+					} else if matches!(selected_camera, WhichCameraToUse::ThirdPersonFar) {
+						camera_position -= camera_direction_vector * 40.0;
+					} else if matches!(selected_camera, WhichCameraToUse::ThirdPersonVeryFar) {
+						camera_position -= camera_direction_vector * 200.0;
 					}
 					let camera_up_vector = camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
 					camera.view_projection_matrix(
@@ -1798,7 +1827,7 @@ pub fn run() {
 					}),
 				});
 
-				if use_sun_camera_to_render {
+				if matches!(selected_camera, WhichCameraToUse::Sun) {
 					let scale = config.height as f32 / sun_camera.height;
 					let w = sun_camera.width * scale;
 					let h = sun_camera.height * scale;
@@ -1852,7 +1881,7 @@ pub fn run() {
 				});
 
 				render_pass.set_pipeline(&simple_line_2d_render_pipeline);
-				if !use_sun_camera_to_render {
+				if !matches!(selected_camera, WhichCameraToUse::Sun) {
 					render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
 				}
