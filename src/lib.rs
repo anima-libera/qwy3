@@ -906,6 +906,10 @@ enum Action {
 	RemoveBlockAtTarget,
 }
 
+enum WorkerTask {
+	FullChunkWithoutMesh(ChunkCoords, std::sync::mpsc::Receiver<Chunk>),
+}
+
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -930,6 +934,8 @@ struct Game {
 	chunk_grid: ChunkGrid,
 	controls_to_trigger: Vec<ControlEvent>,
 	control_bindings: HashMap<Control, Action>,
+
+	test_worker_task: Option<WorkerTask>,
 
 	block_shadow_render_pipeline: wgpu::RenderPipeline,
 	block_shadow_bind_group: wgpu::BindGroup,
@@ -1420,6 +1426,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_world_generation = true;
 
+	let test_worker_task = None;
+
 	let game = Game {
 		window,
 		window_surface,
@@ -1442,6 +1450,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_grid,
 		controls_to_trigger,
 		control_bindings,
+
+		test_worker_task,
 
 		block_shadow_render_pipeline,
 		block_shadow_bind_group,
@@ -1704,6 +1714,7 @@ pub fn run() {
 			game.controls_to_trigger.clear();
 
 			if game.enable_world_generation {
+				/*
 				let player_block_coords = (game.player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
@@ -1719,6 +1730,58 @@ pub fn run() {
 				game
 					.chunk_grid
 					.remesh_all_chunks_that_require_it(&game.device);
+				*/
+
+				let chunk_coords_and_chunk_from_worker =
+					game
+						.test_worker_task
+						.as_ref()
+						.and_then(|worker_task| match worker_task {
+							WorkerTask::FullChunkWithoutMesh(chunk_coords, receiver) => {
+								receiver.try_recv().ok().map(|chunk| (*chunk_coords, chunk))
+							},
+						});
+				if chunk_coords_and_chunk_from_worker.is_some() {
+					game.test_worker_task = None;
+				}
+				if let Some((chunk_coords, chunk)) = chunk_coords_and_chunk_from_worker {
+					game.chunk_grid.map.insert(chunk_coords, chunk);
+
+					for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
+						if let Some(neighbor_chunk) = game.chunk_grid.map.get_mut(&neighbor_chunk_coords)
+						{
+							neighbor_chunk.remeshing_required = true;
+						}
+					}
+				}
+				game
+					.chunk_grid
+					.remesh_all_chunks_that_require_it(&game.device);
+
+				let player_block_coords = (game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z()
+						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+					.map(|x| x.round() as i32);
+				let player_chunk_coords = game
+					.cd
+					.world_coords_to_containing_chunk_coords(player_block_coords);
+
+				if game.test_worker_task.is_none()
+					&& !game.chunk_grid.map.contains_key(&player_chunk_coords)
+				{
+					let chunk_coords = player_chunk_coords;
+					let (sender, receiver) = std::sync::mpsc::channel();
+					game.test_worker_task =
+						Some(WorkerTask::FullChunkWithoutMesh(chunk_coords, receiver));
+					let chunk_generator = ChunkGenerator {};
+					let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+					std::thread::spawn(move || {
+						let blocks = chunk_generator.generate_chunk_blocks(coords_span);
+						let mut chunk = Chunk::new_empty(coords_span);
+						chunk.blocks = Some(blocks);
+						sender.send(chunk).unwrap();
+					});
+				}
 			}
 
 			let walking_vector = {

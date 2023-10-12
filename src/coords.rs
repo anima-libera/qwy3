@@ -124,6 +124,8 @@ pub fn iter_3d_cube_inf_edge(
 }
 
 /// Iterates over a 3D cubic area of the given center and given radius.
+///
+/// A radius of 0 gives an empty iterator and a radius of 1 gives just the center.
 pub fn iter_3d_cube_center_radius(
 	center: cgmath::Point3<i32>,
 	radius: i32,
