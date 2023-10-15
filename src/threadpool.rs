@@ -17,6 +17,7 @@ enum OrderToManager {
 
 pub struct ThreadPool {
 	order_sender_to_manager: mpsc::Sender<OrderToManager>,
+	number_of_workers: usize,
 }
 
 impl ThreadPool {
@@ -113,7 +114,7 @@ impl ThreadPool {
 			}
 		});
 
-		ThreadPool { order_sender_to_manager }
+		ThreadPool { order_sender_to_manager, number_of_workers }
 	}
 
 	/// Ends the manager and worker threads.
@@ -131,5 +132,9 @@ impl ThreadPool {
 			.order_sender_to_manager
 			.send(OrderToManager::Task(task))
 			.unwrap();
+	}
+
+	pub fn number_of_workers(&self) -> usize {
+		self.number_of_workers
 	}
 }

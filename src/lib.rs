@@ -2,6 +2,7 @@
 
 mod camera;
 mod coords;
+mod noise;
 mod shaders;
 mod threadpool;
 
@@ -669,14 +670,14 @@ impl ChunkGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
+		let noise = noise::OctavedNoise::new(3, vec![1]);
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		let coords_to_ground = |coords: BlockCoords| {
 			let d = coords
 				.map(|x| x as f32)
 				.distance(cgmath::point3(0.0, 0.0, 20.0));
 			coords.z as f32 * (10.0 / (d + 1.0))
-				- f32::cos(coords.x as f32 * 0.3)
-				- f32::cos(coords.y as f32 * 0.3)
+				- noise.sample_3d(coords.map(|x| x as f32 * 0.03), &[]) * 6.0
 				- 3.0 < 0.0
 		};
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -1869,7 +1870,9 @@ pub fn run() {
 								},
 								_ => false,
 							});
-					if (!blocks_was_generated) && (!blocks_is_being_generated) {
+					if (!blocks_was_generated) && (!blocks_is_being_generated)
+					//&& game.worker_tasks.len() < game.pool.number_of_workers() - 2
+					{
 						// Asking a worker for the generation of chunk blocks
 						let chunk_coords = neighbor_chunk_coords;
 						let (sender, receiver) = std::sync::mpsc::channel();
