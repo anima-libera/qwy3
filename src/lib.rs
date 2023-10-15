@@ -1798,7 +1798,9 @@ pub fn run() {
 					.map
 					.get(&chunk_coords)
 					.is_some_and(|chunk| chunk.remeshing_required);
-				if (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed) && can_be_meshed
+				if (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
+					&& can_be_meshed
+					&& game.worker_tasks.len() < game.pool.number_of_workers()
 				{
 					// Asking a worker for the meshing or remeshing of the chunk
 					game
@@ -1854,7 +1856,17 @@ pub fn run() {
 					.cd
 					.world_coords_to_containing_chunk_coords(player_block_coords);
 
-				for neighbor_chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 8) {
+				let mut neighbor_chunk_coords_array: Vec<_> =
+					iter_3d_cube_center_radius(player_chunk_coords, 8).collect();
+				// No early optimizations! This is an (in)valid excuse to not optimize this!
+				neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
+					(chunk_coords
+						.map(|x| x as f32)
+						.distance2(player_chunk_coords.map(|x| x as f32))
+						* 10.0) as u64
+				});
+
+				for neighbor_chunk_coords in neighbor_chunk_coords_array.into_iter() {
 					let blocks_was_generated = game
 						.chunk_grid
 						.map
@@ -1870,8 +1882,9 @@ pub fn run() {
 								},
 								_ => false,
 							});
-					if (!blocks_was_generated) && (!blocks_is_being_generated)
-					//&& game.worker_tasks.len() < game.pool.number_of_workers() - 2
+					if (!blocks_was_generated)
+						&& (!blocks_is_being_generated)
+						&& game.worker_tasks.len() < (game.pool.number_of_workers() - 2)
 					{
 						// Asking a worker for the generation of chunk blocks
 						let chunk_coords = neighbor_chunk_coords;
