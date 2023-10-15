@@ -3,6 +3,7 @@
 mod camera;
 mod coords;
 mod shaders;
+mod threadpool;
 
 use std::{
 	collections::{hash_map::Entry, HashMap},
@@ -931,6 +932,7 @@ struct Game {
 	control_bindings: HashMap<Control, Action>,
 
 	worker_tasks: Vec<WorkerTask>,
+	pool: threadpool::ThreadPool,
 
 	block_shadow_render_pipeline: wgpu::RenderPipeline,
 	block_shadow_bind_group: wgpu::BindGroup,
@@ -1423,6 +1425,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let worker_tasks = vec![];
 
+	let number_of_workers = 12;
+	let pool = threadpool::ThreadPool::new(number_of_workers);
+
 	let game = Game {
 		window,
 		window_surface,
@@ -1447,6 +1452,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		control_bindings,
 
 		worker_tasks,
+		pool,
 
 		block_shadow_render_pipeline,
 		block_shadow_bind_group,
@@ -1781,9 +1787,7 @@ pub fn run() {
 					.map
 					.get(&chunk_coords)
 					.is_some_and(|chunk| chunk.remeshing_required);
-				if (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
-					&& can_be_meshed
-					&& game.worker_tasks.len() < 12
+				if (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed) && can_be_meshed
 				{
 					// Asking a worker for the meshing or remeshing of the chunk
 					game
@@ -1805,22 +1809,22 @@ pub fn run() {
 						.get(&chunk_coords)
 						.unwrap()
 						.blocks
-						.clone()
+						.clone() // TODO: Find a way to avoid cloning all these blocks ><.
 						.unwrap();
 					let device = Arc::clone(&game.device);
-					std::thread::spawn(move || {
+					game.pool.enqueue_task(Box::new(move || {
 						// TODO: Remove the sleeping!
 						// Test delay to make sure that the main thread keeps working even
 						// when the workers tasks take very long.
-						//std::thread::sleep(std::time::Duration::from_secs_f32(
-						//	rand::thread_rng().gen_range(0.3..0.8),
-						//));
+						std::thread::sleep(std::time::Duration::from_secs_f32(
+							rand::thread_rng().gen_range(0.1..0.3),
+						));
 
 						let mut mesh =
 							chunk_blocks.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
 						mesh.update_gpu_data(&device);
-						sender.send(mesh).unwrap();
-					});
+						let _ = sender.send(mesh);
+					}));
 				}
 			}
 
@@ -1850,10 +1854,7 @@ pub fn run() {
 								},
 								_ => false,
 							});
-					if (!blocks_was_generated)
-						&& (!blocks_is_being_generated)
-						&& game.worker_tasks.len() < 12
-					{
+					if (!blocks_was_generated) && (!blocks_is_being_generated) {
 						// Asking a worker for the generation of chunk blocks
 						let chunk_coords = neighbor_chunk_coords;
 						let (sender, receiver) = std::sync::mpsc::channel();
@@ -1862,17 +1863,17 @@ pub fn run() {
 							.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
 						let chunk_generator = ChunkGenerator {};
 						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-						std::thread::spawn(move || {
+						game.pool.enqueue_task(Box::new(move || {
 							// TODO: Remove the sleeping!
 							// Test delay to make sure that the main thread keeps working even
 							// when the workers tasks take very long.
-							//std::thread::sleep(std::time::Duration::from_secs_f32(
-							//	rand::thread_rng().gen_range(0.3..0.8),
-							//));
+							std::thread::sleep(std::time::Duration::from_secs_f32(
+								rand::thread_rng().gen_range(0.1..0.3),
+							));
 
 							let chunk_blocks = chunk_generator.generate_chunk_blocks(coords_span);
-							sender.send(chunk_blocks).unwrap();
-						});
+							let _ = sender.send(chunk_blocks);
+						}));
 					}
 				}
 			}
