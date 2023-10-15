@@ -103,9 +103,64 @@ impl BitCube3 {
 	}
 }
 
+enum BlockType {
+	Air,
+	Solid { texture_coords_on_atlas: cgmath::Point2<i32> },
+}
+
+impl BlockType {
+	fn is_opaque(&self) -> bool {
+		matches!(self, BlockType::Solid { .. })
+	}
+}
+
+struct BlockTypeTable {
+	block_types: Vec<BlockType>,
+}
+
+impl BlockTypeTable {
+	fn new() -> BlockTypeTable {
+		BlockTypeTable {
+			block_types: vec![
+				BlockType::Air,
+				BlockType::Solid { texture_coords_on_atlas: (0, 0).into() },
+				BlockType::Solid { texture_coords_on_atlas: (16, 0).into() },
+			],
+		}
+	}
+
+	fn get(&self, id: BlockTypeId) -> Option<&BlockType> {
+		if id.value < 0 {
+			None
+		} else {
+			self.block_types.get(id.value as usize)
+		}
+	}
+
+	fn air_id(&self) -> BlockTypeId {
+		BlockTypeId::new(0)
+	}
+
+	fn ground_id(&self) -> BlockTypeId {
+		BlockTypeId::new(1)
+	}
+
+	fn kinda_grass_id(&self) -> BlockTypeId {
+		BlockTypeId::new(2)
+	}
+}
+
 #[derive(Clone, Copy)]
 struct BlockTypeId {
-	is_not_air: bool,
+	/// Positive values are indices in the table of block types.
+	/// Negative values will be used as ids in a table of blocks that have data, maybe?
+	value: i16,
+}
+
+impl BlockTypeId {
+	fn new(value: i16) -> BlockTypeId {
+		BlockTypeId { value }
+	}
 }
 
 /// The blocks of a chunk.
@@ -120,8 +175,7 @@ impl ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
 			blocks: Vec::from_iter(
-				std::iter::repeat(BlockTypeId { is_not_air: false })
-					.take(coords_span.cd.number_of_blocks()),
+				std::iter::repeat(BlockTypeId { value: 0 }).take(coords_span.cd.number_of_blocks()),
 			),
 		}
 	}
@@ -286,10 +340,11 @@ impl ChunkBlocks {
 	fn generate_mesh_given_surrounding_opaqueness(
 		&self,
 		mut opaqueness_layer: OpaquenessLayerAroundChunk,
+		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkMesh {
 		let mut is_opaque = |coords: BlockCoords| {
-			if let Some(block) = self.get(coords) {
-				block.is_not_air
+			if let Some(block_id) = self.get(coords) {
+				block_type_table.get(block_id).unwrap().is_opaque()
 			} else if let Some(opaque) = opaqueness_layer.get(coords) {
 				opaque
 			} else {
@@ -299,7 +354,12 @@ impl ChunkBlocks {
 
 		let mut block_vertices = Vec::new();
 		for coords in self.coords_span.iter_coords() {
-			if self.get(coords).unwrap().is_not_air {
+			let block_id = self.get(coords).unwrap();
+			if block_type_table.get(block_id).unwrap().is_opaque() {
+				let texture_coords_on_atlas = match block_type_table.get(block_id).unwrap() {
+					BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
+					_ => unimplemented!(),
+				};
 				let opacity_bit_cube_3 = {
 					let mut cube = BitCube3::new_zero();
 					for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
@@ -319,6 +379,7 @@ impl ChunkBlocks {
 							direction,
 							coords.map(|x| x as f32),
 							opacity_bit_cube_3,
+							texture_coords_on_atlas,
 						);
 					}
 				}
@@ -363,6 +424,7 @@ fn generate_block_face_mesh(
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
 	neighborhood_opaqueness: BitCube3,
+	texture_coords_on_atlas: cgmath::Point2<i32>,
 ) {
 	// NO EARLY OPTIMIZATION
 	// This shall remain in an unoptimized, unfactorized and flexible state for now!
@@ -403,9 +465,9 @@ fn generate_block_face_mesh(
 	};
 
 	// Texture moment ^^.
-	let texture_rect_in_atlas_xy: cgmath::Point2<f32> = (0.0, 0.0).into();
-	let texture_rect_in_atlas_wh: cgmath::Vector2<f32> = (16.0, 16.0).into();
-	let texture_rect_in_atlas_wh = texture_rect_in_atlas_wh * (1.0 / 512.0);
+	let texture_rect_in_atlas_xy: cgmath::Point2<f32> =
+		texture_coords_on_atlas.map(|x| x as f32) * (1.0 / 512.0);
+	let texture_rect_in_atlas_wh: cgmath::Vector2<f32> = cgmath::vec2(16.0, 16.0) * (1.0 / 512.0);
 	let mut coords_in_atlas_array: [cgmath::Point2<f32>; 4] = [
 		texture_rect_in_atlas_xy,
 		texture_rect_in_atlas_xy,
@@ -515,12 +577,13 @@ impl Chunk {
 	fn generate_mesh_given_surrounding_opaqueness(
 		&mut self,
 		opaqueness_layer: OpaquenessLayerAroundChunk,
+		block_type_table: Arc<BlockTypeTable>,
 	) {
 		let mesh = self
 			.blocks
 			.as_ref()
 			.unwrap()
-			.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+			.generate_mesh_given_surrounding_opaqueness(opaqueness_layer, block_type_table);
 		self.mesh = Some(mesh);
 	}
 }
@@ -575,6 +638,7 @@ impl ChunkGrid {
 		&self,
 		chunk_coords: ChunkCoords,
 		default_to_opaque: bool,
+		block_type_table: Arc<BlockTypeTable>,
 	) -> OpaquenessLayerAroundChunk {
 		let surrounded_chunk_coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
 		let mut layer = OpaquenessLayerAroundChunk::new(surrounded_chunk_coords_span);
@@ -594,7 +658,9 @@ impl ChunkGrid {
 						{
 							let opaque = self
 								.get_block(coords)
-								.map(|block_type_id| block_type_id.is_not_air)
+								.map(|block_type_id| {
+									block_type_table.get(block_type_id).unwrap().is_opaque()
+								})
 								.unwrap_or(default_to_opaque);
 							layer.set(coords, opaque);
 						}
@@ -614,10 +680,16 @@ impl ChunkGrid {
 		}
 	}
 
-	fn generate_blocks(&mut self, chunk_coords: ChunkCoords, chunk_generator: ChunkGenerator) {
+	fn generate_blocks(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		chunk_generator: ChunkGenerator,
+		block_type_table: Arc<BlockTypeTable>,
+	) {
 		self.make_sure_that_a_chunk_exists(chunk_coords);
 		let chunk = self.map.get_mut(&chunk_coords).unwrap();
-		chunk.blocks = Some(chunk_generator.generate_chunk_blocks(chunk.coords_span));
+		chunk.blocks =
+			Some(chunk_generator.generate_chunk_blocks(chunk.coords_span, block_type_table));
 
 		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 3) {
 			if let Some(neighbor_chunk) = self.map.get_mut(&neighbor_chunk_coords) {
@@ -630,15 +702,20 @@ impl ChunkGrid {
 		&mut self,
 		chunk_coords: ChunkCoords,
 		chunk_generator: ChunkGenerator,
+		block_type_table: Arc<BlockTypeTable>,
 	) {
 		self.make_sure_that_a_chunk_exists(chunk_coords);
 		let chunk = self.map.get(&chunk_coords).unwrap();
 		if chunk.blocks.is_none() {
-			self.generate_blocks(chunk_coords, chunk_generator);
+			self.generate_blocks(chunk_coords, chunk_generator, block_type_table);
 		}
 	}
 
-	fn remesh_all_chunks_that_require_it(&mut self, device: &wgpu::Device) {
+	fn remesh_all_chunks_that_require_it(
+		&mut self,
+		device: &wgpu::Device,
+		block_type_table: Arc<BlockTypeTable>,
+	) {
 		let chunk_coords_list: Vec<_> = self.map.keys().copied().collect();
 		for chunk_coords in chunk_coords_list {
 			if self
@@ -647,9 +724,16 @@ impl ChunkGrid {
 				.as_ref()
 				.is_some_and(|chunk| chunk.remeshing_required)
 			{
-				let opaqueness_layer = self.get_opaqueness_layer_around_chunk(chunk_coords, false);
+				let opaqueness_layer = self.get_opaqueness_layer_around_chunk(
+					chunk_coords,
+					false,
+					Arc::clone(&block_type_table),
+				);
 				let chunk = self.map.get_mut(&chunk_coords).unwrap();
-				chunk.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+				chunk.generate_mesh_given_surrounding_opaqueness(
+					opaqueness_layer,
+					Arc::clone(&block_type_table),
+				);
 				chunk.mesh.as_mut().unwrap().update_gpu_data(device);
 				chunk.remeshing_required = false;
 			}
@@ -660,15 +744,34 @@ impl ChunkGrid {
 struct ChunkGenerator {}
 
 impl ChunkGenerator {
-	fn generate_chunk_blocks(self, coords_span: ChunkCoordsSpan) -> ChunkBlocks {
+	fn generate_chunk_blocks(
+		self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
-			// Test chunk generation.
-			let ground = coords.z as f32
+		let coords_to_ground = |coords: BlockCoords| {
+			let d = coords
+				.map(|x| x as f32)
+				.distance(cgmath::point3(0.0, 0.0, 20.0));
+			coords.z as f32 * (10.0 / (d + 1.0))
 				- f32::cos(coords.x as f32 * 0.3)
 				- f32::cos(coords.y as f32 * 0.3)
-				- 3.0 < 0.0;
-			*chunk_blocks.get_mut(coords).unwrap() = BlockTypeId { is_not_air: ground };
+				- 3.0 < 0.0
+		};
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
 		}
 		chunk_blocks
 	}
@@ -930,6 +1033,7 @@ struct Game {
 	chunk_grid: ChunkGrid,
 	controls_to_trigger: Vec<ControlEvent>,
 	control_bindings: HashMap<Control, Action>,
+	block_type_table: Arc<BlockTypeTable>,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -1042,6 +1146,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	};
 	window_surface.configure(&device, &window_surface_config);
 
+	let block_type_table = Arc::new(BlockTypeTable::new());
+
 	const ATLAS_DIMS: (usize, usize) = (512, 512);
 	let mut atlas_data: [u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1] = [0; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1];
 	for y in 0..16 {
@@ -1049,13 +1155,17 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			let index = 4 * (y * ATLAS_DIMS.0 + x);
 			let grey = rand::thread_rng().gen_range(240..=255);
 			atlas_data[index..(index + 4)].clone_from_slice(&[grey, grey, grey, 255]);
-			// Kinda grass:
-			// atlas_data[index..(index + 4)].clone_from_slice(&[
-			// 	rand::thread_rng().gen_range(80..100),
-			// 	rand::thread_rng().gen_range(230..=255),
-			// 	rand::thread_rng().gen_range(10..30),
-			// 	255,
-			// ]);
+		}
+	}
+	for y in 0..16 {
+		for x in (0..16).map(|x| x + 16) {
+			let index = 4 * (y * ATLAS_DIMS.0 + x);
+			atlas_data[index..(index + 4)].clone_from_slice(&[
+				rand::thread_rng().gen_range(80..100),
+				rand::thread_rng().gen_range(230..=255),
+				rand::thread_rng().gen_range(10..30),
+				255,
+			]);
 		}
 	}
 
@@ -1415,11 +1525,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
 	let cd = ChunkDimensions::from(16);
-	let mut chunk_grid = ChunkGrid { cd, map: HashMap::new() };
+	let chunk_grid = ChunkGrid { cd, map: HashMap::new() };
+	/*
 	for chunk_coords in iter_3d_cube_center_radius((0, 0, 0).into(), 3) {
 		chunk_grid.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
 	}
 	chunk_grid.remesh_all_chunks_that_require_it(&device);
+	*/
 
 	let enable_world_generation = true;
 
@@ -1450,6 +1562,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_grid,
 		controls_to_trigger,
 		control_bindings,
+		block_type_table,
 
 		worker_tasks,
 		pool,
@@ -1518,33 +1631,6 @@ pub fn run() {
 					.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 					.unwrap();
 				game.window.set_cursor_visible(false);
-			},
-
-			WindowEvent::KeyboardInput {
-				input:
-					KeyboardInput {
-						state: ElementState::Pressed,
-						virtual_keycode: Some(VirtualKeyCode::Return),
-						..
-					},
-				..
-			} => {
-				let player_block_coords = (game.player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::unit_z()
-						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
-					.map(|x| x.round() as i32);
-				let player_chunk_coords = game
-					.cd
-					.world_coords_to_containing_chunk_coords(player_block_coords);
-
-				for chunk_coords in iter_3d_cube_center_radius(player_chunk_coords, 6) {
-					game
-						.chunk_grid
-						.make_sure_that_a_chunk_has_blocks(chunk_coords, ChunkGenerator {});
-				}
-				game
-					.chunk_grid
-					.remesh_all_chunks_that_require_it(&game.device);
 			},
 
 			WindowEvent::KeyboardInput {
@@ -1682,10 +1768,14 @@ pub fn run() {
 							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 							let player_bottom_block_opt =
 								game.chunk_grid.get_block(player_bottom_block_coords);
-							if let Some(block) = player_bottom_block_opt {
+							if let Some(block_id) = player_bottom_block_opt {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									player_bottom_block_coords,
-									BlockTypeId { is_not_air: !block.is_not_air },
+									if game.block_type_table.get(block_id).unwrap().is_opaque() {
+										game.block_type_table.air_id()
+									} else {
+										game.block_type_table.ground_id()
+									},
 								);
 							}
 						},
@@ -1693,7 +1783,7 @@ pub fn run() {
 							if let Some((_, coords)) = game.targeted_block_coords {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									coords,
-									BlockTypeId { is_not_air: true },
+									game.block_type_table.ground_id(),
 								);
 							}
 						},
@@ -1701,7 +1791,7 @@ pub fn run() {
 							if let Some((coords, _)) = game.targeted_block_coords {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									coords,
-									BlockTypeId { is_not_air: false },
+									game.block_type_table.air_id(),
 								);
 							}
 						},
@@ -1800,9 +1890,11 @@ pub fn run() {
 					game
 						.worker_tasks
 						.push(WorkerTask::MeshChunk(chunk_coords, receiver));
-					let opaqueness_layer = game
-						.chunk_grid
-						.get_opaqueness_layer_around_chunk(chunk_coords, false);
+					let opaqueness_layer = game.chunk_grid.get_opaqueness_layer_around_chunk(
+						chunk_coords,
+						false,
+						Arc::clone(&game.block_type_table),
+					);
 					let chunk_blocks = game
 						.chunk_grid
 						.map
@@ -1812,6 +1904,7 @@ pub fn run() {
 						.clone() // TODO: Find a way to avoid cloning all these blocks ><.
 						.unwrap();
 					let device = Arc::clone(&game.device);
+					let block_type_table = Arc::clone(&game.block_type_table);
 					game.pool.enqueue_task(Box::new(move || {
 						// TODO: Remove the sleeping!
 						// Test delay to make sure that the main thread keeps working even
@@ -1820,8 +1913,10 @@ pub fn run() {
 						//	rand::thread_rng().gen_range(0.1..0.3),
 						//));
 
-						let mut mesh =
-							chunk_blocks.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
+						let mut mesh = chunk_blocks.generate_mesh_given_surrounding_opaqueness(
+							opaqueness_layer,
+							block_type_table,
+						);
 						mesh.update_gpu_data(&device);
 						let _ = sender.send(mesh);
 					}));
@@ -1863,6 +1958,7 @@ pub fn run() {
 							.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
 						let chunk_generator = ChunkGenerator {};
 						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+						let block_type_table = Arc::clone(&game.block_type_table);
 						game.pool.enqueue_task(Box::new(move || {
 							// TODO: Remove the sleeping!
 							// Test delay to make sure that the main thread keeps working even
@@ -1871,7 +1967,8 @@ pub fn run() {
 							//	rand::thread_rng().gen_range(0.1..0.3),
 							//));
 
-							let chunk_blocks = chunk_generator.generate_chunk_blocks(coords_span);
+							let chunk_blocks =
+								chunk_generator.generate_chunk_blocks(coords_span, block_type_table);
 							let _ = sender.send(chunk_blocks);
 						}));
 					}
@@ -1921,8 +2018,8 @@ pub fn run() {
 				let player_bottom_block_opt_below =
 					game.chunk_grid.get_block(player_bottom_block_coords_below);
 				let is_on_ground = if game.player_phys.motion.z <= 0.0 {
-					if let Some(block) = player_bottom_block_opt_below {
-						if block.is_not_air {
+					if let Some(block_id) = player_bottom_block_opt_below {
+						if game.block_type_table.get(block_id).unwrap().is_opaque() {
 							// The player is on the ground, so we make sure we are not overlapping it.
 							game.player_phys.motion.z = 0.0;
 							game.player_phys.aligned_box.pos.z =
@@ -1939,8 +2036,8 @@ pub fn run() {
 					false
 				};
 				let is_in_ground = if game.player_phys.motion.z <= 0.0 {
-					if let Some(block) = player_bottom_block_opt {
-						if block.is_not_air {
+					if let Some(block_id) = player_bottom_block_opt {
+						if game.block_type_table.get(block_id).unwrap().is_opaque() {
 							// The player is inside the ground, so we uuh.. do something?
 							game.player_phys.motion.z = 0.0;
 							game.player_phys.aligned_box.pos.z =
@@ -1985,7 +2082,7 @@ pub fn run() {
 				if game
 					.chunk_grid
 					.get_block(position_int)
-					.is_some_and(|block| block.is_not_air)
+					.is_some_and(|block_id| game.block_type_table.get(block_id).unwrap().is_opaque())
 				{
 					if let Some(last_position_int) = last_position_int {
 						break Some((position_int, last_position_int));
