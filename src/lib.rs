@@ -1816,9 +1816,9 @@ pub fn run() {
 						// TODO: Remove the sleeping!
 						// Test delay to make sure that the main thread keeps working even
 						// when the workers tasks take very long.
-						std::thread::sleep(std::time::Duration::from_secs_f32(
-							rand::thread_rng().gen_range(0.1..0.3),
-						));
+						//std::thread::sleep(std::time::Duration::from_secs_f32(
+						//	rand::thread_rng().gen_range(0.1..0.3),
+						//));
 
 						let mut mesh =
 							chunk_blocks.generate_mesh_given_surrounding_opaqueness(opaqueness_layer);
@@ -1867,9 +1867,9 @@ pub fn run() {
 							// TODO: Remove the sleeping!
 							// Test delay to make sure that the main thread keeps working even
 							// when the workers tasks take very long.
-							std::thread::sleep(std::time::Duration::from_secs_f32(
-								rand::thread_rng().gen_range(0.1..0.3),
-							));
+							//std::thread::sleep(std::time::Duration::from_secs_f32(
+							//	rand::thread_rng().gen_range(0.1..0.3),
+							//));
 
 							let chunk_blocks = chunk_generator.generate_chunk_blocks(coords_span);
 							let _ = sender.send(chunk_blocks);
