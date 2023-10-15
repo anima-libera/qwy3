@@ -5,12 +5,7 @@ mod coords;
 mod shaders;
 mod threadpool;
 
-use std::{
-	collections::{hash_map::Entry, HashMap},
-	f32::consts::TAU,
-	io::Write,
-	sync::Arc,
-};
+use std::{collections::HashMap, f32::consts::TAU, io::Write, sync::Arc};
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
@@ -563,7 +558,7 @@ fn generate_block_face_mesh(
 }
 
 struct Chunk {
-	coords_span: ChunkCoordsSpan,
+	_coords_span: ChunkCoordsSpan,
 	blocks: Option<ChunkBlocks>,
 	remeshing_required: bool,
 	mesh: Option<ChunkMesh>,
@@ -571,20 +566,12 @@ struct Chunk {
 
 impl Chunk {
 	fn new_empty(coords_span: ChunkCoordsSpan) -> Chunk {
-		Chunk { coords_span, blocks: None, remeshing_required: false, mesh: None }
-	}
-
-	fn generate_mesh_given_surrounding_opaqueness(
-		&mut self,
-		opaqueness_layer: OpaquenessLayerAroundChunk,
-		block_type_table: Arc<BlockTypeTable>,
-	) {
-		let mesh = self
-			.blocks
-			.as_ref()
-			.unwrap()
-			.generate_mesh_given_surrounding_opaqueness(opaqueness_layer, block_type_table);
-		self.mesh = Some(mesh);
+		Chunk {
+			_coords_span: coords_span,
+			blocks: None,
+			remeshing_required: false,
+			mesh: None,
+		}
 	}
 }
 
@@ -671,73 +658,6 @@ impl ChunkGrid {
 		}
 
 		layer
-	}
-
-	fn make_sure_that_a_chunk_exists(&mut self, chunk_coords: ChunkCoords) {
-		if let Entry::Vacant(entry) = self.map.entry(chunk_coords) {
-			let chunk = Chunk::new_empty(ChunkCoordsSpan { cd: self.cd, chunk_coords });
-			entry.insert(chunk);
-		}
-	}
-
-	fn generate_blocks(
-		&mut self,
-		chunk_coords: ChunkCoords,
-		chunk_generator: ChunkGenerator,
-		block_type_table: Arc<BlockTypeTable>,
-	) {
-		self.make_sure_that_a_chunk_exists(chunk_coords);
-		let chunk = self.map.get_mut(&chunk_coords).unwrap();
-		chunk.blocks =
-			Some(chunk_generator.generate_chunk_blocks(chunk.coords_span, block_type_table));
-
-		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 3) {
-			if let Some(neighbor_chunk) = self.map.get_mut(&neighbor_chunk_coords) {
-				neighbor_chunk.remeshing_required = true;
-			}
-		}
-	}
-
-	fn make_sure_that_a_chunk_has_blocks(
-		&mut self,
-		chunk_coords: ChunkCoords,
-		chunk_generator: ChunkGenerator,
-		block_type_table: Arc<BlockTypeTable>,
-	) {
-		self.make_sure_that_a_chunk_exists(chunk_coords);
-		let chunk = self.map.get(&chunk_coords).unwrap();
-		if chunk.blocks.is_none() {
-			self.generate_blocks(chunk_coords, chunk_generator, block_type_table);
-		}
-	}
-
-	fn remesh_all_chunks_that_require_it(
-		&mut self,
-		device: &wgpu::Device,
-		block_type_table: Arc<BlockTypeTable>,
-	) {
-		let chunk_coords_list: Vec<_> = self.map.keys().copied().collect();
-		for chunk_coords in chunk_coords_list {
-			if self
-				.map
-				.get(&chunk_coords)
-				.as_ref()
-				.is_some_and(|chunk| chunk.remeshing_required)
-			{
-				let opaqueness_layer = self.get_opaqueness_layer_around_chunk(
-					chunk_coords,
-					false,
-					Arc::clone(&block_type_table),
-				);
-				let chunk = self.map.get_mut(&chunk_coords).unwrap();
-				chunk.generate_mesh_given_surrounding_opaqueness(
-					opaqueness_layer,
-					Arc::clone(&block_type_table),
-				);
-				chunk.mesh.as_mut().unwrap().update_gpu_data(device);
-				chunk.remeshing_required = false;
-			}
-		}
 	}
 }
 
