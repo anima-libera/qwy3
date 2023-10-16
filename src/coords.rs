@@ -305,3 +305,81 @@ impl AngularDirection {
 		))
 	}
 }
+
+/// An array of 27 boolean values stored in a `u32`.
+#[derive(Debug, Clone, Copy)]
+struct BitArray27 {
+	data: u32,
+}
+impl BitArray27 {
+	fn new_zero() -> BitArray27 {
+		BitArray27 { data: 0 }
+	}
+	fn get(self, index: usize) -> bool {
+		(self.data >> index) & 1 != 0
+	}
+	fn set(&mut self, index: usize, value: bool) {
+		self.data = (self.data & !(1 << index)) | ((value as u32) << index);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn bit_array() {
+		let mut bit_array = BitArray27::new_zero();
+		bit_array.set(3, true);
+		assert!(!bit_array.get(2));
+		assert!(bit_array.get(3));
+	}
+}
+
+/// Coords of a cell in a `BitCube3` ^^.
+#[derive(Debug, Clone, Copy)]
+pub struct BitCube3Coords {
+	x: i32,
+	y: i32,
+	z: i32,
+}
+
+impl From<cgmath::Point3<i32>> for BitCube3Coords {
+	fn from(coords: cgmath::Point3<i32>) -> BitCube3Coords {
+		assert!((-1..=1).contains(&coords.x));
+		assert!((-1..=1).contains(&coords.y));
+		assert!((-1..=1).contains(&coords.z));
+		BitCube3Coords { x: coords.x, y: coords.y, z: coords.z }
+	}
+}
+
+impl BitCube3Coords {
+	fn index(self) -> usize {
+		((self.x + 1) + (self.y + 1) * 3 + (self.z + 1) * 3 * 3) as usize
+	}
+	pub fn set(&mut self, axis: NonOrientedAxis, value: i32) {
+		assert!((-1..=1).contains(&value));
+		match axis {
+			NonOrientedAxis::X => self.x = value,
+			NonOrientedAxis::Y => self.y = value,
+			NonOrientedAxis::Z => self.z = value,
+		}
+	}
+}
+
+/// A 3x3x3 cube of boolean values.
+/// The (0, 0, 0) coords is the center of the cube (that spans from (-1, -1, -1) to (1, 1, 1)).
+#[derive(Debug, Clone, Copy)]
+pub struct BitCube3 {
+	data: BitArray27,
+}
+impl BitCube3 {
+	pub fn new_zero() -> BitCube3 {
+		BitCube3 { data: BitArray27::new_zero() }
+	}
+	pub fn get(self, coords: BitCube3Coords) -> bool {
+		self.data.get(coords.index())
+	}
+	pub fn set(&mut self, coords: BitCube3Coords, value: bool) {
+		self.data.set(coords.index(), value);
+	}
+}
