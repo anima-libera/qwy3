@@ -243,6 +243,22 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			]);
 		}
 	}
+	for y in 0..16 {
+		for x in (0..16).map(|x| x + 32) {
+			let index = 4 * (y * ATLAS_DIMS.0 + x);
+			let tx = x - 32;
+			if tx * 2 < y || 16 * 2 - tx * 2 < y {
+				atlas_data[index..(index + 4)].clone_from_slice(&[0, 0, 0, 0]);
+			} else {
+				atlas_data[index..(index + 4)].clone_from_slice(&[
+					rand::thread_rng().gen_range(80..100),
+					rand::thread_rng().gen_range(230..=255),
+					rand::thread_rng().gen_range(10..30),
+					255,
+				]);
+			}
+		}
+	}
 	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
 		init_atlas_stuff(Arc::clone(&device), &queue, &atlas_data);
 

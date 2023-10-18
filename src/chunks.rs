@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use cgmath::{EuclideanSpace, MetricSpace};
+use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
 use wgpu::util::DeviceExt;
 
 pub(crate) use crate::{
@@ -15,6 +15,7 @@ pub(crate) use crate::{
 pub enum BlockType {
 	Air,
 	Solid { texture_coords_on_atlas: cgmath::Point2<i32> },
+	XShaped { texture_coords_on_atlas: cgmath::Point2<i32> },
 }
 
 impl BlockType {
@@ -34,6 +35,7 @@ impl BlockTypeTable {
 				BlockType::Air,
 				BlockType::Solid { texture_coords_on_atlas: (0, 0).into() },
 				BlockType::Solid { texture_coords_on_atlas: (16, 0).into() },
+				BlockType::XShaped { texture_coords_on_atlas: (32, 0).into() },
 			],
 		}
 	}
@@ -56,6 +58,10 @@ impl BlockTypeTable {
 
 	fn kinda_grass_id(&self) -> BlockTypeId {
 		BlockTypeId::new(2)
+	}
+
+	fn kinda_grass_blades_id(&self) -> BlockTypeId {
+		BlockTypeId::new(3)
 	}
 }
 
@@ -266,34 +272,48 @@ impl ChunkBlocks {
 		let mut block_vertices = Vec::new();
 		for coords in self.coords_span.iter_coords() {
 			let block_id = self.get(coords).unwrap();
-			if block_type_table.get(block_id).unwrap().is_opaque() {
-				let texture_coords_on_atlas = match block_type_table.get(block_id).unwrap() {
-					BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
-					_ => unimplemented!(),
-				};
-				let opacity_bit_cube_3 = {
-					let mut cube = BitCube3::new_zero();
-					for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
-						let neighbor_coords = coords + delta.to_vec();
-						cube.set(delta.into(), is_opaque(neighbor_coords));
-					}
-					cube
-				};
-				for direction in OrientedAxis::all_the_six_possible_directions() {
-					let is_covered_by_neighbor = {
-						let neighbor_coords = coords + direction.delta();
-						is_opaque(neighbor_coords)
+			match block_type_table.get(block_id).unwrap() {
+				BlockType::Air => {},
+				BlockType::Solid { texture_coords_on_atlas } => {
+					let opacity_bit_cube_3 = {
+						let mut cube = BitCube3::new_zero();
+						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+							let neighbor_coords = coords + delta.to_vec();
+							cube.set(delta.into(), is_opaque(neighbor_coords));
+						}
+						cube
 					};
-					if !is_covered_by_neighbor {
-						generate_block_face_mesh(
+					for direction in OrientedAxis::all_the_six_possible_directions() {
+						let is_covered_by_neighbor = {
+							let neighbor_coords = coords + direction.delta();
+							is_opaque(neighbor_coords)
+						};
+						if !is_covered_by_neighbor {
+							generate_block_face_mesh(
+								&mut block_vertices,
+								direction,
+								coords.map(|x| x as f32),
+								opacity_bit_cube_3,
+								*texture_coords_on_atlas,
+							);
+						}
+					}
+				},
+				BlockType::XShaped { texture_coords_on_atlas } => {
+					for vertices_offets_xy in [
+						[[false, false], [true, true]],
+						[[true, true], [false, false]],
+						[[true, false], [false, true]],
+						[[false, true], [true, false]],
+					] {
+						generate_xshaped_block_face_mesh(
 							&mut block_vertices,
-							direction,
 							coords.map(|x| x as f32),
-							opacity_bit_cube_3,
-							texture_coords_on_atlas,
+							vertices_offets_xy,
+							*texture_coords_on_atlas,
 						);
 					}
-				}
+				},
 			}
 		}
 		ChunkMesh::from_vertices(block_vertices)
@@ -473,6 +493,90 @@ fn generate_block_face_mesh(
 	}
 }
 
+/// Generate one of the two faces in the mesh of an X-shaped block, adding it to `vertices`.
+fn generate_xshaped_block_face_mesh(
+	vertices: &mut Vec<BlockVertexPod>,
+	block_center: cgmath::Point3<f32>,
+	//neighborhood_opaqueness: BitCube3,
+	vertices_offets_xy: [[bool; 2]; 2],
+	texture_coords_on_atlas: cgmath::Point2<i32>,
+) {
+	// NO EARLY OPTIMIZATION
+	// This shall remain in an unoptimized, unfactorized and flexible state for now!
+
+	// We are just meshing a single face, thus a rectangle.
+	// We start by 4 points at the center of a block.
+	let mut coords_array: [cgmath::Point3<f32>; 4] =
+		[block_center, block_center, block_center, block_center];
+
+	let offset_a: cgmath::Vector2<f32> = (
+		if vertices_offets_xy[0][0] { 1.0 } else { 0.0 },
+		if vertices_offets_xy[0][1] { 1.0 } else { 0.0 },
+	)
+		.into();
+	let offset_b: cgmath::Vector2<f32> = (
+		if vertices_offets_xy[1][0] { 1.0 } else { 0.0 },
+		if vertices_offets_xy[1][1] { 1.0 } else { 0.0 },
+	)
+		.into();
+
+	coords_array[0] += offset_a.extend(0.0);
+	coords_array[1] += offset_b.extend(0.0);
+	coords_array[2] += offset_a.extend(1.0);
+	coords_array[3] += offset_b.extend(1.0);
+
+	let normal = (offset_b - offset_a)
+		.extend(0.0)
+		.cross(cgmath::vec3(0.0, 0.0, 1.0))
+		.normalize();
+
+	// Texture moment ^^.
+	let texture_rect_in_atlas_xy: cgmath::Point2<f32> =
+		texture_coords_on_atlas.map(|x| x as f32) * (1.0 / 512.0);
+	let texture_rect_in_atlas_wh: cgmath::Vector2<f32> = cgmath::vec2(16.0, 16.0) * (1.0 / 512.0);
+	let mut coords_in_atlas_array: [cgmath::Point2<f32>; 4] = [
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+		texture_rect_in_atlas_xy,
+	];
+	coords_in_atlas_array[0].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[0].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[1].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[1].y += texture_rect_in_atlas_wh.y * 1.0;
+	coords_in_atlas_array[2].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[2].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[3].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[3].y += texture_rect_in_atlas_wh.y * 1.0;
+
+	let indices = [1, 0, 3, 3, 0, 2];
+
+	// Face culling will discard triangles whose verices don't end up clipped to the screen in
+	// a counter-clockwise order. This means that triangles must be counter-clockwise when
+	// we look at their front and clockwise when we look at their back.
+	// `reverse_order` makes sure that they have the right orientation.
+	let reverse_order = false;
+	let indices_indices_normal = [0, 1, 2, 3, 4, 5];
+	let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
+	let mut handle_index = |index: usize| {
+		vertices.push(BlockVertexPod {
+			position: coords_array[index].into(),
+			coords_in_atlas: coords_in_atlas_array[index].into(),
+			normal: normal.into(),
+			ambiant_occlusion: 0.0,
+		});
+	};
+	if !reverse_order {
+		for indices_index in indices_indices_normal {
+			handle_index(indices[indices_index]);
+		}
+	} else {
+		for indices_index in indices_indices_reversed {
+			handle_index(indices[indices_index]);
+		}
+	}
+}
+
 pub struct Chunk {
 	_coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
@@ -607,12 +711,15 @@ impl ChunkGenerator {
 			// Test chunk generation.
 			let ground = coords_to_ground(coords);
 			let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+			let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
 			*chunk_blocks.get_mut(coords).unwrap() = if ground {
 				if ground_above {
 					block_type_table.ground_id()
 				} else {
 					block_type_table.kinda_grass_id()
 				}
+			} else if ground_below && noise.sample_3d(coords.map(|x| x as f32), &[]) < 0.1 {
+				block_type_table.kinda_grass_blades_id()
 			} else {
 				block_type_table.air_id()
 			};
