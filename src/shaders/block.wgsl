@@ -54,6 +54,11 @@ fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 
 	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
 
+	// Full transparency.
+	if out_color.a < 0.5 {
+		discard;
+	}
+
 	// Apply the darkenning due to the shadows and ambiant occlusion.
 	var shade = the.shade * not_in_shadow;
 	var out_color_rgb = out_color.rgb;

@@ -510,24 +510,24 @@ fn generate_xshaped_block_face_mesh(
 		[block_center, block_center, block_center, block_center];
 
 	let offset_a: cgmath::Vector2<f32> = (
-		if vertices_offets_xy[0][0] { 1.0 } else { 0.0 },
-		if vertices_offets_xy[0][1] { 1.0 } else { 0.0 },
+		if vertices_offets_xy[0][0] { 0.5 } else { -0.5 },
+		if vertices_offets_xy[0][1] { 0.5 } else { -0.5 },
 	)
 		.into();
 	let offset_b: cgmath::Vector2<f32> = (
-		if vertices_offets_xy[1][0] { 1.0 } else { 0.0 },
-		if vertices_offets_xy[1][1] { 1.0 } else { 0.0 },
+		if vertices_offets_xy[1][0] { 0.5 } else { -0.5 },
+		if vertices_offets_xy[1][1] { 0.5 } else { -0.5 },
 	)
 		.into();
 
-	coords_array[0] += offset_a.extend(0.0);
-	coords_array[1] += offset_b.extend(0.0);
-	coords_array[2] += offset_a.extend(1.0);
-	coords_array[3] += offset_b.extend(1.0);
+	coords_array[0] += offset_a.extend(-0.5);
+	coords_array[1] += offset_b.extend(-0.5);
+	coords_array[2] += offset_a.extend(0.5);
+	coords_array[3] += offset_b.extend(0.5);
 
 	let normal = (offset_b - offset_a)
 		.extend(0.0)
-		.cross(cgmath::vec3(0.0, 0.0, 1.0))
+		.cross(cgmath::vec3(0.0, 0.0, -1.0))
 		.normalize();
 
 	// Texture moment ^^.
@@ -542,10 +542,10 @@ fn generate_xshaped_block_face_mesh(
 	];
 	coords_in_atlas_array[0].x += texture_rect_in_atlas_wh.x * 0.0;
 	coords_in_atlas_array[0].y += texture_rect_in_atlas_wh.y * 0.0;
-	coords_in_atlas_array[1].x += texture_rect_in_atlas_wh.x * 0.0;
-	coords_in_atlas_array[1].y += texture_rect_in_atlas_wh.y * 1.0;
-	coords_in_atlas_array[2].x += texture_rect_in_atlas_wh.x * 1.0;
-	coords_in_atlas_array[2].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[1].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[1].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[2].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[2].y += texture_rect_in_atlas_wh.y * 1.0;
 	coords_in_atlas_array[3].x += texture_rect_in_atlas_wh.x * 1.0;
 	coords_in_atlas_array[3].y += texture_rect_in_atlas_wh.y * 1.0;
 
@@ -560,7 +560,7 @@ fn generate_xshaped_block_face_mesh(
 	let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
 	let mut handle_index = |index: usize| {
 		vertices.push(BlockVertexPod {
-			position: coords_array[index].into(),
+			position: (coords_array[index] + normal * 0.025).into(),
 			coords_in_atlas: coords_in_atlas_array[index].into(),
 			normal: normal.into(),
 			ambiant_occlusion: 0.0,

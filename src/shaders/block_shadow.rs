@@ -4,6 +4,8 @@ pub(crate) use crate::BindingThingy;
 
 pub struct BindingThingies<'a> {
 	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
+	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
 pub fn render_pipeline_and_bind_group(
@@ -40,21 +42,47 @@ pub fn render_pipeline_and_bind_group(
 
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Block Shadow Shader Bind Group Layout"),
-		entries: &[binding_thingies
-			.sun_camera_matrix_thingy
-			.binding_type
-			.layout_entry(0, wgpu::ShaderStages::VERTEX)],
+		entries: &[
+			binding_thingies
+				.sun_camera_matrix_thingy
+				.binding_type
+				.layout_entry(0, wgpu::ShaderStages::VERTEX),
+			binding_thingies
+				.atlas_texture_view_thingy
+				.binding_type
+				.layout_entry(1, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.atlas_texture_sampler_thingy
+				.binding_type
+				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
+		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Block Shadow Shader Bind Group"),
 		layout: &bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: binding_thingies
-				.sun_camera_matrix_thingy
-				.resource
-				.as_binding_resource(),
-		}],
+		entries: &[
+			wgpu::BindGroupEntry {
+				binding: 0,
+				resource: binding_thingies
+					.sun_camera_matrix_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 1,
+				resource: binding_thingies
+					.atlas_texture_view_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 2,
+				resource: binding_thingies
+					.atlas_texture_sampler_thingy
+					.resource
+					.as_binding_resource(),
+			},
+		],
 	});
 
 	let block_shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -76,7 +104,11 @@ pub fn render_pipeline_and_bind_group(
 			entry_point: "vertex_shader_main",
 			buffers: &[block_vertex_buffer_layout],
 		},
-		fragment: None,
+		fragment: Some(wgpu::FragmentState {
+			module: &block_shadow_shader,
+			entry_point: "fragment_shader_main",
+			targets: &[],
+		}),
 		primitive: wgpu::PrimitiveState {
 			topology: wgpu::PrimitiveTopology::TriangleList,
 			strip_index_format: None,

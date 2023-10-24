@@ -99,6 +99,8 @@ pub fn init_rendering_stuff(
 			&device,
 			shaders::block_shadow::BindingThingies {
 				sun_camera_matrix_thingy: all_binding_thingies.sun_camera_matrix_thingy,
+				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
+				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
 			},
 			shadow_map_format,
 		);
