@@ -563,7 +563,7 @@ fn generate_xshaped_block_face_mesh(
 			position: (coords_array[index] + normal * 0.025).into(),
 			coords_in_atlas: coords_in_atlas_array[index].into(),
 			normal: normal.into(),
-			ambiant_occlusion: 0.0,
+			ambiant_occlusion: 1.0,
 		});
 	};
 	if !reverse_order {
