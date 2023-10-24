@@ -904,7 +904,7 @@ pub fn run() {
 				if game
 					.chunk_grid
 					.get_block(position_int)
-					.is_some_and(|block_id| game.block_type_table.get(block_id).unwrap().is_opaque())
+					.is_some_and(|block_id| !game.block_type_table.get(block_id).unwrap().is_air())
 				{
 					if let Some(last_position_int) = last_position_int {
 						break Some((position_int, last_position_int));

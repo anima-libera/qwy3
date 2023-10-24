@@ -22,6 +22,10 @@ impl BlockType {
 	pub fn is_opaque(&self) -> bool {
 		matches!(self, BlockType::Solid { .. })
 	}
+
+	pub fn is_air(&self) -> bool {
+		matches!(self, BlockType::Air)
+	}
 }
 
 pub struct BlockTypeTable {
