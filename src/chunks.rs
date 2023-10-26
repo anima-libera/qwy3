@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use cgmath::{num_traits::clamp, EuclideanSpace, InnerSpace};
+use cgmath::{EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 
 pub(crate) use crate::{
@@ -755,8 +755,8 @@ impl ChunkGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
-		let noise_a = noise::OctavedNoise::new(3, vec![1]);
-		let noise_b = noise::OctavedNoise::new(3, vec![2]);
+		let noise_a = noise::OctavedNoise::new(5, vec![1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![2]);
 		let noise_grass_a = noise::OctavedNoise::new(2, vec![1, 1]);
 		let noise_grass_b = noise::OctavedNoise::new(2, vec![1, 2]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
