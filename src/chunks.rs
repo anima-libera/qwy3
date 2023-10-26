@@ -304,6 +304,14 @@ impl ChunkBlocks {
 					}
 				},
 				BlockType::XShaped { texture_coords_on_atlas } => {
+					let opacity_bit_cube_3 = {
+						let mut cube = BitCube3::new_zero();
+						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
+							let neighbor_coords = coords + delta.to_vec();
+							cube.set(delta.into(), is_opaque(neighbor_coords));
+						}
+						cube
+					};
 					for vertices_offets_xy in [
 						[[false, false], [true, true]],
 						[[true, true], [false, false]],
@@ -313,6 +321,7 @@ impl ChunkBlocks {
 						generate_xshaped_block_face_mesh(
 							&mut block_vertices,
 							coords.map(|x| x as f32),
+							opacity_bit_cube_3,
 							vertices_offets_xy,
 							*texture_coords_on_atlas,
 						);
@@ -501,7 +510,7 @@ fn generate_block_face_mesh(
 fn generate_xshaped_block_face_mesh(
 	vertices: &mut Vec<BlockVertexPod>,
 	block_center: cgmath::Point3<f32>,
-	//neighborhood_opaqueness: BitCube3,
+	neighborhood_opaqueness: BitCube3,
 	vertices_offets_xy: [[bool; 2]; 2],
 	texture_coords_on_atlas: cgmath::Point2<i32>,
 ) {
@@ -553,6 +562,51 @@ fn generate_xshaped_block_face_mesh(
 	coords_in_atlas_array[3].x += texture_rect_in_atlas_wh.x * 1.0;
 	coords_in_atlas_array[3].y += texture_rect_in_atlas_wh.y * 1.0;
 
+	let ambiant_occlusion_base_value = |side_a: bool, side_b: bool, corner_ab: bool| {
+		if side_a && side_b {
+			0
+		} else {
+			3 - (side_a as i32 + side_b as i32 + corner_ab as i32)
+		}
+	};
+	let ambiant_occlusion_uwu = |along_x: i32, along_y: i32| {
+		let mut coords: BitCube3Coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::X, along_x);
+		let side_a = neighborhood_opaqueness.get(coords);
+
+		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::Y, along_y);
+		let side_b = neighborhood_opaqueness.get(coords);
+
+		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
+		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::X, along_x);
+		coords.set(NonOrientedAxis::Y, along_y);
+		let corner_ab = neighborhood_opaqueness.get(coords);
+
+		ambiant_occlusion_base_value(side_a, side_b, corner_ab) as f32 / 3.0
+	};
+	let ambiant_occlusion_array = [
+		ambiant_occlusion_uwu(
+			if offset_a.x < 0.0 { -1 } else { 1 },
+			if offset_a.y < 0.0 { -1 } else { 1 },
+		),
+		ambiant_occlusion_uwu(
+			if offset_b.x < 0.0 { -1 } else { 1 },
+			if offset_b.y < 0.0 { -1 } else { 1 },
+		),
+		ambiant_occlusion_uwu(
+			if offset_a.x < 0.0 { -1 } else { 1 },
+			if offset_a.y < 0.0 { -1 } else { 1 },
+		),
+		ambiant_occlusion_uwu(
+			if offset_b.x < 0.0 { -1 } else { 1 },
+			if offset_b.y < 0.0 { -1 } else { 1 },
+		),
+	];
+
 	let indices = [1, 0, 3, 3, 0, 2];
 
 	// Face culling will discard triangles whose verices don't end up clipped to the screen in
@@ -567,7 +621,7 @@ fn generate_xshaped_block_face_mesh(
 			position: (coords_array[index] + normal * 0.025).into(),
 			coords_in_atlas: coords_in_atlas_array[index].into(),
 			normal: normal.into(),
-			ambiant_occlusion: 1.0,
+			ambiant_occlusion: ambiant_occlusion_array[index],
 		});
 	};
 	if !reverse_order {
