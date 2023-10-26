@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
+use cgmath::{num_traits::clamp, EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 
 pub(crate) use crate::{
@@ -755,16 +755,31 @@ impl ChunkGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
-		let noise = noise::OctavedNoise::new(3, vec![1]);
-		let mut chunk_blocks = ChunkBlocks::new(coords_span);
-		let coords_to_ground = |coords: BlockCoords| {
-			let d = coords
-				.map(|x| x as f32)
-				.distance(cgmath::point3(0.0, 0.0, 20.0));
-			coords.z as f32 * (10.0 / (d + 1.0))
-				- noise.sample_3d(coords.map(|x| x as f32 * 0.03), &[]) * 6.0
-				- 3.0 < 0.0
+		let noise_a = noise::OctavedNoise::new(3, vec![1]);
+		let noise_b = noise::OctavedNoise::new(3, vec![2]);
+		let noise_grass_a = noise::OctavedNoise::new(2, vec![1, 1]);
+		let noise_grass_b = noise::OctavedNoise::new(2, vec![1, 2]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 100.0;
+			let a = noise_a.sample_3d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			(coordsf.z < b * 5.0 && a < 0.8) || b < 0.2
 		};
+		let coords_to_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale_a = 30.0;
+			let d = noise_grass_a.sample_3d(coordsf / scale_a, &[]);
+			let density = if d < 0.1 {
+				d * 0.9 + 0.1
+			} else if d < 0.3 {
+				0.1
+			} else {
+				0.01
+			};
+			noise_grass_b.sample_3d(coordsf, &[]) < density
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
 			// Test chunk generation.
 			let ground = coords_to_ground(coords);
@@ -776,7 +791,7 @@ impl ChunkGenerator {
 				} else {
 					block_type_table.kinda_grass_id()
 				}
-			} else if ground_below && noise.sample_3d(coords.map(|x| x as f32), &[]) < 0.1 {
+			} else if ground_below && coords_to_grass(coords) {
 				block_type_table.kinda_grass_blades_id()
 			} else {
 				block_type_table.air_id()
