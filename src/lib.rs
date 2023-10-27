@@ -138,6 +138,41 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	// and we do want to see the errors very much.
 	env_logger::init();
 
+	let mut number_of_threads = 12;
+
+	let mut args = std::env::args().enumerate();
+	args.next(); // Path to binary.
+	if let Some((arg_index, arg_name)) = args.next() {
+		match arg_name.as_str() {
+			"--threads" => match args
+				.next()
+				.map(|(second_index, second_arg)| (second_index, str::parse::<u32>(&second_arg)))
+			{
+				Some((_second_index, Ok(number))) => number_of_threads = number,
+				Some((second_index, Err(parsing_error))) => {
+					println!(
+						"Error in command line arguments at argument {second_index}: \
+						Argument \"--threads\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but parsing failed: {parsing_error}"
+					);
+				},
+				None => {
+					println!(
+						"Error in command line arguments at the end: \
+						Argument \"--threads\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but no argument followed"
+					);
+				},
+			},
+			unknown_arg_name => {
+				println!(
+					"Error in command line arguments at argument {arg_index}: \
+					Argument name \"{unknown_arg_name}\" is unknown"
+				);
+			},
+		}
+	}
+
 	let event_loop = winit::event_loop::EventLoop::new();
 	let window = winit::window::WindowBuilder::new()
 		.with_title("Qwy3")
@@ -335,8 +370,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_world_generation = true;
 
 	let worker_tasks = vec![];
-	let number_of_workers = 12;
-	let pool = threadpool::ThreadPool::new(number_of_workers);
+	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
