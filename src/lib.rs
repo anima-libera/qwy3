@@ -141,6 +141,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let mut number_of_threads = 12;
 	let mut close_after_one_frame = false;
+	let mut verbose = false;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -169,6 +170,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			"--close-after-one-frame" => {
 				println!("Will close after one frame");
 				close_after_one_frame = true;
+			},
+			"--verbose" => {
+				verbose = true;
 			},
 			unknown_arg_name => {
 				println!(
@@ -214,7 +218,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	});
 	let adapter = adapter.unwrap();
 
-	if false {
+	if verbose {
 		// At some point it could be nice to allow the user to choose their preferred adapter.
 		// No one should have to struggle to make some game use the big GPU instead of the tiny one.
 		println!("AVAILABLE ADAPTERS:");
@@ -393,6 +397,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		window_surface_config.format,
 		z_buffer_format,
 	);
+
+	if verbose {
+		println!("End of initialization");
+	}
 
 	let game = Game {
 		window,
