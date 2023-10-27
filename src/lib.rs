@@ -115,6 +115,7 @@ struct Game {
 	control_bindings: HashMap<Control, Action>,
 	block_type_table: Arc<BlockTypeTable>,
 	rendering: RenderPipelinesAndBindGroups,
+	close_after_one_frame: bool,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -139,10 +140,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	env_logger::init();
 
 	let mut number_of_threads = 12;
+	let mut close_after_one_frame = false;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
-	if let Some((arg_index, arg_name)) = args.next() {
+	while let Some((arg_index, arg_name)) = args.next() {
 		match arg_name.as_str() {
 			"--threads" => match args
 				.next()
@@ -163,6 +165,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 						integer argument, but no argument followed"
 					);
 				},
+			},
+			"--close-after-one-frame" => {
+				println!("Will close after one frame");
+				close_after_one_frame = true;
 			},
 			unknown_arg_name => {
 				println!(
@@ -412,6 +418,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		control_bindings,
 		block_type_table,
 		rendering,
+		close_after_one_frame,
 
 		worker_tasks,
 		pool,
@@ -1142,6 +1149,11 @@ pub fn run() {
 
 			game.queue.submit(std::iter::once(encoder.finish()));
 			window_texture.present();
+
+			if game.close_after_one_frame {
+				println!("Closing after one frame, as asked via command line arguments");
+				*control_flow = ControlFlow::Exit;
+			}
 		},
 		_ => {},
 	});
