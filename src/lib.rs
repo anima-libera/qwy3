@@ -146,16 +146,16 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	args.next(); // Path to binary.
 	while let Some((arg_index, arg_name)) = args.next() {
 		match arg_name.as_str() {
-			"--threads" => match args
-				.next()
-				.map(|(second_index, second_arg)| (second_index, str::parse::<u32>(&second_arg)))
-			{
-				Some((_second_index, Ok(number))) => number_of_threads = number,
-				Some((second_index, Err(parsing_error))) => {
+			"--threads" => match args.next().map(|(second_index, second_arg)| {
+				let parsing_result = str::parse::<u32>(&second_arg);
+				(second_index, second_arg, parsing_result)
+			}) {
+				Some((_second_index, _second_arg, Ok(number))) => number_of_threads = number,
+				Some((second_index, second_arg, Err(parsing_error))) => {
 					println!(
 						"Error in command line arguments at argument {second_index}: \
 						Argument \"--threads\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but parsing failed: {parsing_error}"
+						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
 					);
 				},
 				None => {
