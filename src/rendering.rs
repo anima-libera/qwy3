@@ -73,11 +73,13 @@ pub struct RenderPipelinesAndBindGroups {
 	pub block_render_pipeline: wgpu::RenderPipeline,
 	pub block_bind_group: wgpu::BindGroup,
 	pub simple_line_render_pipeline: wgpu::RenderPipeline,
-	pub simple_line_render_bind_group: wgpu::BindGroup,
+	pub simple_line_bind_group: wgpu::BindGroup,
 	pub simple_line_2d_render_pipeline: wgpu::RenderPipeline,
+	pub simple_line_2d_bind_group: wgpu::BindGroup,
 }
 
 pub struct AllBindingThingies<'a> {
+	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
@@ -120,7 +122,7 @@ pub fn init_rendering_stuff(
 		z_buffer_format,
 	);
 
-	let (simple_line_render_pipeline, simple_line_render_bind_group) =
+	let (simple_line_render_pipeline, simple_line_bind_group) =
 		shaders::simple_line::render_pipeline_and_bind_group(
 			&device,
 			shaders::simple_line::BindingThingies {
@@ -130,12 +132,15 @@ pub fn init_rendering_stuff(
 			z_buffer_format,
 		);
 
-	let simple_line_2d_render_pipeline = shaders::simple_line_2d::render_pipeline(
-		&device,
-		shaders::simple_line_2d::BindingThingies {},
-		window_surface_format,
-		z_buffer_format,
-	);
+	let (simple_line_2d_render_pipeline, simple_line_2d_bind_group) =
+		shaders::simple_line_2d::render_pipeline(
+			&device,
+			shaders::simple_line_2d::BindingThingies {
+				aspect_ratio_thingy: all_binding_thingies.aspect_ratio_thingy,
+			},
+			window_surface_format,
+			z_buffer_format,
+		);
 
 	RenderPipelinesAndBindGroups {
 		block_shadow_render_pipeline,
@@ -143,8 +148,29 @@ pub fn init_rendering_stuff(
 		block_render_pipeline,
 		block_bind_group,
 		simple_line_render_pipeline,
-		simple_line_render_bind_group,
+		simple_line_bind_group,
 		simple_line_2d_render_pipeline,
+		simple_line_2d_bind_group,
+	}
+}
+
+pub fn init_aspect_ratio_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+	let aspect_ratio_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Aspect Ratio Buffer"),
+		contents: bytemuck::cast_slice(&[f32::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let aspect_ratio_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	BindingThingy {
+		binding_type: aspect_ratio_binding_type,
+		resource: aspect_ratio_buffer,
 	}
 }
 

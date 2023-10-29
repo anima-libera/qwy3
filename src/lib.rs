@@ -95,6 +95,7 @@ struct Game {
 	device: Arc<wgpu::Device>,
 	queue: wgpu::Queue,
 	window_surface_config: wgpu::SurfaceConfiguration,
+	aspect_ratio_thingy: BindingThingy<wgpu::Buffer>,
 	z_buffer_view: wgpu::TextureView,
 	z_buffer_format: wgpu::TextureFormat,
 	camera_direction: AngularDirection,
@@ -116,6 +117,7 @@ struct Game {
 	block_type_table: Arc<BlockTypeTable>,
 	rendering: RenderPipelinesAndBindGroups,
 	close_after_one_frame: bool,
+	cursor_mesh: SimpleLineMesh,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -267,6 +269,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	};
 	window_surface.configure(&device, &window_surface_config);
 
+	let aspect_ratio_thingy = init_aspect_ratio_thingy(Arc::clone(&device));
+
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
 	let mut atlas_data: [u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1] = [0; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1];
@@ -385,6 +389,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
+			aspect_ratio_thingy: &aspect_ratio_thingy,
 			camera_matrix_thingy: &camera_matrix_thingy,
 			sun_light_direction_thingy: &sun_light_direction_thingy,
 			sun_camera_matrix_thingy: &sun_camera_matrix_thingy,
@@ -398,6 +403,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		z_buffer_format,
 	);
 
+	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -408,6 +415,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		device,
 		queue,
 		window_surface_config,
+		aspect_ratio_thingy,
 		z_buffer_format,
 		z_buffer_view,
 		camera_direction,
@@ -427,6 +435,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		block_type_table,
 		rendering,
 		close_after_one_frame,
+		cursor_mesh,
 
 		worker_tasks,
 		pool,
@@ -474,6 +483,12 @@ pub fn run() {
 				game.z_buffer_view =
 					make_z_buffer_texture_view(&game.device, game.z_buffer_format, width, height);
 				game.camera_settings.aspect_ratio = aspect_ratio(width, height);
+
+				game.queue.write_buffer(
+					&game.aspect_ratio_thingy.resource,
+					0,
+					bytemuck::cast_slice(&[game.camera_settings.aspect_ratio]),
+				);
 			},
 
 			WindowEvent::MouseInput {
@@ -1035,14 +1050,6 @@ pub fn run() {
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
 
-			let cursor_mesh = SimpleLineMesh::interface_2d_cursor(
-				&game.device,
-				(
-					game.window_surface_config.width,
-					game.window_surface_config.height,
-				),
-			);
-
 			let mut encoder = game
 				.device
 				.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1116,14 +1123,14 @@ pub fn run() {
 
 				if game.enable_display_phys_box {
 					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_render_bind_group, &[]);
+					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
 				}
 
 				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
 					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_render_bind_group, &[]);
+					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 				}
@@ -1149,9 +1156,10 @@ pub fn run() {
 				});
 
 				render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
+				render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
 				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					render_pass.set_vertex_buffer(0, cursor_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(cursor_mesh.vertices.len() as u32), 0..1);
+					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 

@@ -70,15 +70,14 @@ impl SimpleLineMesh {
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
 
-	pub fn interface_2d_cursor(device: &wgpu::Device, window_size: (u32, u32)) -> SimpleLineMesh {
+	pub fn interface_2d_cursor(device: &wgpu::Device) -> SimpleLineMesh {
 		let color = [1.0, 1.0, 1.0];
-		let w = 20.0 / window_size.0 as f32;
-		let h = 20.0 / window_size.1 as f32;
+		let size = 0.015;
 		let vertices = vec![
-			SimpleLineVertexPod { position: [-w, 0.0, 0.5], color },
-			SimpleLineVertexPod { position: [w, 0.0, 0.5], color },
-			SimpleLineVertexPod { position: [0.0, -h, 0.5], color },
-			SimpleLineVertexPod { position: [0.0, h, 0.5], color },
+			SimpleLineVertexPod { position: [-size, 0.0, 0.5], color },
+			SimpleLineVertexPod { position: [size, 0.0, 0.5], color },
+			SimpleLineVertexPod { position: [0.0, -size, 0.5], color },
+			SimpleLineVertexPod { position: [0.0, size, 0.5], color },
 		];
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
