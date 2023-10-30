@@ -83,6 +83,7 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					"place_or_remove_block_under_player" => Action::PlaceOrRemoveBlockUnderPlayer,
 					"place_block_at_target" => Action::PlaceBlockAtTarget,
 					"remove_block_at_target" => Action::RemoveBlockAtTarget,
+					"toggle_display_interface" => Action::ToggleDisplayInterface,
 					"toggle_third_person_view" => {
 						println!(
 							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \

@@ -83,6 +83,7 @@ enum Action {
 	PlaceOrRemoveBlockUnderPlayer,
 	PlaceBlockAtTarget,
 	RemoveBlockAtTarget,
+	ToggleDisplayInterface,
 }
 
 enum WorkerTask {
@@ -188,6 +189,7 @@ struct Game {
 	selected_camera: WhichCameraToUse,
 	enable_display_phys_box: bool,
 	cursor_is_captured: bool,
+	enable_display_interface: bool,
 }
 
 fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
@@ -519,6 +521,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		),
 	];
 
+	let enable_display_interface = true;
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -567,6 +571,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		selected_camera,
 		enable_display_phys_box,
 		cursor_is_captured,
+		enable_display_interface,
 	};
 	(game, event_loop)
 }
@@ -780,6 +785,9 @@ pub fn run() {
 									game.block_type_table.air_id(),
 								);
 							}
+						},
+						(Action::ToggleDisplayInterface, true) => {
+							game.enable_display_interface = !game.enable_display_interface;
 						},
 						(_, false) => {},
 					}
@@ -1244,10 +1252,12 @@ pub fn run() {
 				}
 
 				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
-					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
-					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
+					if game.enable_display_interface {
+						render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
+						render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
+						render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
+						render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
+					}
 				}
 			}
 
@@ -1272,14 +1282,18 @@ pub fn run() {
 
 				render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
-				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
+				if game.enable_display_interface
+					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
+				{
 					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
 				}
 
 				render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
-				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
+				if game.enable_display_interface
+					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
+				{
 					for test_texture_2d_mesh in game.test_texture_2d_meshes.iter() {
 						render_pass.set_vertex_buffer(0, test_texture_2d_mesh.vertex_buffer.slice(..));
 						render_pass.draw(0..(test_texture_2d_mesh.vertices.len() as u32), 0..1);
