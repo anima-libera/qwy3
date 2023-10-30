@@ -143,6 +143,92 @@ impl SimpleTextureMesh {
 	}
 }
 
+#[derive(Clone, Copy)]
+struct RectInAtlas {
+	texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+	texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+}
+
+#[derive(Clone)]
+struct CharacterDetails {
+	rect_in_atlas: RectInAtlas,
+	dimensions_in_pixels: cgmath::Vector2<i32>,
+}
+
+struct Font {
+	character_details_map: HashMap<char, CharacterDetails>,
+}
+
+impl Font {
+	fn font_01() -> Font {
+		let mut character_details_map = HashMap::new();
+
+		let coords_asset_to_details = |x: i32, y: i32, w: i32, h: i32| -> CharacterDetails {
+			let y = y + 32; // The assert image is loaded into y=32+ area of the atlas.
+			CharacterDetails {
+				rect_in_atlas: RectInAtlas {
+					texture_rect_in_atlas_xy: cgmath::point2(x as f32, y as f32) * (1.0 / 512.0),
+					texture_rect_in_atlas_wh: cgmath::vec2(w as f32, h as f32) * (1.0 / 512.0),
+				},
+				dimensions_in_pixels: cgmath::vec2(w, h),
+			}
+		};
+
+		const PUNCT_1: &str = "|.:!";
+		const PUNCT_2: &str = ",;'[]()`";
+		const PUNCT_3: &str = "_/\\%#\"^{}?*+-=@<>¨~°";
+		let row_height = 5 + 1;
+
+		for letter in "abcdefghijklmnopqrstuvwxyz".chars() {
+			// First row from the bottom in the spritesheet, case insensitive, a few letters are wider.
+			let mut x = (letter as i32 - 'a' as i32) * 4;
+			let mut w = 3;
+			for (wider_letter, how_much_wider) in [('m', 2), ('n', 1), ('q', 1), ('w', 2)] {
+				use std::cmp::Ordering;
+				match Ord::cmp(&letter, &wider_letter) {
+					Ordering::Less => {},
+					Ordering::Equal => w += how_much_wider,
+					Ordering::Greater => x += how_much_wider,
+				}
+			}
+			let details = coords_asset_to_details(x, row_height * 3, w, 5);
+			character_details_map.insert(letter, details.clone());
+			character_details_map.insert(letter.to_ascii_uppercase(), details);
+		}
+
+		for digit in "0123456789".chars() {
+			// Second row from the bottom.
+			let x = (digit as i32 - '0' as i32) * 4;
+			let details = coords_asset_to_details(x, row_height * 2, 3, 5);
+			character_details_map.insert(digit, details);
+		}
+
+		for (index, punctuation) in PUNCT_1.chars().enumerate() {
+			// Beginning of the forth row from the bottom, for 1-pixel-wide special characters.
+			let details = coords_asset_to_details(index as i32 * 2, 0, 1, 5);
+			character_details_map.insert(punctuation, details);
+		}
+		for (index, punctuation) in PUNCT_2.chars().enumerate() {
+			// End of the forth row from the bottom, for 2-pixel-wide special characters.
+			let x = PUNCT_1.len() as i32 * 2 + index as i32 * 3;
+			let details = coords_asset_to_details(x, 0, 2, 5);
+			character_details_map.insert(punctuation, details);
+		}
+
+		for (index, punctuation) in PUNCT_3.chars().enumerate() {
+			// Third row from the bottom, reserved for 3-pixel-wide special characters.
+			let details = coords_asset_to_details(index as i32 * 4, row_height, 3, 5);
+			character_details_map.insert(punctuation, details);
+		}
+
+		Font { character_details_map }
+	}
+
+	fn character_details(&self, character: char) -> Option<CharacterDetails> {
+		self.character_details_map.get(&character).cloned()
+	}
+}
+
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -173,6 +259,7 @@ struct Game {
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
 	test_texture_2d_meshes: Vec<SimpleTextureMesh>,
+	font: Font,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -377,6 +464,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			atlas_data[index..(index + 4)].clone_from_slice(pixel_from_image.0.as_slice());
 		}
 	}
+	let font = Font::font_01();
 
 	if output_atlas {
 		let path = "atlas.png";
@@ -391,7 +479,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		)
 		.unwrap();
 	}
-
 	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
 		init_atlas_stuff(Arc::clone(&device), &queue, &atlas_data);
 
@@ -490,6 +577,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
 	// Just a test to see if we can get 2D interface textures to render.
+	let character_details_u = font.character_details('u').unwrap();
+	let character_details_w = font.character_details('w').unwrap();
+	let window_width = window_surface_config.width as f32;
 	let test_texture_2d_meshes = vec![
 		SimpleTextureMesh::from_rect(
 			&device,
@@ -518,6 +608,27 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			cgmath::vec2(109.0, 24.0) * 0.003,
 			cgmath::point2(0.0, 32.0) * (1.0 / 512.0),
 			cgmath::vec2(109.0, 24.0) * (1.0 / 512.0),
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(0.6, 0.25, 0.5),
+			character_details_u.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
+			character_details_u.rect_in_atlas.texture_rect_in_atlas_xy,
+			character_details_u.rect_in_atlas.texture_rect_in_atlas_wh,
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(0.61, 0.25, 0.5),
+			character_details_w.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
+			character_details_w.rect_in_atlas.texture_rect_in_atlas_xy,
+			character_details_w.rect_in_atlas.texture_rect_in_atlas_wh,
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(0.62, 0.25, 0.5),
+			character_details_u.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
+			character_details_u.rect_in_atlas.texture_rect_in_atlas_xy,
+			character_details_u.rect_in_atlas.texture_rect_in_atlas_wh,
 		),
 	];
 
@@ -555,6 +666,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		close_after_one_frame,
 		cursor_mesh,
 		test_texture_2d_meshes,
+		font,
 
 		worker_tasks,
 		pool,
