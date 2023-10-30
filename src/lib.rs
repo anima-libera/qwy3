@@ -84,6 +84,7 @@ enum Action {
 	PlaceBlockAtTarget,
 	RemoveBlockAtTarget,
 	ToggleDisplayInterface,
+	OpenCommandLine,
 }
 
 enum WorkerTask {
@@ -313,6 +314,10 @@ struct Game {
 	top_left_info_mesh: SimpleTextureMesh,
 	random_message: &'static str,
 	font: Font,
+	command_line_mesh: SimpleTextureMesh,
+	command_line_content: String,
+	typing_in_command_line: bool,
+	command_confirmed: bool,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -633,6 +638,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let top_left_info_mesh =
 		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
 
+	// Most useful feature in the known universe.
 	let random_message_pool = [
 		"hewwo :3",
 		"uwu",
@@ -655,6 +661,12 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		random_message_pool[rand::thread_rng().gen_range(0..random_message_pool.len())];
 
 	let enable_display_interface = true;
+
+	let command_line_mesh =
+		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
+	let command_line_content = String::new();
+	let typing_in_command_line = false;
+	let command_confirmed = false;
 
 	if verbose {
 		println!("End of initialization");
@@ -690,6 +702,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		top_left_info_mesh,
 		random_message,
 		font,
+		command_line_mesh,
+		command_line_content,
+		typing_in_command_line,
+		command_confirmed,
 
 		worker_tasks,
 		pool,
@@ -763,10 +779,20 @@ pub fn run() {
 				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
 				..
 			} => {
-				game.controls_to_trigger.push(ControlEvent {
-					control: Control::KeyboardKey(*key),
-					pressed: *state == ElementState::Pressed,
-				});
+				if game.typing_in_command_line && *state == ElementState::Pressed {
+					if matches!(key, VirtualKeyCode::Return) {
+						game.command_confirmed = true;
+						game.typing_in_command_line = false;
+					} else {
+						// TODO: convert key codes to characters.
+						game.command_line_content.push('a');
+					}
+				} else {
+					game.controls_to_trigger.push(ControlEvent {
+						control: Control::KeyboardKey(*key),
+						pressed: *state == ElementState::Pressed,
+					});
+				}
 			},
 
 			WindowEvent::MouseInput { state, button, .. } if game.cursor_is_captured => {
@@ -816,42 +842,6 @@ pub fn run() {
 			let now = std::time::Instant::now();
 			let dt = now - game.time_from_last_iteration;
 			game.time_from_last_iteration = now;
-
-			// Top left info
-			let window_width = game.window_surface_config.width as f32;
-			let window_height = game.window_surface_config.height as f32;
-			let fps = 1.0 / dt.as_secs_f32();
-			let chunk_count = game.chunk_grid.map.len();
-			let chunk_meshed_count = game
-				.chunk_grid
-				.map
-				.iter()
-				.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
-				.count();
-			let player_block_coords = (game.player_phys.aligned_box.pos
-				- cgmath::Vector3::<f32>::unit_z() * (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
-				.map(|x| x.round() as i32);
-			let player_block_coords_str = {
-				let cgmath::Point3 { x, y, z } = player_block_coords;
-				format!("{x},{y},{z}")
-			};
-			let random_message = game.random_message;
-			game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
-				&game.device,
-				window_width,
-				cgmath::point3(
-					-1.0 + 4.0 / window_width,
-					(-4.0 + window_height) / window_width,
-					0.5,
-				),
-				&format!(
-					"fps: {fps}\n\
-					chunks loaded: {chunk_count}\n\
-					chunks meshed: {chunk_meshed_count}\n\
-					player coords: {player_block_coords_str}\n\
-					{random_message}"
-				),
-			);
 
 			// Perform actions triggered by controls.
 			for control_event in game.controls_to_trigger.iter() {
@@ -960,11 +950,70 @@ pub fn run() {
 						(Action::ToggleDisplayInterface, true) => {
 							game.enable_display_interface = !game.enable_display_interface;
 						},
+						(Action::OpenCommandLine, true) => {
+							game.typing_in_command_line = true;
+						},
 						(_, false) => {},
 					}
 				}
 			}
 			game.controls_to_trigger.clear();
+
+			// Top left info.
+			{
+				let window_width = game.window_surface_config.width as f32;
+				let window_height = game.window_surface_config.height as f32;
+				let fps = 1.0 / dt.as_secs_f32();
+				let chunk_count = game.chunk_grid.map.len();
+				let chunk_meshed_count = game
+					.chunk_grid
+					.map
+					.iter()
+					.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
+					.count();
+				let player_block_coords = (game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z()
+						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+					.map(|x| x.round() as i32);
+				let player_block_coords_str = {
+					let cgmath::Point3 { x, y, z } = player_block_coords;
+					format!("{x},{y},{z}")
+				};
+				let random_message = game.random_message;
+				game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
+					&game.device,
+					window_width,
+					cgmath::point3(
+						-1.0 + 4.0 / window_width,
+						(-4.0 + window_height) / window_width,
+						0.5,
+					),
+					&format!(
+						"fps: {fps}\n\
+						chunks loaded: {chunk_count}\n\
+						chunks meshed: {chunk_meshed_count}\n\
+						player coords: {player_block_coords_str}\n\
+						{random_message}"
+					),
+				);
+			}
+
+			// Command line handling.
+			if game.command_confirmed {
+				println!("Executing command \"{}\"", game.command_line_content);
+				game.command_line_content.clear();
+				game.command_confirmed = false;
+			}
+			{
+				let window_width = game.window_surface_config.width as f32;
+				let command_line_content = game.command_line_content.as_str();
+				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
+					&game.device,
+					window_width,
+					cgmath::point3(0.0 + 4.0 / window_width, (-4.0) / window_width, 0.5),
+					command_line_content,
+				);
+			}
 
 			// Recieve task results from workers.
 			game.worker_tasks.retain_mut(|worker_task| {
@@ -1488,6 +1537,9 @@ pub fn run() {
 				{
 					render_pass.set_vertex_buffer(0, game.top_left_info_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.top_left_info_mesh.vertices.len() as u32), 0..1);
+
+					render_pass.set_vertex_buffer(0, game.command_line_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(game.command_line_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 
