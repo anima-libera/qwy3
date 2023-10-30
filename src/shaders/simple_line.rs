@@ -1,7 +1,7 @@
 use crate::BindingResourceable;
 pub(crate) use crate::BindingThingy;
 
-/// Vertex type used in debugging line meshes.
+/// Vertex type used in line meshes.
 #[derive(Copy, Clone, Debug)]
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]

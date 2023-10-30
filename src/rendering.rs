@@ -76,6 +76,8 @@ pub struct RenderPipelinesAndBindGroups {
 	pub simple_line_bind_group: wgpu::BindGroup,
 	pub simple_line_2d_render_pipeline: wgpu::RenderPipeline,
 	pub simple_line_2d_bind_group: wgpu::BindGroup,
+	pub simple_texture_2d_render_pipeline: wgpu::RenderPipeline,
+	pub simple_texture_2d_bind_group: wgpu::BindGroup,
 }
 
 pub struct AllBindingThingies<'a> {
@@ -142,6 +144,18 @@ pub fn init_rendering_stuff(
 			z_buffer_format,
 		);
 
+	let (simple_texture_2d_render_pipeline, simple_texture_2d_bind_group) =
+		shaders::simple_texture_2d::render_pipeline(
+			&device,
+			shaders::simple_texture_2d::BindingThingies {
+				aspect_ratio_thingy: all_binding_thingies.aspect_ratio_thingy,
+				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
+				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
+			},
+			window_surface_format,
+			z_buffer_format,
+		);
+
 	RenderPipelinesAndBindGroups {
 		block_shadow_render_pipeline,
 		block_shadow_bind_group,
@@ -151,6 +165,8 @@ pub fn init_rendering_stuff(
 		simple_line_bind_group,
 		simple_line_2d_render_pipeline,
 		simple_line_2d_bind_group,
+		simple_texture_2d_render_pipeline,
+		simple_texture_2d_bind_group,
 	}
 }
 

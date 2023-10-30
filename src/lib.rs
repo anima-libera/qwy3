@@ -12,8 +12,9 @@ mod threadpool;
 
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
-use cgmath::{InnerSpace, MetricSpace};
+use cgmath::{ElementWise, InnerSpace, MetricSpace};
 use rand::Rng;
+use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
 
 use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, CameraSettings};
@@ -89,6 +90,58 @@ enum WorkerTask {
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
 }
 
+pub struct SimpleTextureMesh {
+	pub vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
+	pub vertex_buffer: wgpu::Buffer,
+}
+
+impl SimpleTextureMesh {
+	fn from_vertices(
+		device: &wgpu::Device,
+		vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
+	) -> SimpleTextureMesh {
+		let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Simple Texture Vertex Buffer"),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+		SimpleTextureMesh { vertices, vertex_buffer }
+	}
+
+	fn from_rect(
+		device: &wgpu::Device,
+		center: cgmath::Point3<f32>,
+		dimensions: cgmath::Vector2<f32>,
+		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+	) -> SimpleTextureMesh {
+		use shaders::simple_texture_2d::SimpleTextureVertexPod;
+		let mut vertices = vec![];
+
+		let a = center + cgmath::vec3(-dimensions.x, dimensions.y, 0.0);
+		let b = center + cgmath::vec3(dimensions.x, dimensions.y, 0.0);
+		let c = center + cgmath::vec3(-dimensions.x, -dimensions.y, 0.0);
+		let d = center + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
+		let atlas_a = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(0.0, 0.0));
+		let atlas_b = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(1.0, 0.0));
+		let atlas_c = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(0.0, 1.0));
+		let atlas_d = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(1.0, 1.0));
+
+		vertices.push(SimpleTextureVertexPod { position: a.into(), coords_in_atlas: atlas_a.into() });
+		vertices.push(SimpleTextureVertexPod { position: b.into(), coords_in_atlas: atlas_b.into() });
+		vertices.push(SimpleTextureVertexPod { position: c.into(), coords_in_atlas: atlas_c.into() });
+		vertices.push(SimpleTextureVertexPod { position: c.into(), coords_in_atlas: atlas_c.into() });
+		vertices.push(SimpleTextureVertexPod { position: b.into(), coords_in_atlas: atlas_b.into() });
+		vertices.push(SimpleTextureVertexPod { position: d.into(), coords_in_atlas: atlas_d.into() });
+
+		SimpleTextureMesh::from_vertices(device, vertices)
+	}
+}
+
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -118,6 +171,7 @@ struct Game {
 	rendering: RenderPipelinesAndBindGroups,
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
+	test_texture_2d_meshes: Vec<SimpleTextureMesh>,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -405,6 +459,31 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
+	// Just a test to see if we can get 2D interface textures to render.
+	let test_texture_2d_meshes = vec![
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(-0.7, -0.25, 0.5),
+			cgmath::vec2(0.05, 0.05),
+			cgmath::point2(0.0, 0.0) * (1.0 / 512.0),
+			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(-0.6, -0.25, 0.5),
+			cgmath::vec2(0.05, 0.05),
+			cgmath::point2(16.0, 0.0) * (1.0 / 512.0),
+			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(-0.5, -0.25, 0.5),
+			cgmath::vec2(0.05, 0.05),
+			cgmath::point2(32.0, 0.0) * (1.0 / 512.0),
+			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+		),
+	];
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -436,6 +515,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		rendering,
 		close_after_one_frame,
 		cursor_mesh,
+		test_texture_2d_meshes,
 
 		worker_tasks,
 		pool,
@@ -1160,6 +1240,15 @@ pub fn run() {
 				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
 					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
+				}
+
+				render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
+				render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
+				if !matches!(game.selected_camera, WhichCameraToUse::Sun) {
+					for test_texture_2d_mesh in game.test_texture_2d_meshes.iter() {
+						render_pass.set_vertex_buffer(0, test_texture_2d_mesh.vertex_buffer.slice(..));
+						render_pass.draw(0..(test_texture_2d_mesh.vertices.len() as u32), 0..1);
+					}
 				}
 			}
 
