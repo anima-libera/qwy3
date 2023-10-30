@@ -764,7 +764,7 @@ impl ChunkGenerator {
 			let scale = 100.0;
 			let a = noise_a.sample_3d(coordsf / scale, &[]);
 			let b = noise_b.sample_3d(coordsf / scale, &[]);
-			(coordsf.z < b * 5.0 && a < 0.8) || b < 0.2
+			(coordsf.z < b * 5.0 && a < 0.7) || b < 0.3
 		};
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
@@ -783,18 +783,20 @@ impl ChunkGenerator {
 		for coords in chunk_blocks.coords_span.iter_coords() {
 			// Test chunk generation.
 			let ground = coords_to_ground(coords);
-			let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
-			let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
 			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
 				if ground_above {
 					block_type_table.ground_id()
 				} else {
 					block_type_table.kinda_grass_id()
 				}
-			} else if ground_below && coords_to_grass(coords) {
-				block_type_table.kinda_grass_blades_id()
 			} else {
-				block_type_table.air_id()
+				let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
+				if ground_below && coords_to_grass(coords) {
+					block_type_table.kinda_grass_blades_id()
+				} else {
+					block_type_table.air_id()
+				}
 			};
 		}
 		chunk_blocks
