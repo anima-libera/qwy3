@@ -252,7 +252,7 @@ impl Font {
 	) -> SimpleTextureMesh {
 		let mut vertices = vec![];
 		for character in text.chars() {
-			let scale = 4.0;
+			let scale = 3.0;
 			if character == ' ' {
 				coords.x += 3.0 / (window_width / 2.0) * scale;
 			} else {
@@ -307,6 +307,7 @@ struct Game {
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
 	fps_display_mesh: SimpleTextureMesh,
+	chunk_count_display_mesh: SimpleTextureMesh,
 	font: Font,
 
 	worker_tasks: Vec<WorkerTask>,
@@ -625,12 +626,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
 	let window_width = window_surface_config.width as f32;
-	let fps_display_mesh = font.simple_texture_mesh_from_text(
-		&device,
-		window_width,
-		cgmath::point3(-1.0 + 4.0 / window_width, 1.0 - 4.0 / window_width, 0.5),
-		"h",
-	);
+	let fps_display_mesh =
+		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
+	let chunk_count_display_mesh =
+		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
 
 	let enable_display_interface = true;
 
@@ -666,6 +665,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		close_after_one_frame,
 		cursor_mesh,
 		fps_display_mesh,
+		chunk_count_display_mesh,
 		font,
 
 		worker_tasks,
@@ -807,6 +807,25 @@ pub fn run() {
 					0.5,
 				),
 				&format!("fps: {fps}"),
+			);
+
+			// Chunk count
+			let chunk_count = game.chunk_grid.map.len();
+			let chunk_meshed_count = game
+				.chunk_grid
+				.map
+				.iter()
+				.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
+				.count();
+			game.chunk_count_display_mesh = game.font.simple_texture_mesh_from_text(
+				&game.device,
+				window_width,
+				cgmath::point3(
+					-1.0 + 4.0 / window_width,
+					(-4.0 - 6.0 * 3.0 * 2.0 + window_height) / window_width,
+					0.5,
+				),
+				&format!("chunks: {chunk_count} loaded, {chunk_meshed_count} meshed"),
 			);
 
 			// Perform actions triggered by controls.
@@ -1444,6 +1463,13 @@ pub fn run() {
 				{
 					render_pass.set_vertex_buffer(0, game.fps_display_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.fps_display_mesh.vertices.len() as u32), 0..1);
+
+					render_pass
+						.set_vertex_buffer(0, game.chunk_count_display_mesh.vertex_buffer.slice(..));
+					render_pass.draw(
+						0..(game.chunk_count_display_mesh.vertices.len() as u32),
+						0..1,
+					);
 				}
 			}
 
