@@ -950,7 +950,7 @@ pub fn run() {
 
 			// Request meshing for chunks that can be meshed or should be re-meshed.
 			let chunk_coords_list: Vec<_> = game.chunk_grid.map.keys().copied().collect();
-			for chunk_coords in chunk_coords_list.into_iter() {
+			for chunk_coords in chunk_coords_list.iter().copied() {
 				let already_has_mesh = game
 					.chunk_grid
 					.map
@@ -1092,6 +1092,27 @@ pub fn run() {
 								chunk_generator.generate_chunk_blocks(coords_span, block_type_table);
 							let _ = sender.send(chunk_blocks);
 						}));
+					}
+				}
+			}
+
+			// Unload chunks that are a bit too far.
+			{
+				let player_block_coords = (game.player_phys.aligned_box.pos
+					- cgmath::Vector3::<f32>::unit_z()
+						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+					.map(|x| x.round() as i32);
+				let player_chunk_coords = game
+					.cd
+					.world_coords_to_containing_chunk_coords(player_block_coords);
+
+				for chunk_coords in chunk_coords_list.into_iter() {
+					let dist = chunk_coords
+						.map(|x| x as f32)
+						.distance(player_chunk_coords.map(|x| x as f32));
+					if dist > 20.0 {
+						// TODO: Save blocks to database on disk or something.
+						game.chunk_grid.map.remove(&chunk_coords);
 					}
 				}
 			}
