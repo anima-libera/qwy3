@@ -311,6 +311,7 @@ struct Game {
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
 	top_left_info_mesh: SimpleTextureMesh,
+	random_message: &'static str,
 	font: Font,
 
 	worker_tasks: Vec<WorkerTask>,
@@ -632,6 +633,26 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let top_left_info_mesh =
 		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
 
+	let random_message_pool = [
+		"hewwo :3",
+		"uwu",
+		"owo",
+		"jaaj",
+		"trans rights",
+		"qwy3 best game",
+		":3",
+		"^^",
+		"drink water!",
+		"rust best lang",
+		"when the",
+		"voxels!",
+		">w<",
+		"rat <3",
+		"touch grass",
+	];
+	let random_message =
+		random_message_pool[rand::thread_rng().gen_range(0..random_message_pool.len())];
+
 	let enable_display_interface = true;
 
 	if verbose {
@@ -666,6 +687,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		close_after_one_frame,
 		cursor_mesh,
 		top_left_info_mesh,
+		random_message,
 		font,
 
 		worker_tasks,
@@ -805,6 +827,7 @@ pub fn run() {
 				.iter()
 				.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
 				.count();
+			let random_message = game.random_message;
 			game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
 				&game.device,
 				window_width,
@@ -816,7 +839,8 @@ pub fn run() {
 				&format!(
 					"fps: {fps}\n\
 					chunks loaded: {chunk_count}\n\
-					chunks meshed: {chunk_meshed_count}"
+					chunks meshed: {chunk_meshed_count}\n\
+					{random_message}"
 				),
 			);
 
