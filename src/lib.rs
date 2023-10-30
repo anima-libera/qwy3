@@ -116,13 +116,28 @@ impl SimpleTextureMesh {
 		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
 		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 	) -> SimpleTextureMesh {
+		let vertices = SimpleTextureMesh::vertices_for_rect(
+			center,
+			dimensions,
+			texture_rect_in_atlas_xy,
+			texture_rect_in_atlas_wh,
+		);
+		SimpleTextureMesh::from_vertices(device, vertices)
+	}
+
+	fn vertices_for_rect(
+		top_left: cgmath::Point3<f32>,
+		dimensions: cgmath::Vector2<f32>,
+		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+	) -> Vec<shaders::simple_texture_2d::SimpleTextureVertexPod> {
 		use shaders::simple_texture_2d::SimpleTextureVertexPod;
 		let mut vertices = vec![];
 
-		let a = center + cgmath::vec3(-dimensions.x, dimensions.y, 0.0);
-		let b = center + cgmath::vec3(dimensions.x, dimensions.y, 0.0);
-		let c = center + cgmath::vec3(-dimensions.x, -dimensions.y, 0.0);
-		let d = center + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
+		let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
+		let b = top_left + cgmath::vec3(dimensions.x, 0.0, 0.0);
+		let c = top_left + cgmath::vec3(0.0, -dimensions.y, 0.0);
+		let d = top_left + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
 		let atlas_a = texture_rect_in_atlas_xy
 			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(0.0, 0.0));
 		let atlas_b = texture_rect_in_atlas_xy
@@ -139,7 +154,7 @@ impl SimpleTextureMesh {
 		vertices.push(SimpleTextureVertexPod { position: b.into(), coords_in_atlas: atlas_b.into() });
 		vertices.push(SimpleTextureVertexPod { position: d.into(), coords_in_atlas: atlas_d.into() });
 
-		SimpleTextureMesh::from_vertices(device, vertices)
+		vertices
 	}
 }
 
@@ -227,6 +242,39 @@ impl Font {
 	fn character_details(&self, character: char) -> Option<CharacterDetails> {
 		self.character_details_map.get(&character).cloned()
 	}
+
+	fn simple_texture_mesh_from_text(
+		&self,
+		device: &wgpu::Device,
+		window_width: f32,
+		mut coords: cgmath::Point3<f32>,
+		text: &str,
+	) -> SimpleTextureMesh {
+		let mut vertices = vec![];
+		for character in text.chars() {
+			let scale = 4.0;
+			if character == ' ' {
+				coords.x += 3.0 / (window_width / 2.0) * scale;
+			} else {
+				let character_details = self
+					.character_details(character)
+					.unwrap_or_else(|| self.character_details('?').unwrap());
+				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
+					/ (window_width / 2.0)
+					* scale;
+				vertices.extend(SimpleTextureMesh::vertices_for_rect(
+					coords,
+					dimensions,
+					character_details.rect_in_atlas.texture_rect_in_atlas_xy,
+					character_details.rect_in_atlas.texture_rect_in_atlas_wh,
+				));
+				coords.x +=
+					(character_details.dimensions_in_pixels.x + 1) as f32 / (window_width / 2.0) * scale;
+			}
+		}
+
+		SimpleTextureMesh::from_vertices(device, vertices)
+	}
 }
 
 struct Game {
@@ -258,7 +306,7 @@ struct Game {
 	rendering: RenderPipelinesAndBindGroups,
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
-	test_texture_2d_meshes: Vec<SimpleTextureMesh>,
+	fps_display_mesh: SimpleTextureMesh,
 	font: Font,
 
 	worker_tasks: Vec<WorkerTask>,
@@ -576,61 +624,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
-	// Just a test to see if we can get 2D interface textures to render.
-	let character_details_u = font.character_details('u').unwrap();
-	let character_details_w = font.character_details('w').unwrap();
 	let window_width = window_surface_config.width as f32;
-	let test_texture_2d_meshes = vec![
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(-0.7, -0.25, 0.5),
-			cgmath::vec2(0.05, 0.05),
-			cgmath::point2(0.0, 0.0) * (1.0 / 512.0),
-			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(-0.6, -0.25, 0.5),
-			cgmath::vec2(0.05, 0.05),
-			cgmath::point2(16.0, 0.0) * (1.0 / 512.0),
-			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(-0.5, -0.25, 0.5),
-			cgmath::vec2(0.05, 0.05),
-			cgmath::point2(32.0, 0.0) * (1.0 / 512.0),
-			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(0.6, -0.25, 0.5),
-			cgmath::vec2(109.0, 24.0) * 0.003,
-			cgmath::point2(0.0, 32.0) * (1.0 / 512.0),
-			cgmath::vec2(109.0, 24.0) * (1.0 / 512.0),
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(0.6, 0.25, 0.5),
-			character_details_u.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
-			character_details_u.rect_in_atlas.texture_rect_in_atlas_xy,
-			character_details_u.rect_in_atlas.texture_rect_in_atlas_wh,
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(0.61, 0.25, 0.5),
-			character_details_w.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
-			character_details_w.rect_in_atlas.texture_rect_in_atlas_xy,
-			character_details_w.rect_in_atlas.texture_rect_in_atlas_wh,
-		),
-		SimpleTextureMesh::from_rect(
-			&device,
-			cgmath::point3(0.62, 0.25, 0.5),
-			character_details_u.dimensions_in_pixels.map(|x| x as f32) / window_width * 2.0,
-			character_details_u.rect_in_atlas.texture_rect_in_atlas_xy,
-			character_details_u.rect_in_atlas.texture_rect_in_atlas_wh,
-		),
-	];
+	let fps_display_mesh = font.simple_texture_mesh_from_text(
+		&device,
+		window_width,
+		cgmath::point3(-1.0 + 4.0 / window_width, 1.0 - 4.0 / window_width, 0.5),
+		"h",
+	);
 
 	let enable_display_interface = true;
 
@@ -665,7 +665,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		rendering,
 		close_after_one_frame,
 		cursor_mesh,
-		test_texture_2d_meshes,
+		fps_display_mesh,
 		font,
 
 		worker_tasks,
@@ -793,6 +793,21 @@ pub fn run() {
 			let now = std::time::Instant::now();
 			let dt = now - game.time_from_last_iteration;
 			game.time_from_last_iteration = now;
+
+			// FPS
+			let window_width = game.window_surface_config.width as f32;
+			let window_height = game.window_surface_config.height as f32;
+			let fps = 1.0 / dt.as_secs_f32();
+			game.fps_display_mesh = game.font.simple_texture_mesh_from_text(
+				&game.device,
+				window_width,
+				cgmath::point3(
+					-1.0 + 4.0 / window_width,
+					(-4.0 + window_height) / window_width,
+					0.5,
+				),
+				&format!("fps: {fps}"),
+			);
 
 			// Perform actions triggered by controls.
 			for control_event in game.controls_to_trigger.iter() {
@@ -1427,10 +1442,8 @@ pub fn run() {
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 				{
-					for test_texture_2d_mesh in game.test_texture_2d_meshes.iter() {
-						render_pass.set_vertex_buffer(0, test_texture_2d_mesh.vertex_buffer.slice(..));
-						render_pass.draw(0..(test_texture_2d_mesh.vertices.len() as u32), 0..1);
-					}
+					render_pass.set_vertex_buffer(0, game.fps_display_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(game.fps_display_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 
