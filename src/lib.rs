@@ -109,7 +109,7 @@ impl SimpleTextureMesh {
 		SimpleTextureMesh { vertices, vertex_buffer }
 	}
 
-	fn from_rect(
+	fn _from_rect(
 		device: &wgpu::Device,
 		center: cgmath::Point3<f32>,
 		dimensions: cgmath::Vector2<f32>,
@@ -250,11 +250,15 @@ impl Font {
 		mut coords: cgmath::Point3<f32>,
 		text: &str,
 	) -> SimpleTextureMesh {
+		let initial_coords = coords;
 		let mut vertices = vec![];
 		for character in text.chars() {
 			let scale = 3.0;
 			if character == ' ' {
 				coords.x += 3.0 / (window_width / 2.0) * scale;
+			} else if character == '\n' {
+				coords.x = initial_coords.x;
+				coords.y -= 6.0 / (window_width / 2.0) * scale;
 			} else {
 				let character_details = self
 					.character_details(character)
@@ -306,8 +310,7 @@ struct Game {
 	rendering: RenderPipelinesAndBindGroups,
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
-	fps_display_mesh: SimpleTextureMesh,
-	chunk_count_display_mesh: SimpleTextureMesh,
+	top_left_info_mesh: SimpleTextureMesh,
 	font: Font,
 
 	worker_tasks: Vec<WorkerTask>,
@@ -626,9 +629,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
 	let window_width = window_surface_config.width as f32;
-	let fps_display_mesh =
-		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
-	let chunk_count_display_mesh =
+	let top_left_info_mesh =
 		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
 
 	let enable_display_interface = true;
@@ -664,8 +665,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		rendering,
 		close_after_one_frame,
 		cursor_mesh,
-		fps_display_mesh,
-		chunk_count_display_mesh,
+		top_left_info_mesh,
 		font,
 
 		worker_tasks,
@@ -794,22 +794,10 @@ pub fn run() {
 			let dt = now - game.time_from_last_iteration;
 			game.time_from_last_iteration = now;
 
-			// FPS
+			// Top left info
 			let window_width = game.window_surface_config.width as f32;
 			let window_height = game.window_surface_config.height as f32;
 			let fps = 1.0 / dt.as_secs_f32();
-			game.fps_display_mesh = game.font.simple_texture_mesh_from_text(
-				&game.device,
-				window_width,
-				cgmath::point3(
-					-1.0 + 4.0 / window_width,
-					(-4.0 + window_height) / window_width,
-					0.5,
-				),
-				&format!("fps: {fps}"),
-			);
-
-			// Chunk count
 			let chunk_count = game.chunk_grid.map.len();
 			let chunk_meshed_count = game
 				.chunk_grid
@@ -817,15 +805,19 @@ pub fn run() {
 				.iter()
 				.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
 				.count();
-			game.chunk_count_display_mesh = game.font.simple_texture_mesh_from_text(
+			game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
 				&game.device,
 				window_width,
 				cgmath::point3(
 					-1.0 + 4.0 / window_width,
-					(-4.0 - 6.0 * 3.0 * 2.0 + window_height) / window_width,
+					(-4.0 + window_height) / window_width,
 					0.5,
 				),
-				&format!("chunks: {chunk_count} loaded, {chunk_meshed_count} meshed"),
+				&format!(
+					"fps: {fps}\n\
+					chunks loaded: {chunk_count}\n\
+					chunks meshed: {chunk_meshed_count}"
+				),
 			);
 
 			// Perform actions triggered by controls.
@@ -1461,15 +1453,8 @@ pub fn run() {
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 				{
-					render_pass.set_vertex_buffer(0, game.fps_display_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(game.fps_display_mesh.vertices.len() as u32), 0..1);
-
-					render_pass
-						.set_vertex_buffer(0, game.chunk_count_display_mesh.vertex_buffer.slice(..));
-					render_pass.draw(
-						0..(game.chunk_count_display_mesh.vertices.len() as u32),
-						0..1,
-					);
+					render_pass.set_vertex_buffer(0, game.top_left_info_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(game.top_left_info_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 
