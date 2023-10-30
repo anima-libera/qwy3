@@ -647,8 +647,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		"when the",
 		"voxels!",
 		">w<",
-		"rat <3",
-		"touch grass",
+		"<3",
+		"gaming",
+		"nyaa",
 	];
 	let random_message =
 		random_message_pool[rand::thread_rng().gen_range(0..random_message_pool.len())];
@@ -827,6 +828,13 @@ pub fn run() {
 				.iter()
 				.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
 				.count();
+			let player_block_coords = (game.player_phys.aligned_box.pos
+				- cgmath::Vector3::<f32>::unit_z() * (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+				.map(|x| x.round() as i32);
+			let player_block_coords_str = {
+				let cgmath::Point3 { x, y, z } = player_block_coords;
+				format!("{x},{y},{z}")
+			};
 			let random_message = game.random_message;
 			game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
 				&game.device,
@@ -840,6 +848,7 @@ pub fn run() {
 					"fps: {fps}\n\
 					chunks loaded: {chunk_count}\n\
 					chunks meshed: {chunk_meshed_count}\n\
+					player coords: {player_block_coords_str}\n\
 					{random_message}"
 				),
 			);
