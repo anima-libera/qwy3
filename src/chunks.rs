@@ -757,6 +757,7 @@ impl ChunkGenerator {
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![2]);
+		let noise_no_grass = noise::OctavedNoise::new(5, vec![3]);
 		let noise_grass_a = noise::OctavedNoise::new(2, vec![1, 1]);
 		let noise_grass_b = noise::OctavedNoise::new(2, vec![1, 2]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -768,8 +769,8 @@ impl ChunkGenerator {
 		};
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
-			let scale_a = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale_a, &[]);
+			let scale = 30.0;
+			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -778,6 +779,11 @@ impl ChunkGenerator {
 				0.01
 			};
 			noise_grass_b.sample_3d(coordsf, &[]) < density
+		};
+		let coords_to_no_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -788,12 +794,24 @@ impl ChunkGenerator {
 				if ground_above {
 					block_type_table.ground_id()
 				} else {
-					block_type_table.kinda_grass_id()
+					let no_grass = coords_to_no_grass(coords);
+					if no_grass {
+						block_type_table.ground_id()
+					} else {
+						block_type_table.kinda_grass_id()
+					}
 				}
 			} else {
 				let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
-				if ground_below && coords_to_grass(coords) {
-					block_type_table.kinda_grass_blades_id()
+				if ground_below {
+					let no_grass_below = coords_to_no_grass(coords + cgmath::vec3(0, 0, -1));
+					if no_grass_below {
+						block_type_table.air_id()
+					} else if coords_to_grass(coords) {
+						block_type_table.kinda_grass_blades_id()
+					} else {
+						block_type_table.air_id()
+					}
 				} else {
 					block_type_table.air_id()
 				}
