@@ -198,6 +198,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut number_of_threads = 12;
 	let mut close_after_one_frame = false;
 	let mut verbose = false;
+	let mut output_atlas = false;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -229,6 +230,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			},
 			"--verbose" => {
 				verbose = true;
+			},
+			"--output-atlas" => {
+				output_atlas = true;
 			},
 			unknown_arg_name => {
 				println!(
@@ -362,6 +366,30 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			}
 		}
 	}
+
+	let font_image = image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
+	for y in 0..64 {
+		for x in 0..128 {
+			let pixel_from_image = font_image.as_rgba8().unwrap().get_pixel(x, y);
+			let index = 4 * ((y as usize + 32) * ATLAS_DIMS.0 + x as usize);
+			atlas_data[index..(index + 4)].clone_from_slice(pixel_from_image.0.as_slice());
+		}
+	}
+
+	if output_atlas {
+		let path = "atlas.png";
+		println!("Outputting atlas to \"{path}\"");
+		image::save_buffer_with_format(
+			path,
+			&atlas_data,
+			ATLAS_DIMS.0 as u32,
+			ATLAS_DIMS.1 as u32,
+			image::ColorType::Rgba8,
+			image::ImageFormat::Png,
+		)
+		.unwrap();
+	}
+
 	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
 		init_atlas_stuff(Arc::clone(&device), &queue, &atlas_data);
 
@@ -481,6 +509,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			cgmath::vec2(0.05, 0.05),
 			cgmath::point2(32.0, 0.0) * (1.0 / 512.0),
 			cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+		),
+		SimpleTextureMesh::from_rect(
+			&device,
+			cgmath::point3(0.6, -0.25, 0.5),
+			cgmath::vec2(109.0, 24.0) * 0.003,
+			cgmath::point2(0.0, 32.0) * (1.0 / 512.0),
+			cgmath::vec2(109.0, 24.0) * (1.0 / 512.0),
 		),
 	];
 
