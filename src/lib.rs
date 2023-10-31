@@ -318,6 +318,7 @@ struct Game {
 	command_line_content: String,
 	typing_in_command_line: bool,
 	command_confirmed: bool,
+	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -346,6 +347,12 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut close_after_one_frame = false;
 	let mut verbose = false;
 	let mut output_atlas = false;
+	let mut world_gen_seed = 0;
+	enum WhichWorldGenerator {
+		Default,
+		Test001,
+	}
+	let mut which_world_generator = WhichWorldGenerator::Default;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -380,6 +387,54 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			},
 			"--output-atlas" => {
 				output_atlas = true;
+			},
+			"--seed" => match args.next().map(|(second_index, second_arg)| {
+				let parsing_result = str::parse::<i32>(&second_arg);
+				(second_index, second_arg, parsing_result)
+			}) {
+				Some((_second_index, _second_arg, Ok(number))) => world_gen_seed = number,
+				Some((second_index, second_arg, Err(parsing_error))) => {
+					println!(
+						"Error in command line arguments at argument {second_index}: \
+						Argument \"--seed\" is expected to be followed by an signed 32-bits \
+						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
+					);
+				},
+				None => {
+					println!(
+						"Error in command line arguments at the end: \
+						Argument \"--seed\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but no argument followed"
+					);
+				},
+			},
+			"--gen" => {
+				match args
+					.next()
+					.as_ref()
+					.map(|(second_index, second_arg)| (second_index, second_arg.as_str()))
+				{
+					Some((_second_index, "default")) => {
+						which_world_generator = WhichWorldGenerator::Default
+					},
+					Some((_second_index, "test001")) => {
+						which_world_generator = WhichWorldGenerator::Test001
+					},
+					Some((second_index, unknown_name)) => {
+						println!(
+							"Error in command line arguments at argument {second_index}: \
+							Argument \"--gen\" is expected to be followed by a world generator name, \
+							but \"{unknown_name}\" is not a knonw generator name"
+						);
+					},
+					None => {
+						println!(
+							"Error in command line arguments at the end: \
+							Argument \"--gen\" is expected to be followed by a world generator name, \
+							but no argument followed"
+						);
+					},
+				}
 			},
 			unknown_arg_name => {
 				println!(
@@ -668,6 +723,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let typing_in_command_line = false;
 	let command_confirmed = false;
 
+	let world_generator: Arc<dyn WorldGenerator + Sync + Send> = match which_world_generator {
+		WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed: world_gen_seed }),
+		WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed: world_gen_seed }),
+	};
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -706,6 +766,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		command_line_content,
 		typing_in_command_line,
 		command_confirmed,
+		world_generator,
 
 		worker_tasks,
 		pool,
@@ -1185,7 +1246,7 @@ pub fn run() {
 						game
 							.worker_tasks
 							.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
-						let chunk_generator = ChunkGenerator {};
+						let chunk_generator = Arc::clone(&game.world_generator);
 						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 						let block_type_table = Arc::clone(&game.block_type_table);
 						game.pool.enqueue_task(Box::new(move || {

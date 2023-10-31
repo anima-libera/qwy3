@@ -38,7 +38,6 @@ fn interpolate(
 }
 
 fn raw_noise_a_node(xs: &[i32]) -> f32 {
-	/*
 	let mut a = 0;
 	let mut b = 0;
 	for (i, x) in xs.iter().copied().enumerate() {
@@ -47,10 +46,10 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 		std::mem::swap(&mut a, &mut b);
 		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
 	}
-	println!("{xs:?} -> {a}, {b}");
+	//println!("{xs:?} -> {a}, {b}");
 	positive_fract(f32::cos(a as f32 + b as f32))
-	*/
 	// The version below is hopefully and probably faster than the version above >w<
+	/*
 	let mut v = 0.0;
 	for (i, x) in xs.iter().copied().enumerate() {
 		let pool = [
@@ -61,6 +60,7 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 	}
 	//println!("{xs:?} -> {}", positive_fract(v));
 	positive_fract(v)
+	*/
 }
 
 fn raw_noise_a(xs: &[f32], channels: &[i32]) -> f32 {
