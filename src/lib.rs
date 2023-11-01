@@ -361,6 +361,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		Test007,
 		Test008,
 		Test009,
+		Test010,
 	}
 	let mut which_world_generator = WhichWorldGenerator::Default;
 
@@ -453,6 +454,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 					},
 					Some((_second_index, "test009")) => {
 						which_world_generator = WhichWorldGenerator::Test009
+					},
+					Some((_second_index, "test010")) => {
+						which_world_generator = WhichWorldGenerator::Test010
 					},
 					Some((second_index, unknown_name)) => {
 						println!(
@@ -770,6 +774,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed: world_gen_seed }),
 			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed: world_gen_seed }),
 			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed: world_gen_seed }),
 		}
 	};
 
