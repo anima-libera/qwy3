@@ -321,6 +321,8 @@ struct Game {
 	typing_in_command_line: bool,
 	command_confirmed: bool,
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
+	loading_distance: f32,
+	margin_before_unloading: f32,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -351,6 +353,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut output_atlas = false;
 	let mut world_gen_seed = 0;
 	let mut which_world_generator = world_gen::WhichWorldGenerator::Default;
+	let mut loading_distance = 190.0;
+	let mut chunk_edge = 20;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -429,6 +433,46 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 						);
 					},
 				}
+			},
+			"--gen-dist" => match args.next().map(|(second_index, second_arg)| {
+				let parsing_result = str::parse::<u32>(&second_arg);
+				(second_index, second_arg, parsing_result)
+			}) {
+				Some((_second_index, _second_arg, Ok(number))) => loading_distance = number as f32,
+				Some((second_index, second_arg, Err(parsing_error))) => {
+					println!(
+						"Error in command line arguments at argument {second_index}: \
+						Argument \"--gen-dist\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
+					);
+				},
+				None => {
+					println!(
+						"Error in command line arguments at the end: \
+						Argument \"--gen-dist\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but no argument followed"
+					);
+				},
+			},
+			"--chunk-edge" => match args.next().map(|(second_index, second_arg)| {
+				let parsing_result = str::parse::<u32>(&second_arg);
+				(second_index, second_arg, parsing_result)
+			}) {
+				Some((_second_index, _second_arg, Ok(number))) => chunk_edge = number,
+				Some((second_index, second_arg, Err(parsing_error))) => {
+					println!(
+						"Error in command line arguments at argument {second_index}: \
+						Argument \"--chunk-edge\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
+					);
+				},
+				None => {
+					println!(
+						"Error in command line arguments at the end: \
+						Argument \"--chunk-edge\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but no argument followed"
+					);
+				},
 			},
 			unknown_arg_name => {
 				println!(
@@ -658,7 +702,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let control_bindings = commands::parse_control_binding_file();
 	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
-	let cd = ChunkDimensions::from(20);
+	let cd = ChunkDimensions::from(chunk_edge as i32);
 	let chunk_grid = ChunkGrid::new(cd);
 
 	let enable_world_generation = true;
@@ -721,6 +765,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
 
+	let margin_before_unloading = 60.0;
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -760,6 +806,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		typing_in_command_line,
 		command_confirmed,
 		world_generator,
+		loading_distance,
+		margin_before_unloading,
 
 		worker_tasks,
 		pool,
@@ -1193,9 +1241,6 @@ pub fn run() {
 				}
 			}
 
-			let generation_distance = 200.0;
-			let unloading_distance = 260.0;
-
 			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
 			if game.enable_world_generation {
 				let player_block_coords = (game.player_phys.aligned_box.pos
@@ -1206,7 +1251,7 @@ pub fn run() {
 					.cd
 					.world_coords_to_containing_chunk_coords(player_block_coords);
 
-				let generation_distance_in_chunks = generation_distance / game.cd.edge as f32;
+				let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
 				let generation_distance_in_chunks_up = generation_distance_in_chunks.ceil() as i32;
 
 				let mut neighbor_chunk_coords_array: Vec<_> =
@@ -1281,11 +1326,12 @@ pub fn run() {
 					.cd
 					.world_coords_to_containing_chunk_coords(player_block_coords);
 
+				let unloading_distance = game.loading_distance + game.margin_before_unloading;
+				let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
 				for chunk_coords in chunk_coords_list.into_iter() {
 					let dist_in_chunks = chunk_coords
 						.map(|x| x as f32)
 						.distance(player_chunk_coords.map(|x| x as f32));
-					let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
 					if dist_in_chunks > unloading_distance_in_chunks {
 						// TODO: Save blocks to database on disk or something.
 						game.chunk_grid.map.remove(&chunk_coords);
