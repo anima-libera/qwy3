@@ -550,7 +550,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		for x in (0..16).map(|x| x + 32) {
 			let index = 4 * (y * ATLAS_DIMS.0 + x);
 			let tx = x - 32;
-			if tx * 2 < y || 16 * 2 - tx * 2 < y {
+			let tp = cgmath::vec2(tx as f32, y as f32 / 2.0);
+			let bottom_center = cgmath::vec2(8.0, 0.0);
+			if bottom_center.distance(tp) > 8.0 {
 				atlas_data[index..(index + 4)].clone_from_slice(&[0, 0, 0, 0]);
 			} else {
 				atlas_data[index..(index + 4)].clone_from_slice(&[
@@ -656,7 +658,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let control_bindings = commands::parse_control_binding_file();
 	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
-	let cd = ChunkDimensions::from(16);
+	let cd = ChunkDimensions::from(20);
 	let chunk_grid = ChunkGrid::new(cd);
 
 	let enable_world_generation = true;
@@ -1191,6 +1193,9 @@ pub fn run() {
 				}
 			}
 
+			let generation_distance = 200.0;
+			let unloading_distance = 260.0;
+
 			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
 			if game.enable_world_generation {
 				let player_block_coords = (game.player_phys.aligned_box.pos
@@ -1201,8 +1206,18 @@ pub fn run() {
 					.cd
 					.world_coords_to_containing_chunk_coords(player_block_coords);
 
+				let generation_distance_in_chunks = generation_distance / game.cd.edge as f32;
+				let generation_distance_in_chunks_up = generation_distance_in_chunks.ceil() as i32;
+
 				let mut neighbor_chunk_coords_array: Vec<_> =
-					iter_3d_cube_center_radius(player_chunk_coords, 8).collect();
+					iter_3d_cube_center_radius(player_chunk_coords, generation_distance_in_chunks_up)
+						.filter(|chunk_coords| {
+							chunk_coords
+								.map(|x| x as f32)
+								.distance(player_chunk_coords.map(|x| x as f32))
+								<= generation_distance_in_chunks
+						})
+						.collect();
 				// No early optimizations! This is an (in)valid excuse to not optimize this!
 				neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
 					(chunk_coords
@@ -1267,10 +1282,11 @@ pub fn run() {
 					.world_coords_to_containing_chunk_coords(player_block_coords);
 
 				for chunk_coords in chunk_coords_list.into_iter() {
-					let dist = chunk_coords
+					let dist_in_chunks = chunk_coords
 						.map(|x| x as f32)
 						.distance(player_chunk_coords.map(|x| x as f32));
-					if dist > 20.0 {
+					let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
+					if dist_in_chunks > unloading_distance_in_chunks {
 						// TODO: Save blocks to database on disk or something.
 						game.chunk_grid.map.remove(&chunk_coords);
 					}
