@@ -9,6 +9,7 @@ mod noise;
 mod rendering;
 mod shaders;
 mod threadpool;
+mod world_gen;
 
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
@@ -22,6 +23,7 @@ use chunks::*;
 use coords::*;
 use line_meshes::*;
 use rendering::*;
+use world_gen::WorldGenerator;
 
 /// Just a 3D rectangular axis-aligned box.
 /// It cannot rotate as it stays aligned on the axes.
@@ -755,17 +757,20 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let typing_in_command_line = false;
 	let command_confirmed = false;
 
-	let world_generator: Arc<dyn WorldGenerator + Sync + Send> = match which_world_generator {
-		WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed: world_gen_seed }),
-		WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test004 => Arc::new(WorldGeneratorTest004 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test005 => Arc::new(WorldGeneratorTest005 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test006 => Arc::new(WorldGeneratorTest006 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed: world_gen_seed }),
-		WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed: world_gen_seed }),
+	let world_generator: Arc<dyn WorldGenerator + Sync + Send> = {
+		use world_gen::*;
+		match which_world_generator {
+			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed: world_gen_seed }),
+			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test004 => Arc::new(WorldGeneratorTest004 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test005 => Arc::new(WorldGeneratorTest005 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test006 => Arc::new(WorldGeneratorTest006 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed: world_gen_seed }),
+			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed: world_gen_seed }),
+		}
 	};
 
 	if verbose {
