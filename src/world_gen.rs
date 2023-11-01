@@ -17,6 +17,54 @@ pub trait WorldGenerator {
 	) -> ChunkBlocks;
 }
 
+pub enum WhichWorldGenerator {
+	Default,
+	Test001,
+	Test002,
+	Test003,
+	Test004,
+	Test005,
+	Test006,
+	Test007,
+	Test008,
+	Test009,
+	Test010,
+}
+impl WhichWorldGenerator {
+	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
+		match name {
+			"default" => Some(WhichWorldGenerator::Default),
+			"test001" => Some(WhichWorldGenerator::Test001),
+			"test002" => Some(WhichWorldGenerator::Test002),
+			"test003" => Some(WhichWorldGenerator::Test003),
+			"test004" => Some(WhichWorldGenerator::Test004),
+			"test005" => Some(WhichWorldGenerator::Test005),
+			"test006" => Some(WhichWorldGenerator::Test006),
+			"test007" => Some(WhichWorldGenerator::Test007),
+			"test008" => Some(WhichWorldGenerator::Test008),
+			"test009" => Some(WhichWorldGenerator::Test009),
+			"test010" => Some(WhichWorldGenerator::Test010),
+			_ => None,
+		}
+	}
+
+	pub fn get_the_actual_generator(self, seed: i32) -> Arc<dyn WorldGenerator + Sync + Send> {
+		match self {
+			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
+			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed }),
+			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed }),
+			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed }),
+			WhichWorldGenerator::Test004 => Arc::new(WorldGeneratorTest004 { seed }),
+			WhichWorldGenerator::Test005 => Arc::new(WorldGeneratorTest005 { seed }),
+			WhichWorldGenerator::Test006 => Arc::new(WorldGeneratorTest006 { seed }),
+			WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed }),
+			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed }),
+			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed }),
+			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed }),
+		}
+	}
+}
+
 pub struct DefaultWorldGenerator {
 	pub seed: i32,
 }

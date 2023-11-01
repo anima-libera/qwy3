@@ -350,20 +350,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut verbose = false;
 	let mut output_atlas = false;
 	let mut world_gen_seed = 0;
-	enum WhichWorldGenerator {
-		Default,
-		Test001,
-		Test002,
-		Test003,
-		Test004,
-		Test005,
-		Test006,
-		Test007,
-		Test008,
-		Test009,
-		Test010,
-	}
-	let mut which_world_generator = WhichWorldGenerator::Default;
+	let mut which_world_generator = world_gen::WhichWorldGenerator::Default;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -420,45 +407,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				},
 			},
 			"--gen" => {
-				match args
-					.next()
-					.as_ref()
-					.map(|(second_index, second_arg)| (second_index, second_arg.as_str()))
-				{
-					Some((_second_index, "default")) => {
-						which_world_generator = WhichWorldGenerator::Default
+				match args.next().as_ref().map(|(second_index, second_arg)| {
+					let which_world_gen = world_gen::WhichWorldGenerator::from_name(second_arg);
+					(second_index, second_arg, which_world_gen)
+				}) {
+					Some((_second_index, _second_arg, Some(which_world_gen))) => {
+						which_world_generator = which_world_gen;
 					},
-					Some((_second_index, "test001")) => {
-						which_world_generator = WhichWorldGenerator::Test001
-					},
-					Some((_second_index, "test002")) => {
-						which_world_generator = WhichWorldGenerator::Test002
-					},
-					Some((_second_index, "test003")) => {
-						which_world_generator = WhichWorldGenerator::Test003
-					},
-					Some((_second_index, "test004")) => {
-						which_world_generator = WhichWorldGenerator::Test004
-					},
-					Some((_second_index, "test005")) => {
-						which_world_generator = WhichWorldGenerator::Test005
-					},
-					Some((_second_index, "test006")) => {
-						which_world_generator = WhichWorldGenerator::Test006
-					},
-					Some((_second_index, "test007")) => {
-						which_world_generator = WhichWorldGenerator::Test007
-					},
-					Some((_second_index, "test008")) => {
-						which_world_generator = WhichWorldGenerator::Test008
-					},
-					Some((_second_index, "test009")) => {
-						which_world_generator = WhichWorldGenerator::Test009
-					},
-					Some((_second_index, "test010")) => {
-						which_world_generator = WhichWorldGenerator::Test010
-					},
-					Some((second_index, unknown_name)) => {
+					Some((second_index, unknown_name, None)) => {
 						println!(
 							"Error in command line arguments at argument {second_index}: \
 							Argument \"--gen\" is expected to be followed by a world generator name, \
@@ -761,22 +717,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let typing_in_command_line = false;
 	let command_confirmed = false;
 
-	let world_generator: Arc<dyn WorldGenerator + Sync + Send> = {
-		use world_gen::*;
-		match which_world_generator {
-			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed: world_gen_seed }),
-			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test004 => Arc::new(WorldGeneratorTest004 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test005 => Arc::new(WorldGeneratorTest005 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test006 => Arc::new(WorldGeneratorTest006 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed: world_gen_seed }),
-			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed: world_gen_seed }),
-		}
-	};
+	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
 
 	if verbose {
 		println!("End of initialization");
