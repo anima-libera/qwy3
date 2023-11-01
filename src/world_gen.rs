@@ -29,6 +29,7 @@ pub enum WhichWorldGenerator {
 	Test008,
 	Test009,
 	Test010,
+	Test011,
 }
 impl WhichWorldGenerator {
 	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
@@ -44,6 +45,7 @@ impl WhichWorldGenerator {
 			"test008" => Some(WhichWorldGenerator::Test008),
 			"test009" => Some(WhichWorldGenerator::Test009),
 			"test010" => Some(WhichWorldGenerator::Test010),
+			"test011" => Some(WhichWorldGenerator::Test011),
 			_ => None,
 		}
 	}
@@ -61,6 +63,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed }),
 			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed }),
 			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed }),
+			WhichWorldGenerator::Test011 => Arc::new(WorldGeneratorTest011 { seed }),
 		}
 	}
 }
@@ -813,6 +816,126 @@ impl WorldGenerator for WorldGeneratorTest010 {
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
+			let deformed_coordsf = coordsf + deformation;
+			coords_to_ground_uwu(deformed_coordsf)
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest011 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest011 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
+		let noise_d = noise::OctavedNoise::new(4, vec![self.seed, 4]);
+		let noise_e = noise::OctavedNoise::new(4, vec![self.seed, 5]);
+		let noise_f = noise::OctavedNoise::new(4, vec![self.seed, 6]);
+		let noise_g = noise::OctavedNoise::new(1, vec![self.seed, 7]);
+		let coords_to_ground_uwu =
+			|coordsf: cgmath::Point3<f32>| -> bool {
+				let scale = 55.0;
+				let radius = 7.0;
+				let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
+					let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
+					let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
+					let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
+					let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+					let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
+					let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
+					let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
+					coordsf_min + the
+				};
+				let coordsf_to_link_negativewards =
+					|coordsf: cgmath::Point3<f32>, axis: NonOrientedAxis| -> bool {
+						let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
+						let axis_channel = axis.index() as i32;
+						let g = noise_g.sample_3d(coordsf_i_scaled, &[axis_channel]);
+						g < 0.5
+					};
+				let in_link = |a: cgmath::Point3<f32>,
+				               b: cgmath::Point3<f32>,
+				               coordsf: cgmath::Point3<f32>,
+				               radius: f32|
+				 -> bool {
+					let dist = distance_to_segment(a, b, coordsf);
+					if dist < radius {
+						let dist_above = distance_to_segment(a, b, coordsf + cgmath::vec3(0.0, 0.0, 1.0));
+						dist_above < dist
+					} else {
+						false
+					}
+				};
+				let the = coordsf_to_the(coordsf);
+				let xp = coordsf_to_the(coordsf + cgmath::vec3(1.0, 0.0, 0.0) * scale);
+				let xm = coordsf_to_the(coordsf - cgmath::vec3(1.0, 0.0, 0.0) * scale);
+				let yp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 1.0, 0.0) * scale);
+				let ym = coordsf_to_the(coordsf - cgmath::vec3(0.0, 1.0, 0.0) * scale);
+				let zp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 0.0, 1.0) * scale);
+				let zm = coordsf_to_the(coordsf - cgmath::vec3(0.0, 0.0, 1.0) * scale);
+				let vxp = in_link(the, xp, coordsf, radius);
+				let vxm = in_link(the, xm, coordsf, radius);
+				let vyp = in_link(the, yp, coordsf, radius);
+				let vym = in_link(the, ym, coordsf, radius);
+				let vzp = in_link(the, zp, coordsf, radius);
+				let vzm = in_link(the, zm, coordsf, radius);
+				let lxp = coordsf_to_link_negativewards(
+					coordsf + cgmath::vec3(1.0, 0.0, 0.0) * scale,
+					NonOrientedAxis::X,
+				);
+				let lxm = coordsf_to_link_negativewards(coordsf, NonOrientedAxis::X);
+				let lyp = coordsf_to_link_negativewards(
+					coordsf + cgmath::vec3(0.0, 1.0, 0.0) * scale,
+					NonOrientedAxis::Y,
+				);
+				let lym = coordsf_to_link_negativewards(coordsf, NonOrientedAxis::Y);
+				let lzp = coordsf_to_link_negativewards(
+					coordsf + cgmath::vec3(0.0, 0.0, 1.0) * scale,
+					NonOrientedAxis::Z,
+				);
+				let lzm = coordsf_to_link_negativewards(coordsf, NonOrientedAxis::Z);
+				(lxp && vxp)
+					|| (lxm && vxm) || (lyp && vyp)
+					|| (lym && vym) || (lzp && vzp)
+					|| (lzm && vzm)
+			};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 30.0;
+			let horizontal_deformation_max_length = 14.0;
+			let vertical_deformation_max_length = 4.0;
+			let d = noise_d.sample_3d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			use crate::coords::AngularDirection;
+			let mut deformation =
+				AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3() * f;
+			deformation.x *= horizontal_deformation_max_length;
+			deformation.y *= horizontal_deformation_max_length;
+			deformation.z *= vertical_deformation_max_length;
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
