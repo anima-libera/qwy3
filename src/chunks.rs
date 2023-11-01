@@ -1255,3 +1255,168 @@ impl WorldGenerator for WorldGeneratorTest007 {
 		chunk_blocks
 	}
 }
+
+pub struct WorldGeneratorTest008 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest008 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
+		let noise_d = noise::OctavedNoise::new(4, vec![self.seed, 4]);
+		let noise_e = noise::OctavedNoise::new(4, vec![self.seed, 5]);
+		let noise_f = noise::OctavedNoise::new(4, vec![self.seed, 6]);
+		let coords_to_ground_uwu = |coordsf: cgmath::Point3<f32>| -> bool {
+			if coordsf.z < 0.0 {
+				return true;
+			}
+			let scale = 65.0;
+			let radius = (10.0f32).min(1.0f32.min(1.0 / (coordsf.z * 0.1 + 4.0)) * 30.0);
+			if radius < 1.0 {
+				return false;
+			}
+			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
+				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
+				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
+				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
+				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
+				coordsf_min + the
+			};
+			let the = coordsf_to_the(coordsf);
+			let xp = coordsf_to_the(coordsf + cgmath::vec3(1.0, 0.0, 0.0) * scale);
+			let xm = coordsf_to_the(coordsf - cgmath::vec3(1.0, 0.0, 0.0) * scale);
+			let yp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 1.0, 0.0) * scale);
+			let ym = coordsf_to_the(coordsf - cgmath::vec3(0.0, 1.0, 0.0) * scale);
+			let zp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 0.0, 1.0) * scale);
+			let zm = coordsf_to_the(coordsf - cgmath::vec3(0.0, 0.0, 1.0) * scale);
+			let vxp = distance_to_segment(the, xp, coordsf);
+			let vxm = distance_to_segment(the, xm, coordsf);
+			let vyp = distance_to_segment(the, yp, coordsf);
+			let vym = distance_to_segment(the, ym, coordsf);
+			let vzp = distance_to_segment(the, zp, coordsf);
+			let vzm = distance_to_segment(the, zm, coordsf);
+			(vxp < radius || vxm < radius)
+				|| (vyp < radius || vym < radius)
+				|| (vzp < radius || vzm < radius)
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 30.0;
+			let deformation_max_length = 13.0;
+			let d = noise_d.sample_3d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			use crate::coords::AngularDirection;
+			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
+				* f * deformation_max_length;
+			let deformed_coordsf = coordsf + deformation;
+			coords_to_ground_uwu(deformed_coordsf)
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest009 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest009 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
+		let noise_d = noise::OctavedNoise::new(4, vec![self.seed, 4]);
+		let noise_e = noise::OctavedNoise::new(4, vec![self.seed, 5]);
+		let noise_f = noise::OctavedNoise::new(4, vec![self.seed, 6]);
+		let coords_to_ground_uwu = |coordsf: cgmath::Point3<f32>| -> bool {
+			if coordsf.z > 0.0 {
+				return false;
+			}
+			let scale = 65.0;
+			let radius = 5.0;
+			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
+				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
+				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
+				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
+				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
+				coordsf_min + the
+			};
+			let the = coordsf_to_the(coordsf);
+			let xp = coordsf_to_the(coordsf + cgmath::vec3(1.0, 0.0, 0.0) * scale);
+			let xm = coordsf_to_the(coordsf - cgmath::vec3(1.0, 0.0, 0.0) * scale);
+			let yp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 1.0, 0.0) * scale);
+			let ym = coordsf_to_the(coordsf - cgmath::vec3(0.0, 1.0, 0.0) * scale);
+			let zp = coordsf_to_the(coordsf + cgmath::vec3(0.0, 0.0, 1.0) * scale);
+			let zm = coordsf_to_the(coordsf - cgmath::vec3(0.0, 0.0, 1.0) * scale);
+			let vxp = distance_to_segment(the, xp, coordsf);
+			let vxm = distance_to_segment(the, xm, coordsf);
+			let vyp = distance_to_segment(the, yp, coordsf);
+			let vym = distance_to_segment(the, ym, coordsf);
+			let vzp = distance_to_segment(the, zp, coordsf);
+			let vzm = distance_to_segment(the, zm, coordsf);
+			!((vxp < radius || vxm < radius)
+				|| (vyp < radius || vym < radius)
+				|| (vzp < radius || vzm < radius))
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 30.0;
+			let deformation_max_length = 13.0;
+			let d = noise_d.sample_3d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			use crate::coords::AngularDirection;
+			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
+				* f * deformation_max_length;
+			let deformed_coordsf = coordsf + deformation;
+			coords_to_ground_uwu(deformed_coordsf)
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
