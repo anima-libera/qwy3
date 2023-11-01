@@ -2,10 +2,12 @@
 
 mod camera;
 mod chunks;
+mod cmdline;
 mod commands;
 mod coords;
 mod line_meshes;
 mod noise;
+mod physics;
 mod rendering;
 mod shaders;
 mod threadpool;
@@ -22,35 +24,10 @@ use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings
 use chunks::*;
 use coords::*;
 use line_meshes::*;
+use physics::AlignedPhysBox;
 use rendering::*;
+use shaders::Vector3Pod;
 use world_gen::WorldGenerator;
-
-/// Just a 3D rectangular axis-aligned box.
-/// It cannot rotate as it stays aligned on the axes.
-struct AlignedBox {
-	/// Position of the center of the box.
-	pos: cgmath::Point3<f32>,
-	/// Width of the box along each axis.
-	dims: cgmath::Vector3<f32>,
-}
-
-/// Represents an `AlignedBox`-shaped object that has physics or something like that.
-struct AlignedPhysBox {
-	aligned_box: AlignedBox,
-	motion: cgmath::Vector3<f32>,
-	/// Gravity's acceleration of this box is influenced by this parameter.
-	/// It may not be exactly analog to weight but it's not too far.
-	gravity_factor: f32,
-}
-
-/// Vector in 3D.
-#[derive(Copy, Clone, Debug)]
-/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
-#[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vector3Pod {
-	values: [f32; 3],
-}
 
 enum WhichCameraToUse {
 	FirstPerson,
@@ -347,141 +324,16 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	// and we do want to see the errors very much.
 	env_logger::init();
 
-	let mut number_of_threads = 12;
-	let mut close_after_one_frame = false;
-	let mut verbose = false;
-	let mut output_atlas = false;
-	let mut world_gen_seed = 0;
-	let mut which_world_generator = world_gen::WhichWorldGenerator::Default;
-	let mut loading_distance = 190.0;
-	let mut chunk_edge = 20;
-
-	let mut args = std::env::args().enumerate();
-	args.next(); // Path to binary.
-	while let Some((arg_index, arg_name)) = args.next() {
-		match arg_name.as_str() {
-			"--threads" => match args.next().map(|(second_index, second_arg)| {
-				let parsing_result = str::parse::<u32>(&second_arg);
-				(second_index, second_arg, parsing_result)
-			}) {
-				Some((_second_index, _second_arg, Ok(number))) => number_of_threads = number,
-				Some((second_index, second_arg, Err(parsing_error))) => {
-					println!(
-						"Error in command line arguments at argument {second_index}: \
-						Argument \"--threads\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
-					);
-				},
-				None => {
-					println!(
-						"Error in command line arguments at the end: \
-						Argument \"--threads\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but no argument followed"
-					);
-				},
-			},
-			"--close-after-one-frame" => {
-				println!("Will close after one frame");
-				close_after_one_frame = true;
-			},
-			"--verbose" => {
-				verbose = true;
-			},
-			"--output-atlas" => {
-				output_atlas = true;
-			},
-			"--seed" => match args.next().map(|(second_index, second_arg)| {
-				let parsing_result = str::parse::<i32>(&second_arg);
-				(second_index, second_arg, parsing_result)
-			}) {
-				Some((_second_index, _second_arg, Ok(number))) => world_gen_seed = number,
-				Some((second_index, second_arg, Err(parsing_error))) => {
-					println!(
-						"Error in command line arguments at argument {second_index}: \
-						Argument \"--seed\" is expected to be followed by an signed 32-bits \
-						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
-					);
-				},
-				None => {
-					println!(
-						"Error in command line arguments at the end: \
-						Argument \"--seed\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but no argument followed"
-					);
-				},
-			},
-			"--gen" => {
-				match args.next().as_ref().map(|(second_index, second_arg)| {
-					let which_world_gen = world_gen::WhichWorldGenerator::from_name(second_arg);
-					(second_index, second_arg, which_world_gen)
-				}) {
-					Some((_second_index, _second_arg, Some(which_world_gen))) => {
-						which_world_generator = which_world_gen;
-					},
-					Some((second_index, unknown_name, None)) => {
-						println!(
-							"Error in command line arguments at argument {second_index}: \
-							Argument \"--gen\" is expected to be followed by a world generator name, \
-							but \"{unknown_name}\" is not a knonw generator name"
-						);
-					},
-					None => {
-						println!(
-							"Error in command line arguments at the end: \
-							Argument \"--gen\" is expected to be followed by a world generator name, \
-							but no argument followed"
-						);
-					},
-				}
-			},
-			"--gen-dist" => match args.next().map(|(second_index, second_arg)| {
-				let parsing_result = str::parse::<u32>(&second_arg);
-				(second_index, second_arg, parsing_result)
-			}) {
-				Some((_second_index, _second_arg, Ok(number))) => loading_distance = number as f32,
-				Some((second_index, second_arg, Err(parsing_error))) => {
-					println!(
-						"Error in command line arguments at argument {second_index}: \
-						Argument \"--gen-dist\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
-					);
-				},
-				None => {
-					println!(
-						"Error in command line arguments at the end: \
-						Argument \"--gen-dist\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but no argument followed"
-					);
-				},
-			},
-			"--chunk-edge" => match args.next().map(|(second_index, second_arg)| {
-				let parsing_result = str::parse::<u32>(&second_arg);
-				(second_index, second_arg, parsing_result)
-			}) {
-				Some((_second_index, _second_arg, Ok(number))) => chunk_edge = number,
-				Some((second_index, second_arg, Err(parsing_error))) => {
-					println!(
-						"Error in command line arguments at argument {second_index}: \
-						Argument \"--chunk-edge\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
-					);
-				},
-				None => {
-					println!(
-						"Error in command line arguments at the end: \
-						Argument \"--chunk-edge\" is expected to be followed by an unsigned 32-bits \
-						integer argument, but no argument followed"
-					);
-				},
-			},
-			unknown_arg_name => {
-				println!(
-					"Error in command line arguments at argument {arg_index}: \
-					Argument name \"{unknown_arg_name}\" is unknown"
-				);
-			},
-		}
-	}
+	let cmdline::CommandLineSettings {
+		number_of_threads,
+		close_after_one_frame,
+		verbose,
+		output_atlas,
+		world_gen_seed,
+		which_world_generator,
+		loading_distance,
+		chunk_edge,
+	} = cmdline::parse_command_line_arguments();
 
 	let event_loop = winit::event_loop::EventLoop::new();
 	let window = winit::window::WindowBuilder::new()
@@ -1362,69 +1214,12 @@ pub fn run() {
 			game.player_phys.aligned_box.pos += walking_vector;
 
 			if game.enable_physics {
-				// TODO: Work out something better here,
-				// although it is not very important at the moment.
-				let player_bottom = game.player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::from((
-						0.0,
-						0.0,
-						game.player_phys.aligned_box.dims.z / 2.0,
-					));
-				let player_bottom_below = game.player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::from((
-						0.0,
-						0.0,
-						game.player_phys.aligned_box.dims.z / 2.0 + 0.01,
-					));
-				let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-				let player_bottom_block_coords_below = player_bottom_below.map(|x| x.round() as i32);
-				let player_bottom_block_opt = game.chunk_grid.get_block(player_bottom_block_coords);
-				let player_bottom_block_opt_below =
-					game.chunk_grid.get_block(player_bottom_block_coords_below);
-				let is_on_ground = if game.player_phys.motion.z <= 0.0 {
-					if let Some(block_id) = player_bottom_block_opt_below {
-						if game.block_type_table.get(block_id).unwrap().is_opaque() {
-							// The player is on the ground, so we make sure we are not overlapping it.
-							game.player_phys.motion.z = 0.0;
-							game.player_phys.aligned_box.pos.z =
-								player_bottom_block_coords_below.z as f32
-									+ 0.5 + game.player_phys.aligned_box.dims.z / 2.0;
-							true
-						} else {
-							false
-						}
-					} else {
-						false
-					}
-				} else {
-					false
-				};
-				let is_in_ground = if game.player_phys.motion.z <= 0.0 {
-					if let Some(block_id) = player_bottom_block_opt {
-						if game.block_type_table.get(block_id).unwrap().is_opaque() {
-							// The player is inside the ground, so we uuh.. do something?
-							game.player_phys.motion.z = 0.0;
-							game.player_phys.aligned_box.pos.z =
-								player_bottom_block_coords.z as f32
-									+ 0.5 + game.player_phys.aligned_box.dims.z / 2.0;
-							true
-						} else {
-							false
-						}
-					} else {
-						false
-					}
-				} else {
-					false
-				};
-				game.player_phys.aligned_box.pos += game.player_phys.motion;
-				if !is_on_ground {
-					game.player_phys.motion.z -=
-						game.player_phys.gravity_factor * 0.3 * dt.as_secs_f32();
-				}
-				if is_in_ground {
-					game.player_phys.aligned_box.pos.z += 0.01;
-				}
+				physics::apply_on_physics_step(
+					&mut game.player_phys,
+					&game.chunk_grid,
+					&game.block_type_table,
+					dt,
+				);
 			}
 
 			let player_box_mesh =

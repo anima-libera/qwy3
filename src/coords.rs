@@ -383,3 +383,12 @@ impl BitCube3 {
 		self.data.set(coords.index(), value);
 	}
 }
+
+/// Just a 3D rectangular axis-aligned box.
+/// It cannot rotate as it stays aligned on the axes.
+pub struct AlignedBox {
+	/// Position of the center of the box.
+	pub pos: cgmath::Point3<f32>,
+	/// Width of the box along each axis.
+	pub dims: cgmath::Vector3<f32>,
+}
