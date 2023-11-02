@@ -5,6 +5,7 @@ mod chunks;
 mod cmdline;
 mod commands;
 mod coords;
+mod lang;
 mod line_meshes;
 mod noise;
 mod physics;
@@ -377,7 +378,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		which_world_generator,
 		loading_distance,
 		chunk_edge,
+		test_lang,
 	} = cmdline::parse_command_line_arguments();
+
+	if test_lang == Some(1) {
+		lang::run("print_integer(42)", &lang::Context::with_builtins()).unwrap();
+		std::process::exit(0);
+	}
 
 	let event_loop = winit::event_loop::EventLoop::new();
 	let window = winit::window::WindowBuilder::new()

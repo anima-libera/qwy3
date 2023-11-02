@@ -9,6 +9,8 @@ pub struct CommandLineSettings {
 	pub which_world_generator: WhichWorldGenerator,
 	pub loading_distance: f32,
 	pub chunk_edge: u32,
+
+	pub test_lang: Option<u32>,
 }
 
 pub fn parse_command_line_arguments() -> CommandLineSettings {
@@ -20,6 +22,7 @@ pub fn parse_command_line_arguments() -> CommandLineSettings {
 	let mut which_world_generator = WhichWorldGenerator::Default;
 	let mut loading_distance = 190.0;
 	let mut chunk_edge = 20;
+	let mut test_lang = None;
 
 	let mut args = std::env::args().enumerate();
 	args.next(); // Path to binary.
@@ -139,6 +142,26 @@ pub fn parse_command_line_arguments() -> CommandLineSettings {
 					);
 				},
 			},
+			"--test-lang" => match args.next().map(|(second_index, second_arg)| {
+				let parsing_result = str::parse::<u32>(&second_arg);
+				(second_index, second_arg, parsing_result)
+			}) {
+				Some((_second_index, _second_arg, Ok(number))) => test_lang = Some(number),
+				Some((second_index, second_arg, Err(parsing_error))) => {
+					println!(
+						"Error in command line arguments at argument {second_index}: \
+						Argument \"--test-lang\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but parsing of \"{second_arg}\" failed: {parsing_error}"
+					);
+				},
+				None => {
+					println!(
+						"Error in command line arguments at the end: \
+						Argument \"--test-lang\" is expected to be followed by an unsigned 32-bits \
+						integer argument, but no argument followed"
+					);
+				},
+			},
 			unknown_arg_name => {
 				println!(
 					"Error in command line arguments at argument {arg_index}: \
@@ -157,5 +180,6 @@ pub fn parse_command_line_arguments() -> CommandLineSettings {
 		which_world_generator,
 		loading_distance,
 		chunk_edge,
+		test_lang,
 	}
 }
