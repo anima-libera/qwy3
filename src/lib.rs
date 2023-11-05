@@ -1143,7 +1143,8 @@ pub fn run() {
 					|| should_be_remeshed)
 					&& can_be_def_meshed
 					&& game.worker_tasks.len() < game.pool.number_of_workers();
-				let shall_be_tmp_meshed = !is_being_meshed
+				let shall_be_tmp_meshed = tmp_meshing_allowed
+					&& !is_being_meshed
 					&& !shall_be_def_meshed
 					&& !already_has_mesh
 					&& !already_has_def_mesh
