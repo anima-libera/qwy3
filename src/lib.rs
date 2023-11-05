@@ -70,7 +70,8 @@ enum Action {
 
 enum WorkerTask {
 	GenerateChunkBlocks(ChunkCoords, std::sync::mpsc::Receiver<ChunkBlocks>),
-	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
+	/// The bool at the end is `meshed_with_all_the_surrounding_chunks`.
+	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>, bool),
 }
 
 pub struct SimpleTextureMesh {
@@ -364,6 +365,7 @@ struct Game {
 	cursor_is_captured: bool,
 	enable_display_interface: bool,
 	enable_display_not_surrounded_chunks_as_boxes: bool,
+	enable_temporary_meshing_of_not_surrounded_chunks: bool,
 }
 
 fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
@@ -673,6 +675,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let margin_before_unloading = 60.0;
 
 	let enable_display_not_surrounded_chunks_as_boxes = false;
+	let enable_temporary_meshing_of_not_surrounded_chunks = true;
 
 	if verbose {
 		println!("End of initialization");
@@ -733,6 +736,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		cursor_is_captured,
 		enable_display_interface,
 		enable_display_not_surrounded_chunks_as_boxes,
+		enable_temporary_meshing_of_not_surrounded_chunks,
 	};
 	(game, event_loop)
 }
@@ -980,12 +984,23 @@ pub fn run() {
 				let window_height = game.window_surface_config.height as f32;
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.map.len();
-				let chunk_meshed_count = game
+				let chunk_def_meshed_count = game
 					.chunk_grid
 					.map
 					.iter()
-					.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
+					.filter(|(_chunk_coords, chunk)| {
+						chunk.mesh.is_some() && chunk.meshed_with_all_the_surrounding_chunks
+					})
 					.count();
+				let chunk_tmp_meshed_count = game
+					.chunk_grid
+					.map
+					.iter()
+					.filter(|(_chunk_coords, chunk)| {
+						chunk.mesh.is_some() && !chunk.meshed_with_all_the_surrounding_chunks
+					})
+					.count();
+				let chunk_meshed_count = chunk_def_meshed_count + chunk_tmp_meshed_count;
 				let player_block_coords = (game.player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
@@ -1006,7 +1021,8 @@ pub fn run() {
 					&format!(
 						"fps: {fps}\n\
 						chunks loaded: {chunk_count}\n\
-						chunks meshed: {chunk_meshed_count}\n\
+						chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
+							{chunk_meshed_count}\n\
 						player coords: {player_block_coords_str}\n\
 						{random_message}"
 					),
@@ -1055,7 +1071,11 @@ pub fn run() {
 						}
 						is_not_done_yet
 					},
-					WorkerTask::MeshChunk(chunk_coords, receiver) => {
+					WorkerTask::MeshChunk(
+						chunk_coords,
+						receiver,
+						meshed_with_all_the_surrounding_chunks,
+					) => {
 						let chunk_coords_and_result_opt = receiver
 							.try_recv()
 							.ok()
@@ -1064,6 +1084,10 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
 							let chunk = game.chunk_grid.map.get_mut(&chunk_coords).unwrap();
 							chunk.mesh = Some(chunk_mesh);
+							if *meshed_with_all_the_surrounding_chunks {
+								chunk.meshed_with_all_the_surrounding_chunks =
+									*meshed_with_all_the_surrounding_chunks;
+							}
 						}
 						is_not_done_yet
 					},
@@ -1074,13 +1098,18 @@ pub fn run() {
 			// Request meshing for chunks that can be meshed or should be re-meshed.
 			let chunk_coords_list: Vec<_> = game.chunk_grid.map.keys().copied().collect();
 			for chunk_coords in chunk_coords_list.iter().copied() {
-				let already_has_mesh = game
+				let tmp_meshing_allowed = game.enable_temporary_meshing_of_not_surrounded_chunks;
+				let (already_has_mesh, already_has_def_mesh) = game
 					.chunk_grid
 					.map
 					.get(&chunk_coords)
-					.unwrap()
-					.mesh
-					.is_some();
+					.map(|chunk| {
+						(
+							chunk.mesh.is_some(),
+							chunk.meshed_with_all_the_surrounding_chunks,
+						)
+					})
+					.unwrap();
 				let is_being_meshed = game
 					.worker_tasks
 					.iter()
@@ -1088,7 +1117,7 @@ pub fn run() {
 						WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
 						_ => false,
 					});
-				let can_be_meshed = 'can_be_meshed: {
+				let can_be_def_meshed = 'can_be_def_meshed: {
 					for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 						let blocks_was_generated = game
 							.chunk_grid
@@ -1096,7 +1125,7 @@ pub fn run() {
 							.get(&neighbor_chunk_coords)
 							.is_some_and(|chunk| chunk.blocks.is_some());
 						if !blocks_was_generated {
-							break 'can_be_meshed false;
+							break 'can_be_def_meshed false;
 						}
 					}
 					true
@@ -1106,10 +1135,16 @@ pub fn run() {
 					.map
 					.get(&chunk_coords)
 					.is_some_and(|chunk| chunk.remeshing_required);
-				if (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
-					&& can_be_meshed
-					&& game.worker_tasks.len() < game.pool.number_of_workers()
-				{
+				let shall_be_def_meshed = (((!already_has_mesh) && (!is_being_meshed))
+					|| should_be_remeshed)
+					&& can_be_def_meshed
+					&& game.worker_tasks.len() < game.pool.number_of_workers();
+				let shall_be_tmp_meshed = !is_being_meshed
+					&& !shall_be_def_meshed
+					&& !already_has_mesh
+					&& !already_has_def_mesh
+					&& game.worker_tasks.len() < game.pool.number_of_workers();
+				if shall_be_def_meshed || shall_be_tmp_meshed {
 					// Asking a worker for the meshing or remeshing of the chunk
 					game
 						.chunk_grid
@@ -1118,9 +1153,11 @@ pub fn run() {
 						.unwrap()
 						.remeshing_required = false;
 					let (sender, receiver) = std::sync::mpsc::channel();
-					game
-						.worker_tasks
-						.push(WorkerTask::MeshChunk(chunk_coords, receiver));
+					game.worker_tasks.push(WorkerTask::MeshChunk(
+						chunk_coords,
+						receiver,
+						shall_be_def_meshed,
+					));
 					let opaqueness_layer = game.chunk_grid.get_opaqueness_layer_around_chunk(
 						chunk_coords,
 						false,
