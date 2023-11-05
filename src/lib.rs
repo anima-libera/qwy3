@@ -1082,11 +1082,15 @@ pub fn run() {
 							.map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
-							let chunk = game.chunk_grid.map.get_mut(&chunk_coords).unwrap();
-							chunk.mesh = Some(chunk_mesh);
-							if *meshed_with_all_the_surrounding_chunks {
-								chunk.meshed_with_all_the_surrounding_chunks =
-									*meshed_with_all_the_surrounding_chunks;
+							if let Some(chunk) = game.chunk_grid.map.get_mut(&chunk_coords) {
+								chunk.mesh = Some(chunk_mesh);
+								if *meshed_with_all_the_surrounding_chunks {
+									chunk.meshed_with_all_the_surrounding_chunks =
+										*meshed_with_all_the_surrounding_chunks;
+								}
+							} else {
+								// The chunk have been unloaded since the meshing was ordered.
+								// It really can happen, for example when the player travels very fast.
 							}
 						}
 						is_not_done_yet
@@ -1237,9 +1241,11 @@ pub fn run() {
 								},
 								_ => false,
 							});
+					let workers_dedicated_to_meshing = 1;
 					if (!blocks_was_generated)
 						&& (!blocks_is_being_generated)
-						&& game.worker_tasks.len() < (game.pool.number_of_workers() - 2)
+						&& game.worker_tasks.len()
+							< (game.pool.number_of_workers() - workers_dedicated_to_meshing)
 					{
 						// Asking a worker for the generation of chunk blocks
 						let chunk_coords = neighbor_chunk_coords;
