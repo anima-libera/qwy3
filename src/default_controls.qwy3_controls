@@ -12,6 +12,7 @@ bind_control key:H print_coords
 bind_control key:O place_or_remove_block_under_player
 bind_control key:I toggle_world_generation
 bind_control key:U toggle_display_interface
+bind_control key:Y toggle_display_not_surrounded_chunks_as_boxes
 bind_control key:enter open_command_line
 bind_control mouse_button:left remove_block_at_target
 bind_control mouse_button:right place_block_at_target

@@ -65,6 +65,7 @@ enum Action {
 	RemoveBlockAtTarget,
 	ToggleDisplayInterface,
 	OpenCommandLine,
+	ToggleDisplayNotSurroundedChunksAsBoxes,
 }
 
 enum WorkerTask {
@@ -362,6 +363,7 @@ struct Game {
 	enable_display_phys_box: bool,
 	cursor_is_captured: bool,
 	enable_display_interface: bool,
+	enable_display_not_surrounded_chunks_as_boxes: bool,
 }
 
 fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
@@ -670,6 +672,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let margin_before_unloading = 60.0;
 
+	let enable_display_not_surrounded_chunks_as_boxes = false;
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -728,6 +732,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_display_phys_box,
 		cursor_is_captured,
 		enable_display_interface,
+		enable_display_not_surrounded_chunks_as_boxes,
 	};
 	(game, event_loop)
 }
@@ -958,6 +963,10 @@ pub fn run() {
 						},
 						(Action::OpenCommandLine, true) => {
 							game.typing_in_command_line = true;
+						},
+						(Action::ToggleDisplayNotSurroundedChunksAsBoxes, true) => {
+							game.enable_display_not_surrounded_chunks_as_boxes =
+								!game.enable_display_not_surrounded_chunks_as_boxes;
 						},
 						(_, false) => {},
 					}
@@ -1319,6 +1328,32 @@ pub fn run() {
 				)
 			});
 
+			let mut chunk_box_meshes = vec![];
+			if game.enable_display_not_surrounded_chunks_as_boxes {
+				for chunk_coords in game.chunk_grid.map.keys().copied() {
+					let is_surrounded = 'is_surrounded: {
+						for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
+							let blocks_was_generated =
+								game.chunk_grid.map.contains_key(&neighbor_chunk_coords);
+							if !blocks_was_generated {
+								break 'is_surrounded false;
+							}
+						}
+						true
+					};
+					if !is_surrounded {
+						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+						let inf = coords_span.block_coords_inf().map(|x| x as f32);
+						let dims = coords_span.cd._dimensions().map(|x| x as f32);
+						let pos = inf + dims / 2.0;
+						chunk_box_meshes.push(SimpleLineMesh::from_aligned_box(
+							&game.device,
+							&AlignedBox { pos, dims },
+						));
+					}
+				}
+			}
+
 			game.sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
 
 			let sun_camera_view_projection_matrix = {
@@ -1460,6 +1495,13 @@ pub fn run() {
 						render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
 						render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
 					}
+				}
+
+				for chunk_box_mesh in chunk_box_meshes.iter() {
+					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
+					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
+					render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
 				}
 			}
 

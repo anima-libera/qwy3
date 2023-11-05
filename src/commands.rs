@@ -85,6 +85,9 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					"remove_block_at_target" => Action::RemoveBlockAtTarget,
 					"toggle_display_interface" => Action::ToggleDisplayInterface,
 					"open_command_line" => Action::OpenCommandLine,
+					"toggle_display_not_surrounded_chunks_as_boxes" => {
+						Action::ToggleDisplayNotSurroundedChunksAsBoxes
+					},
 					"toggle_third_person_view" => {
 						println!(
 							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \

@@ -635,9 +635,10 @@ fn generate_xshaped_block_face_mesh(
 }
 
 pub struct Chunk {
-	_coords_span: ChunkCoordsSpan,
+	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
 	pub remeshing_required: bool,
+	pub meshed_with_all_the_surrounding_chunks: bool,
 	pub mesh: Option<ChunkMesh>,
 }
 
@@ -647,6 +648,7 @@ impl Chunk {
 			_coords_span: coords_span,
 			blocks: None,
 			remeshing_required: false,
+			meshed_with_all_the_surrounding_chunks: false,
 			mesh: None,
 		}
 	}
