@@ -31,6 +31,9 @@ pub enum WhichWorldGenerator {
 	Test010,
 	Test011,
 	Test012,
+	Test013,
+	Test014,
+	Test015,
 }
 impl WhichWorldGenerator {
 	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
@@ -48,6 +51,9 @@ impl WhichWorldGenerator {
 			"test010" => Some(WhichWorldGenerator::Test010),
 			"test011" => Some(WhichWorldGenerator::Test011),
 			"test012" => Some(WhichWorldGenerator::Test012),
+			"test013" => Some(WhichWorldGenerator::Test013),
+			"test014" => Some(WhichWorldGenerator::Test014),
+			"test015" => Some(WhichWorldGenerator::Test015),
 			_ => None,
 		}
 	}
@@ -67,6 +73,9 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed }),
 			WhichWorldGenerator::Test011 => Arc::new(WorldGeneratorTest011 { seed }),
 			WhichWorldGenerator::Test012 => Arc::new(WorldGeneratorTest012 { seed }),
+			WhichWorldGenerator::Test013 => Arc::new(WorldGeneratorTest013 { seed }),
+			WhichWorldGenerator::Test014 => Arc::new(WorldGeneratorTest014 { seed }),
+			WhichWorldGenerator::Test015 => Arc::new(WorldGeneratorTest015 { seed }),
 		}
 	}
 }
@@ -1050,6 +1059,132 @@ impl WorldGenerator for WorldGeneratorTest012 {
 				} else {
 					block_type_table.air_id()
 				}
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest013 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest013 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
+		let noise_d = noise::OctavedNoise::new(5, vec![self.seed, 4]);
+		let noise_e = noise::OctavedNoise::new(5, vec![self.seed, 5]);
+		let noise_f = noise::OctavedNoise::new(5, vec![self.seed, 6]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 100.0;
+			let a = noise_a.sample_3d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			let abc = cgmath::vec3(a - 0.5, b - 0.5, c - 0.5).normalize();
+			let detail_scale = 85.0;
+			let d = noise_d.sample_3d(coordsf / detail_scale, &[]);
+			let e = noise_e.sample_3d(coordsf / detail_scale, &[]);
+			let f = noise_f.sample_3d(coordsf / detail_scale, &[]);
+			let def = cgmath::vec3(d - 0.5, e - 0.5, f - 0.5).normalize();
+			let uwu = abc.dot(def);
+			uwu < -0.4 && def.z < 0.0
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest014 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest014 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
+		let coords_to_ground_uwu = |coords: BlockCoords| -> f32 {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 200.0;
+			let a = noise_a.sample_3d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			a.max(b).max(c) + a - c
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			coords_to_ground_uwu(coords) < coords_to_ground_uwu(coords + cgmath::vec3(0, 0, 1))
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest015 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest015 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
+		let coords_to_ground = |coords: BlockCoords| -> bool { todo!() };
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
 			};
 		}
 		chunk_blocks

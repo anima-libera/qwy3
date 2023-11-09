@@ -546,7 +546,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: window_surface_config.width as f32 / window_surface_config.height as f32,
 		field_of_view_y: TAU / 4.0,
-		near_plane: 0.001,
+		near_plane: 0.1,
 		far_plane: 400.0,
 	};
 	let camera_matrix_thingy = init_camera_matrix_thingy(Arc::clone(&device));
