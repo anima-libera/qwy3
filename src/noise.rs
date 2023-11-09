@@ -116,7 +116,7 @@ impl OctavedNoise {
 		octaves_noise_a(self.number_of_octaves, xs, &channels)
 	}
 
-	pub fn _sample_2d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
+	pub fn sample_2d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
 		let xs: [f32; 2] = coords.into();
 		self.sample(&xs, additional_channels)
 	}

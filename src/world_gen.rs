@@ -34,6 +34,9 @@ pub enum WhichWorldGenerator {
 	Test013,
 	Test014,
 	Test015,
+	Test016,
+	Test017,
+	Test018,
 }
 impl WhichWorldGenerator {
 	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
@@ -54,6 +57,9 @@ impl WhichWorldGenerator {
 			"test013" => Some(WhichWorldGenerator::Test013),
 			"test014" => Some(WhichWorldGenerator::Test014),
 			"test015" => Some(WhichWorldGenerator::Test015),
+			"test016" => Some(WhichWorldGenerator::Test016),
+			"test017" => Some(WhichWorldGenerator::Test017),
+			"test018" => Some(WhichWorldGenerator::Test018),
 			_ => None,
 		}
 	}
@@ -76,6 +82,9 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test013 => Arc::new(WorldGeneratorTest013 { seed }),
 			WhichWorldGenerator::Test014 => Arc::new(WorldGeneratorTest014 { seed }),
 			WhichWorldGenerator::Test015 => Arc::new(WorldGeneratorTest015 { seed }),
+			WhichWorldGenerator::Test016 => Arc::new(WorldGeneratorTest016 { seed }),
+			WhichWorldGenerator::Test017 => Arc::new(WorldGeneratorTest017 { seed }),
+			WhichWorldGenerator::Test018 => Arc::new(WorldGeneratorTest018 { seed }),
 		}
 	}
 }
@@ -1170,8 +1179,165 @@ impl WorldGenerator for WorldGeneratorTest015 {
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
-		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
-		let coords_to_ground = |coords: BlockCoords| -> bool { todo!() };
+		let coords_to_height = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
+			let scale_a = 100.0;
+			let scale_b = 80.0;
+			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
+			value < 0.001
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			if coords_to_height(coords) {
+				coords.z < 0
+			} else {
+				coords.z < 10
+			}
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest016 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest016 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let coords_to_void = |coords: BlockCoords| -> f32 {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
+			let scale_a = 100.0;
+			let scale_b = 80.0;
+			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
+			value / 0.001
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let void = coords_to_void(coords);
+			(coords.z as f32).abs() < 6.0 / (1.0 / (1.0 - void))
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest017 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest017 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let coords_to_void = |coords: BlockCoords| -> f32 {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
+			let scale_a = 100.0;
+			let scale_b = 80.0;
+			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
+			value / 0.001
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let void = coords_to_void(coords);
+			(coords.z as f32).abs() < (1.0 / void).log2() / (1.0 / (1.0 - void))
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+pub struct WorldGeneratorTest018 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest018 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let coords_to_void = |coords: BlockCoords| -> f32 {
+			let coordsf = coords.map(|x| x as f32);
+			let scale_a = 100.0;
+			let scale_b = 80.0;
+			let nosie_value_a = noise_a.sample_3d(coordsf / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_3d(coordsf / scale_b, &[]);
+			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
+			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
+			value / 0.001
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let void = coords_to_void(coords);
+			(coords.z as f32).abs() < 20.0 / (1.0 / (1.0 - void))
+		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
 			// Test chunk generation.
