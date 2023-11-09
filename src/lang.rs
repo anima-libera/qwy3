@@ -33,6 +33,7 @@ struct FunctionTypeSignature {
 #[derive(Clone)]
 enum BuiltInFunctionBody {
 	PrintInteger,
+	PrintThreeIntegers,
 }
 
 #[derive(Clone)]
@@ -100,6 +101,16 @@ impl Context {
 				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintInteger),
 			}),
 		);
+		variables.insert(
+			"print_three_integers".to_string(),
+			Value::Function(Function {
+				signature: FunctionTypeSignature {
+					arg_types: vec![Type::Integer, Type::Integer, Type::Integer],
+					return_type: Box::new(Type::Nothing),
+				},
+				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintThreeIntegers),
+			}),
+		);
 		Context { variables }
 	}
 }
@@ -109,6 +120,7 @@ enum Token {
 	Integer(i32),
 	OpenParenthesis,
 	CloseParenthesis,
+	Comma,
 	Semicolon,
 }
 
@@ -148,6 +160,10 @@ fn tokenize(code: &str) -> Vec<Token> {
 				chars.next();
 				tokens.push(Token::CloseParenthesis);
 			},
+			Some(',') => {
+				chars.next();
+				tokens.push(Token::Comma);
+			},
 			Some(';') => {
 				chars.next();
 				tokens.push(Token::Semicolon);
@@ -182,20 +198,24 @@ fn parse_expression(
 	};
 	if matches!(tokens.get(i), Some(Token::OpenParenthesis)) {
 		i += 1;
-		match parse_expression(&tokens[i..], context) {
-			Err(_) => todo!(),
-			Ok((sub_expression, number_of_tokens_parsed)) => {
-				i += number_of_tokens_parsed;
-				if matches!(tokens.get(i), Some(Token::CloseParenthesis)) {
-					i += 1;
-					expression = Expression::FunctionCall {
-						func: Box::new(expression),
-						args: vec![sub_expression],
-					};
-				} else {
-					todo!()
-				}
-			},
+		let mut args = vec![];
+		loop {
+			match parse_expression(&tokens[i..], context) {
+				Err(_) => todo!(),
+				Ok((sub_expression, number_of_tokens_parsed)) => {
+					i += number_of_tokens_parsed;
+					args.push(sub_expression);
+					if matches!(tokens.get(i), Some(Token::CloseParenthesis)) {
+						i += 1;
+						expression = Expression::FunctionCall { func: Box::new(expression), args };
+						break;
+					} else if matches!(tokens.get(i), Some(Token::Comma)) {
+						i += 1;
+					} else {
+						todo!("handle unexpected token error");
+					}
+				},
+			}
 		}
 	}
 	Ok((expression, i))
@@ -225,6 +245,17 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 							println!("printing integer {value}",);
 							Value::Nothing
 						},
+						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintThreeIntegers) => {
+							let values: Vec<_> = args_as_value
+								.iter()
+								.map(|arg| match arg {
+									Value::Integer(value) => value,
+									_ => todo!(),
+								})
+								.collect();
+							println!("printing three integers {values:?}",);
+							Value::Nothing
+						},
 					}
 				},
 				_ => todo!(),
@@ -242,4 +273,16 @@ pub fn run(code: &str, context: &Context) -> Result<(), ExpressionParsingError> 
 	let expression = parse(code, context)?;
 	evaluate_expression(&expression, context);
 	Ok(())
+}
+
+pub fn test_lang(test_id: u32) {
+	match test_id {
+		1 => {
+			run("print_integer(69)", &Context::with_builtins()).unwrap();
+		},
+		2 => {
+			run("print_three_integers(42, 2, 8)", &Context::with_builtins()).unwrap();
+		},
+		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
+	}
 }

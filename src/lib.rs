@@ -385,8 +385,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
-	if test_lang == Some(1) {
-		lang::run("print_integer(42)", &lang::Context::with_builtins()).unwrap();
+	if let Some(test_id) = test_lang {
+		println!("Test lang: test id {test_id}");
+		lang::test_lang(test_id);
 		std::process::exit(0);
 	}
 
