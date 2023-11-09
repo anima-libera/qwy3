@@ -1,17 +1,21 @@
 use std::{collections::HashMap, ops::Deref};
 
-#[derive(Clone)]
-enum Type {
+/// A type in the language.
+#[derive(Clone, Debug)]
+pub enum Type {
 	Nothing,
 	Integer,
 	Function(FunctionTypeSignature),
+	Type,
 }
 
+/// A value in the language.
 #[derive(Clone)]
 pub enum Value {
 	Nothing,
 	Integer(i32),
 	Function(Function),
+	Type(Type),
 }
 
 impl Value {
@@ -20,13 +24,25 @@ impl Value {
 			Value::Nothing => Type::Nothing,
 			Value::Integer(_) => Type::Integer,
 			Value::Function(Function { signature, .. }) => Type::Function(signature.clone()),
+			Value::Type(_) => Type::Type,
 		}
 	}
 }
 
-#[derive(Clone)]
-struct FunctionTypeSignature {
-	arg_types: Vec<Type>,
+/// Constraints on a type.
+/// Function signatures present such constraints for the argument types instead of directly types,
+/// so that functions such as `type_of` can take a value of any type as its argument.
+#[derive(Clone, Debug)]
+enum TypeConstraints {
+	/// Only one type satisfy the constraints.
+	Only(Type),
+	/// Any type can do.
+	Any,
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionTypeSignature {
+	arg_types: Vec<TypeConstraints>,
 	return_type: Box<Type>,
 }
 
@@ -34,6 +50,8 @@ struct FunctionTypeSignature {
 enum BuiltInFunctionBody {
 	PrintInteger,
 	PrintThreeIntegers,
+	ToType,
+	PrintType,
 }
 
 #[derive(Clone)]
@@ -95,7 +113,7 @@ impl Context {
 			"print_integer".to_string(),
 			Value::Function(Function {
 				signature: FunctionTypeSignature {
-					arg_types: vec![Type::Integer],
+					arg_types: vec![TypeConstraints::Only(Type::Integer)],
 					return_type: Box::new(Type::Nothing),
 				},
 				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintInteger),
@@ -105,10 +123,34 @@ impl Context {
 			"print_three_integers".to_string(),
 			Value::Function(Function {
 				signature: FunctionTypeSignature {
-					arg_types: vec![Type::Integer, Type::Integer, Type::Integer],
+					arg_types: vec![
+						TypeConstraints::Only(Type::Integer),
+						TypeConstraints::Only(Type::Integer),
+						TypeConstraints::Only(Type::Integer),
+					],
 					return_type: Box::new(Type::Nothing),
 				},
 				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintThreeIntegers),
+			}),
+		);
+		variables.insert(
+			"type_of".to_string(),
+			Value::Function(Function {
+				signature: FunctionTypeSignature {
+					arg_types: vec![TypeConstraints::Any],
+					return_type: Box::new(Type::Type),
+				},
+				body: FunctionBody::BuiltIn(BuiltInFunctionBody::ToType),
+			}),
+		);
+		variables.insert(
+			"print_type".to_string(),
+			Value::Function(Function {
+				signature: FunctionTypeSignature {
+					arg_types: vec![TypeConstraints::Only(Type::Type)],
+					return_type: Box::new(Type::Nothing),
+				},
+				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintType),
 			}),
 		);
 		Context { variables }
@@ -238,10 +280,14 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 							evaluate_expression(&body_expression, context)
 						},
 						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintInteger) => {
-							let value = match args_as_value[0] {
-								Value::Integer(value) => value,
-								_ => todo!(),
-							};
+							let values: Vec<_> = args_as_value
+								.iter()
+								.map(|arg| match arg {
+									Value::Integer(value) => value,
+									_ => todo!(),
+								})
+								.collect();
+							let value = values[0];
 							println!("printing integer {value}",);
 							Value::Nothing
 						},
@@ -254,6 +300,22 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 								})
 								.collect();
 							println!("printing three integers {values:?}",);
+							Value::Nothing
+						},
+						FunctionBody::BuiltIn(BuiltInFunctionBody::ToType) => {
+							let value_type = args_as_value[0].get_type();
+							Value::Type(value_type)
+						},
+						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintType) => {
+							let type_values: Vec<_> = args_as_value
+								.iter()
+								.map(|arg| match arg {
+									Value::Type(type_value) => type_value,
+									_ => todo!(),
+								})
+								.collect();
+							let type_value = type_values[0];
+							println!("printing integer {type_value:?}",);
 							Value::Nothing
 						},
 					}
@@ -282,6 +344,13 @@ pub fn test_lang(test_id: u32) {
 		},
 		2 => {
 			run("print_three_integers(42, 2, 8)", &Context::with_builtins()).unwrap();
+		},
+		3 => {
+			run(
+				"print_type(type_of(print_integer))",
+				&Context::with_builtins(),
+			)
+			.unwrap();
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
 	}
