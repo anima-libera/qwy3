@@ -1,4 +1,9 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{
+	collections::{HashMap, VecDeque},
+	ops::Deref,
+};
+
+use enum_iterator::Sequence;
 
 /// A type in the language.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -57,12 +62,91 @@ pub struct FunctionTypeSignature {
 	return_type: Box<Type>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Sequence)]
 enum BuiltInFunctionBody {
 	PrintInteger,
 	PrintThreeIntegers,
 	ToType,
 	PrintType,
+}
+
+impl BuiltInFunctionBody {
+	fn evaluate(self, arg_values: Vec<Value>) -> Value {
+		match self {
+			BuiltInFunctionBody::PrintInteger => {
+				let integer_value = match arg_values[0] {
+					Value::Integer(integer_value) => integer_value,
+					_ => todo!(),
+				};
+				println!("printing integer {integer_value}",);
+				Value::Nothing
+			},
+			BuiltInFunctionBody::PrintThreeIntegers => {
+				let integer_values: Vec<_> = arg_values
+					.iter()
+					.map(|arg| match arg {
+						Value::Integer(integer_value) => integer_value,
+						_ => todo!(),
+					})
+					.collect();
+				println!("printing three integers {integer_values:?}",);
+				Value::Nothing
+			},
+			BuiltInFunctionBody::ToType => {
+				let type_value = arg_values[0].get_type();
+				Value::Type(type_value)
+			},
+			BuiltInFunctionBody::PrintType => {
+				let type_value = match arg_values.into_iter().next().unwrap() {
+					Value::Type(type_value) => type_value,
+					_ => todo!(),
+				};
+				println!("printing type {type_value:?}",);
+				Value::Nothing
+			},
+		}
+	}
+
+	fn default_name(self) -> &'static str {
+		match self {
+			BuiltInFunctionBody::PrintInteger => "print_integer",
+			BuiltInFunctionBody::PrintThreeIntegers => "print_three_integers",
+			BuiltInFunctionBody::ToType => "type_of",
+			BuiltInFunctionBody::PrintType => "print_type",
+		}
+	}
+
+	fn function_type_signature(self) -> FunctionTypeSignature {
+		match self {
+			BuiltInFunctionBody::PrintInteger => FunctionTypeSignature {
+				arg_types: vec![TypeConstraints::Only(Type::Integer)],
+				return_type: Box::new(Type::Nothing),
+			},
+			BuiltInFunctionBody::PrintThreeIntegers => FunctionTypeSignature {
+				arg_types: vec![
+					TypeConstraints::Only(Type::Integer),
+					TypeConstraints::Only(Type::Integer),
+					TypeConstraints::Only(Type::Integer),
+				],
+				return_type: Box::new(Type::Nothing),
+			},
+			BuiltInFunctionBody::ToType => FunctionTypeSignature {
+				arg_types: vec![TypeConstraints::Any],
+				return_type: Box::new(Type::Type),
+			},
+			BuiltInFunctionBody::PrintType => FunctionTypeSignature {
+				arg_types: vec![TypeConstraints::Only(Type::Type)],
+				return_type: Box::new(Type::Nothing),
+			},
+		}
+	}
+
+	fn function(self) -> Function {
+		Function {
+			signature: self.function_type_signature(),
+			body: FunctionBody::BuiltIn(self),
+		}
+	}
 }
 
 #[derive(Clone)]
@@ -123,50 +207,12 @@ pub struct TypeContext {
 impl Context {
 	pub fn with_builtins() -> Context {
 		let mut variables = HashMap::new();
-		variables.insert(
-			"print_integer".to_string(),
-			Value::Function(Function {
-				signature: FunctionTypeSignature {
-					arg_types: vec![TypeConstraints::Only(Type::Integer)],
-					return_type: Box::new(Type::Nothing),
-				},
-				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintInteger),
-			}),
-		);
-		variables.insert(
-			"print_three_integers".to_string(),
-			Value::Function(Function {
-				signature: FunctionTypeSignature {
-					arg_types: vec![
-						TypeConstraints::Only(Type::Integer),
-						TypeConstraints::Only(Type::Integer),
-						TypeConstraints::Only(Type::Integer),
-					],
-					return_type: Box::new(Type::Nothing),
-				},
-				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintThreeIntegers),
-			}),
-		);
-		variables.insert(
-			"type_of".to_string(),
-			Value::Function(Function {
-				signature: FunctionTypeSignature {
-					arg_types: vec![TypeConstraints::Any],
-					return_type: Box::new(Type::Type),
-				},
-				body: FunctionBody::BuiltIn(BuiltInFunctionBody::ToType),
-			}),
-		);
-		variables.insert(
-			"print_type".to_string(),
-			Value::Function(Function {
-				signature: FunctionTypeSignature {
-					arg_types: vec![TypeConstraints::Only(Type::Type)],
-					return_type: Box::new(Type::Nothing),
-				},
-				body: FunctionBody::BuiltIn(BuiltInFunctionBody::PrintType),
-			}),
-		);
+		for built_in_function_body in enum_iterator::all::<BuiltInFunctionBody>() {
+			variables.insert(
+				built_in_function_body.default_name().to_string(),
+				Value::Function(built_in_function_body.function()),
+			);
+		}
 		Context { variables }
 	}
 
@@ -245,36 +291,64 @@ pub enum ExpressionParsingError {
 	UnexpectedToken(Token),
 	ErroneousType,
 	FunctionCallOnNotAFunction,
-	FunctionCallWithWrongNumberOfArguments,
-	FunctionCallWithAnArgumentOfTheWrongType,
+	FunctionCallTypeCheckError(FunctionCallTypeCheckError),
+}
+
+#[derive(Debug)]
+pub enum FunctionCallTypeCheckError {
+	WrongNumberOfArguments,
+	ArgumentOfErroneousType,
+	ArgumentOfTheWrongType,
+}
+
+fn check_function_call_argument_types(
+	function_type_signature: FunctionTypeSignature,
+	args: &[Expression],
+	type_context: &TypeContext,
+) -> Result<(), FunctionCallTypeCheckError> {
+	let expected_arg_count = function_type_signature.arg_types.len();
+	let actual_arg_count = args.len();
+	if expected_arg_count != actual_arg_count {
+		return Err(FunctionCallTypeCheckError::WrongNumberOfArguments);
+	}
+	for (arg_i, arg) in args.iter().enumerate() {
+		let type_constraints = &function_type_signature.arg_types[arg_i];
+		let actual_type = match arg.get_type(type_context) {
+			Ok(actual_type) => actual_type,
+			Err(_) => return Err(FunctionCallTypeCheckError::ArgumentOfErroneousType),
+		};
+		if !type_constraints.is_satisfied_by_type(&actual_type) {
+			return Err(FunctionCallTypeCheckError::ArgumentOfTheWrongType);
+		}
+	}
+	Ok(())
 }
 
 /// Parsing of some amount of tokens into an expression.
-/// The amount of token parsed is returned alongside the parsed expression.
 fn parse_expression(
-	tokens: &[Token],
+	tokens: &mut VecDeque<Token>,
 	type_context: &TypeContext,
-) -> Result<(Expression, usize), ExpressionParsingError> {
-	let mut i = 0;
-	let mut expression = match tokens.get(i) {
-		None => return Err(ExpressionParsingError::NoTokens),
+) -> Result<Expression, ExpressionParsingError> {
+	// Parsing a leaf expression, ie an expression that doesn't contain more arbitrary expressions.
+	let mut expression = match tokens.front().cloned() {
 		Some(Token::Integer(value)) => {
-			i += 1;
-			Expression::Const(Value::Integer(*value))
+			tokens.pop_front();
+			Expression::Const(Value::Integer(value))
 		},
 		Some(Token::Word(word)) => {
-			i += 1;
-			Expression::Variable(word.clone())
+			tokens.pop_front();
+			Expression::Variable(word)
 		},
 		Some(unexpected_token) => {
-			return Err(ExpressionParsingError::UnexpectedToken(
-				(*unexpected_token).clone(),
-			))
+			return Err(ExpressionParsingError::UnexpectedToken(unexpected_token))
 		},
+		None => return Err(ExpressionParsingError::NoTokens),
 	};
 
-	if matches!(tokens.get(i), Some(Token::OpenParenthesis)) {
-		i += 1;
+	// If an open parenthesis follow then it would mean that we are parsing a function call.
+	if matches!(tokens.front(), Some(Token::OpenParenthesis)) {
+		tokens.pop_front(); // The open parenthesis.
+
 		// Function call.
 		// We are now parsing the potential arguments up until the closing parenthesis.
 		// We still check that `expression` (that is called by this call) is a function.
@@ -289,44 +363,29 @@ fn parse_expression(
 
 		let mut args = vec![];
 		loop {
-			let (arg_expression, number_of_tokens_parsed) =
-				parse_expression(&tokens[i..], type_context)?;
-			i += number_of_tokens_parsed;
-			args.push(arg_expression);
+			args.push(parse_expression(tokens, type_context)?);
 
-			if matches!(tokens.get(i), Some(Token::CloseParenthesis)) {
-				i += 1;
+			if matches!(tokens.front(), Some(Token::CloseParenthesis)) {
+				tokens.pop_front(); // The close parenthesis.
+
 				// Closing parenthesis, this is the end of the arguments.
 				// We can now check the types of the arguments againts
 				// the type constraints of the function.
 
-				let expected_arg_count = function_type_signature.arg_types.len();
-				let actual_arg_count = args.len();
-				if expected_arg_count != actual_arg_count {
-					return Err(ExpressionParsingError::FunctionCallWithWrongNumberOfArguments);
-				}
-				for (arg_i, arg) in args.iter().enumerate() {
-					let type_constraints = &function_type_signature.arg_types[arg_i];
-					let actual_type = match arg.get_type(type_context) {
-						Ok(actual_type) => actual_type,
-						Err(_) => return Err(ExpressionParsingError::ErroneousType),
-					};
-					if !type_constraints.is_satisfied_by_type(&actual_type) {
-						return Err(ExpressionParsingError::FunctionCallWithAnArgumentOfTheWrongType);
-					}
-				}
+				check_function_call_argument_types(function_type_signature, &args, type_context)
+					.map_err(ExpressionParsingError::FunctionCallTypeCheckError)?;
 
 				expression = Expression::FunctionCall { func: Box::new(expression), args };
 				break;
-			} else if matches!(tokens.get(i), Some(Token::Comma)) {
-				i += 1;
+			} else if matches!(tokens.front(), Some(Token::Comma)) {
+				tokens.pop_front(); // The comma.
 			} else {
 				todo!("handle unexpected token error");
 			}
 		}
 	}
 
-	Ok((expression, i))
+	Ok(expression)
 }
 
 fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
@@ -337,7 +396,7 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 			let func_as_value = evaluate_expression(func, context);
 			match func_as_value {
 				Value::Function(Function { body, .. }) => {
-					let args_as_value: Vec<_> = args
+					let arg_values: Vec<_> = args
 						.iter()
 						.map(|arg| evaluate_expression(arg, context))
 						.collect();
@@ -345,44 +404,8 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 						FunctionBody::Expression(body_expression) => {
 							evaluate_expression(&body_expression, context)
 						},
-						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintInteger) => {
-							let values: Vec<_> = args_as_value
-								.iter()
-								.map(|arg| match arg {
-									Value::Integer(value) => value,
-									_ => todo!(),
-								})
-								.collect();
-							let value = values[0];
-							println!("printing integer {value}",);
-							Value::Nothing
-						},
-						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintThreeIntegers) => {
-							let values: Vec<_> = args_as_value
-								.iter()
-								.map(|arg| match arg {
-									Value::Integer(value) => value,
-									_ => todo!(),
-								})
-								.collect();
-							println!("printing three integers {values:?}",);
-							Value::Nothing
-						},
-						FunctionBody::BuiltIn(BuiltInFunctionBody::ToType) => {
-							let value_type = args_as_value[0].get_type();
-							Value::Type(value_type)
-						},
-						FunctionBody::BuiltIn(BuiltInFunctionBody::PrintType) => {
-							let type_values: Vec<_> = args_as_value
-								.iter()
-								.map(|arg| match arg {
-									Value::Type(type_value) => type_value,
-									_ => todo!(),
-								})
-								.collect();
-							let type_value = type_values[0];
-							println!("printing integer {type_value:?}",);
-							Value::Nothing
+						FunctionBody::BuiltIn(built_in_function_body) => {
+							built_in_function_body.evaluate(arg_values)
 						},
 					}
 				},
@@ -393,8 +416,8 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 }
 
 fn parse(code: &str, type_context: &TypeContext) -> Result<Expression, ExpressionParsingError> {
-	let tokens = tokenize(code);
-	parse_expression(&tokens, type_context).map(|(expression, _number_of_tokens_parsed)| expression)
+	let mut tokens = VecDeque::from(tokenize(code));
+	parse_expression(&mut tokens, type_context)
 }
 
 pub fn run(code: &str, context: &Context) -> Result<(), ExpressionParsingError> {

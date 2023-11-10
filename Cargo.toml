@@ -9,6 +9,7 @@ edition = "2021"
 bitvec = "1.0.1"
 bytemuck = { version = "1.13.1", features = [ "derive" ] }
 cgmath = "0.18.0"
+enum-iterator = "1.4.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
 image = "0.24.7"

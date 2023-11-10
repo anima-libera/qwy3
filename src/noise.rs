@@ -48,6 +48,7 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 	}
 	//println!("{xs:?} -> {a}, {b}");
 	positive_fract(f32::cos(a as f32 + b as f32))
+
 	// The version below is hopefully and probably faster than the version above >w<
 	/*
 	let mut v = 0.0;
@@ -60,6 +61,18 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 	}
 	//println!("{xs:?} -> {}", positive_fract(v));
 	positive_fract(v)
+	*/
+
+	/*
+	const K: u64 = 0x517cc1b727220a95;
+	let mut v = 0u64;
+	for (i, x) in xs.iter().enumerate() {
+		v = v
+			.rotate_left(5)
+			.bitxor((*x as u64) ^ i as u64)
+			.wrapping_mul(K);
+	}
+	v as f32 / u64::MAX as f32
 	*/
 }
 
