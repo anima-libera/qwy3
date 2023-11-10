@@ -985,6 +985,7 @@ pub fn run() {
 				let window_height = game.window_surface_config.height as f32;
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.map.len();
+				let block_count = chunk_count * game.cd.number_of_blocks();
 				let chunk_def_meshed_count = game
 					.chunk_grid
 					.map
@@ -1022,6 +1023,7 @@ pub fn run() {
 					&format!(
 						"fps: {fps}\n\
 						chunks loaded: {chunk_count}\n\
+						blocks loaded: {block_count}\n\
 						chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
 							{chunk_meshed_count}\n\
 						player coords: {player_block_coords_str}\n\
