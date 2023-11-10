@@ -1,4 +1,14 @@
-use std::f32::consts::TAU;
+//! N-dimensional noise!
+//!
+//! This is a very "we have noise at home" implementation, slow and all.
+//!
+//! The idea is that we consider an N-dimensional grid of nodes
+//! where nodes are at every interger coordinates
+//! and each node is given a noise value via `raw_noise_node`.
+//! Then, for points that don't fall on nodes, they fall in N-dimensional
+//! (hyper)cubic cells of 2^N nodes as vertices,
+//! we then interpolate the nodes' noise values with `raw_noise`.
+//! Then we can do the usual stuff and add octaves with `octaves_noise`.
 
 fn positive_fract(x: f32) -> f32 {
 	x - f32::floor(x)
@@ -20,10 +30,16 @@ fn smoothcos(x: f32) -> f32 {
 	} else if 1.0 < x {
 		1.0
 	} else {
+		use std::f32::consts::TAU;
 		(f32::cos((1.0 - x) * TAU / 2.0) + 1.0) / 2.0
 	}
 }
 
+/// If `x == x_inf` then the interpolation result is `dst_inf`,
+/// if `x == x_sup` then the interpolation result is `dst_sup`,
+/// and any value in betwee will lead to some interpolation between `dst_inf` and `dst_sup`.
+/// `x` is expected to be between `x_inf` (included) and `x_sup` (also included).
+/// The given `smoothing` function is used to smooth out the curve when x is near its edges.
 fn interpolate(
 	smoothing: &dyn Fn(f32) -> f32,
 	x: f32,
@@ -37,7 +53,7 @@ fn interpolate(
 	dst_inf + smooth_ratio * (dst_sup - dst_inf)
 }
 
-fn raw_noise_a_node(xs: &[i32]) -> f32 {
+fn raw_noise_node(xs: &[i32]) -> f32 {
 	let mut a = 0;
 	let mut b = 0;
 	for (i, x) in xs.iter().copied().enumerate() {
@@ -46,11 +62,13 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 		std::mem::swap(&mut a, &mut b);
 		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
 	}
-	//println!("{xs:?} -> {a}, {b}");
 	positive_fract(f32::cos(a as f32 + b as f32))
+}
 
-	// The version below is hopefully and probably faster than the version above >w<
-	/*
+fn _worst_raw_noise_node(xs: &[i32]) -> f32 {
+	// This raw noise is not used due to not covering the full [0.0, 1.0] interval
+	// as much as possible.
+	// For example, stuff like `if noise_value < 0.0001` will never trigger, which is bad.
 	let mut v = 0.0;
 	for (i, x) in xs.iter().copied().enumerate() {
 		let pool = [
@@ -59,26 +77,12 @@ fn raw_noise_a_node(xs: &[i32]) -> f32 {
 		v += pool[(i as i32 * 3 + x).rem_euclid(pool.len() as i32) as usize];
 		v += x as f32 / 11.0 + (x + 3 + i as i32) as f32 / 13.0 + x as f32 / 2.71;
 	}
-	//println!("{xs:?} -> {}", positive_fract(v));
 	positive_fract(v)
-	*/
-
-	/*
-	const K: u64 = 0x517cc1b727220a95;
-	let mut v = 0u64;
-	for (i, x) in xs.iter().enumerate() {
-		v = v
-			.rotate_left(5)
-			.bitxor((*x as u64) ^ i as u64)
-			.wrapping_mul(K);
-	}
-	v as f32 / u64::MAX as f32
-	*/
 }
 
-fn raw_noise_a(xs: &[f32], channels: &[i32]) -> f32 {
+fn raw_noise(xs: &[f32], channels: &[i32]) -> f32 {
 	if xs.is_empty() {
-		raw_noise_a_node(channels)
+		raw_noise_node(channels)
 	} else {
 		// For every continuous coordinate, we interpolate between
 		// the two closest discreet node values on that axis.
@@ -92,20 +96,20 @@ fn raw_noise_a(xs: &[f32], channels: &[i32]) -> f32 {
 		let mut channels_sup = Vec::from(channels);
 		channels_inf.push(f32::floor(xs[0]) as i32);
 		channels_sup.push(f32::floor(xs[0]) as i32 + 1);
-		let sub_noise_inf = raw_noise_a(&xs[1..], &channels_inf);
-		let sub_noise_sup = raw_noise_a(&xs[1..], &channels_sup);
+		let sub_noise_inf = raw_noise(&xs[1..], &channels_inf);
+		let sub_noise_sup = raw_noise(&xs[1..], &channels_sup);
 		let x_fract = positive_fract(xs[0]);
 		interpolate(&smoothcos, x_fract, 0.0, 1.0, sub_noise_inf, sub_noise_sup)
 	}
 }
 
-fn octaves_noise_a(number_of_octaves: u32, xs: &[f32], channels: &[i32]) -> f32 {
+fn octaves_noise(number_of_octaves: u32, xs: &[f32], channels: &[i32]) -> f32 {
 	let mut xs = Vec::from(xs);
 	let mut value_sum = 0.0;
 	let mut coef_sum = 0.0;
 	let mut coef = 1.0;
 	for _i in 0..number_of_octaves {
-		value_sum += coef * raw_noise_a(&xs, channels);
+		value_sum += coef * raw_noise(&xs, channels);
 		coef_sum += coef;
 		coef /= 2.0;
 		xs.iter_mut().for_each(|x| *x *= 2.0);
@@ -126,7 +130,7 @@ impl OctavedNoise {
 	pub fn sample(&self, xs: &[f32], additional_channels: &[i32]) -> f32 {
 		let mut channels = self.base_channels.clone();
 		channels.extend(additional_channels);
-		octaves_noise_a(self.number_of_octaves, xs, &channels)
+		octaves_noise(self.number_of_octaves, xs, &channels)
 	}
 
 	pub fn sample_2d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
