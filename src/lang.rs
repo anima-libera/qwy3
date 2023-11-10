@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::Deref};
 
 /// A type in the language.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Type {
 	Nothing,
 	Integer,
@@ -32,7 +32,7 @@ impl Value {
 /// Constraints on a type.
 /// Function signatures present such constraints for the argument types instead of directly types,
 /// so that functions such as `type_of` can take a value of any type as its argument.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 enum TypeConstraints {
 	/// Only one type satisfy the constraints.
 	Only(Type),
@@ -40,9 +40,20 @@ enum TypeConstraints {
 	Any,
 }
 
-#[derive(Clone, Debug)]
+impl TypeConstraints {
+	fn is_satisfied_by_type(&self, some_type: &Type) -> bool {
+		match self {
+			TypeConstraints::Only(expected_type) => expected_type == some_type,
+			TypeConstraints::Any => true,
+		}
+	}
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct FunctionTypeSignature {
 	arg_types: Vec<TypeConstraints>,
+	/// The returned type is really a type and not a type constraint to make sure that
+	/// expressions can all be typed.
 	return_type: Box<Type>,
 }
 
@@ -80,18 +91,18 @@ enum ExpressionTypingError {
 }
 
 impl Expression {
-	fn get_type(&self, context: &Context) -> Result<Type, ExpressionTypingError> {
+	fn get_type(&self, type_context: &TypeContext) -> Result<Type, ExpressionTypingError> {
 		match self {
 			Expression::Const(value) => Ok(value.get_type()),
 			Expression::Variable(name) => {
-				if let Some(variable_value) = context.variables.get(name) {
-					Ok(variable_value.get_type())
+				if let Some(variable_type) = type_context.variables.get(name) {
+					Ok(variable_type.clone())
 				} else {
 					Err(ExpressionTypingError::UnknownVariable)
 				}
 			},
 			Expression::FunctionCall { func, .. } => {
-				let func_type = func.get_type(context);
+				let func_type = func.get_type(type_context);
 				match func_type {
 					Ok(Type::Function(signature)) => Ok(signature.return_type.deref().clone()),
 					Err(_) => Err(ExpressionTypingError::FunctionCallOnErroneousType),
@@ -104,6 +115,9 @@ impl Expression {
 
 pub struct Context {
 	variables: HashMap<String, Value>,
+}
+pub struct TypeContext {
+	variables: HashMap<String, Type>,
 }
 
 impl Context {
@@ -155,9 +169,18 @@ impl Context {
 		);
 		Context { variables }
 	}
+
+	fn get_type_context(&self) -> TypeContext {
+		let mut variables = HashMap::new();
+		for (name, value) in self.variables.iter() {
+			variables.insert(name.to_owned(), value.get_type());
+		}
+		TypeContext { variables }
+	}
 }
 
-enum Token {
+#[derive(Clone, Debug)]
+pub enum Token {
 	Word(String),
 	Integer(i32),
 	OpenParenthesis,
@@ -219,11 +242,18 @@ fn tokenize(code: &str) -> Vec<Token> {
 #[derive(Debug)]
 pub enum ExpressionParsingError {
 	NoTokens,
+	UnexpectedToken(Token),
+	ErroneousType,
+	FunctionCallOnNotAFunction,
+	FunctionCallWithWrongNumberOfArguments,
+	FunctionCallWithAnArgumentOfTheWrongType,
 }
 
+/// Parsing of some amount of tokens into an expression.
+/// The amount of token parsed is returned alongside the parsed expression.
 fn parse_expression(
 	tokens: &[Token],
-	context: &Context,
+	type_context: &TypeContext,
 ) -> Result<(Expression, usize), ExpressionParsingError> {
 	let mut i = 0;
 	let mut expression = match tokens.get(i) {
@@ -236,30 +266,66 @@ fn parse_expression(
 			i += 1;
 			Expression::Variable(word.clone())
 		},
-		_ => todo!(),
+		Some(unexpected_token) => {
+			return Err(ExpressionParsingError::UnexpectedToken(
+				(*unexpected_token).clone(),
+			))
+		},
 	};
+
 	if matches!(tokens.get(i), Some(Token::OpenParenthesis)) {
 		i += 1;
+		// Function call.
+		// We are now parsing the potential arguments up until the closing parenthesis.
+		// We still check that `expression` (that is called by this call) is a function.
+
+		let function_type_signature = match expression.get_type(type_context) {
+			Ok(Type::Function(type_signature)) => type_signature,
+			Ok(_not_a_function_type) => {
+				return Err(ExpressionParsingError::FunctionCallOnNotAFunction)
+			},
+			Err(_) => return Err(ExpressionParsingError::ErroneousType),
+		};
+
 		let mut args = vec![];
 		loop {
-			match parse_expression(&tokens[i..], context) {
-				Err(_) => todo!(),
-				Ok((sub_expression, number_of_tokens_parsed)) => {
-					i += number_of_tokens_parsed;
-					args.push(sub_expression);
-					if matches!(tokens.get(i), Some(Token::CloseParenthesis)) {
-						i += 1;
-						expression = Expression::FunctionCall { func: Box::new(expression), args };
-						break;
-					} else if matches!(tokens.get(i), Some(Token::Comma)) {
-						i += 1;
-					} else {
-						todo!("handle unexpected token error");
+			let (arg_expression, number_of_tokens_parsed) =
+				parse_expression(&tokens[i..], type_context)?;
+			i += number_of_tokens_parsed;
+			args.push(arg_expression);
+
+			if matches!(tokens.get(i), Some(Token::CloseParenthesis)) {
+				i += 1;
+				// Closing parenthesis, this is the end of the arguments.
+				// We can now check the types of the arguments againts
+				// the type constraints of the function.
+
+				let expected_arg_count = function_type_signature.arg_types.len();
+				let actual_arg_count = args.len();
+				if expected_arg_count != actual_arg_count {
+					return Err(ExpressionParsingError::FunctionCallWithWrongNumberOfArguments);
+				}
+				for (arg_i, arg) in args.iter().enumerate() {
+					let type_constraints = &function_type_signature.arg_types[arg_i];
+					let actual_type = match arg.get_type(type_context) {
+						Ok(actual_type) => actual_type,
+						Err(_) => return Err(ExpressionParsingError::ErroneousType),
+					};
+					if !type_constraints.is_satisfied_by_type(&actual_type) {
+						return Err(ExpressionParsingError::FunctionCallWithAnArgumentOfTheWrongType);
 					}
-				},
+				}
+
+				expression = Expression::FunctionCall { func: Box::new(expression), args };
+				break;
+			} else if matches!(tokens.get(i), Some(Token::Comma)) {
+				i += 1;
+			} else {
+				todo!("handle unexpected token error");
 			}
 		}
 	}
+
 	Ok((expression, i))
 }
 
@@ -326,13 +392,13 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 	}
 }
 
-fn parse(code: &str, context: &Context) -> Result<Expression, ExpressionParsingError> {
+fn parse(code: &str, type_context: &TypeContext) -> Result<Expression, ExpressionParsingError> {
 	let tokens = tokenize(code);
-	parse_expression(&tokens, context).map(|(expression, _number_of_tokens_parsed)| expression)
+	parse_expression(&tokens, type_context).map(|(expression, _number_of_tokens_parsed)| expression)
 }
 
 pub fn run(code: &str, context: &Context) -> Result<(), ExpressionParsingError> {
-	let expression = parse(code, context)?;
+	let expression = parse(code, &context.get_type_context())?;
 	evaluate_expression(&expression, context);
 	Ok(())
 }
