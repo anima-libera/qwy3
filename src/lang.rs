@@ -78,7 +78,7 @@ impl BuiltInFunctionBody {
 					Value::Integer(integer_value) => integer_value,
 					_ => todo!(),
 				};
-				println!("printing integer {integer_value}",);
+				println!("printing integer {integer_value}");
 				Value::Nothing
 			},
 			BuiltInFunctionBody::PrintThreeIntegers => {
@@ -89,7 +89,7 @@ impl BuiltInFunctionBody {
 						_ => todo!(),
 					})
 					.collect();
-				println!("printing three integers {integer_values:?}",);
+				println!("printing three integers {integer_values:?}");
 				Value::Nothing
 			},
 			BuiltInFunctionBody::ToType => {
@@ -101,7 +101,7 @@ impl BuiltInFunctionBody {
 					Value::Type(type_value) => type_value,
 					_ => todo!(),
 				};
-				println!("printing type {type_value:?}",);
+				println!("printing type {type_value:?}");
 				Value::Nothing
 			},
 		}
@@ -362,27 +362,33 @@ fn parse_expression(
 		};
 
 		let mut args = vec![];
+		let mut comma_needed_before_next_argument = false;
 		loop {
-			args.push(parse_expression(tokens, type_context)?);
-
 			if matches!(tokens.front(), Some(Token::CloseParenthesis)) {
 				tokens.pop_front(); // The close parenthesis.
-
-				// Closing parenthesis, this is the end of the arguments.
-				// We can now check the types of the arguments againts
-				// the type constraints of the function.
-
-				check_function_call_argument_types(function_type_signature, &args, type_context)
-					.map_err(ExpressionParsingError::FunctionCallTypeCheckError)?;
-
-				expression = Expression::FunctionCall { func: Box::new(expression), args };
 				break;
-			} else if matches!(tokens.front(), Some(Token::Comma)) {
+			}
+
+			if comma_needed_before_next_argument && matches!(tokens.front(), Some(Token::Comma)) {
 				tokens.pop_front(); // The comma.
-			} else {
-				todo!("handle unexpected token error");
+				comma_needed_before_next_argument = false;
+			}
+
+			if !matches!(tokens.front(), Some(Token::CloseParenthesis)) {
+				if comma_needed_before_next_argument {
+					todo!("handle expected comma error");
+				} else {
+					args.push(parse_expression(tokens, type_context)?);
+					comma_needed_before_next_argument = true;
+				}
 			}
 		}
+
+		// We can now check the types of the arguments againts
+		// the type constraints of the function.
+		check_function_call_argument_types(function_type_signature, &args, type_context)
+			.map_err(ExpressionParsingError::FunctionCallTypeCheckError)?;
+		expression = Expression::FunctionCall { func: Box::new(expression), args };
 	}
 
 	Ok(expression)
@@ -440,6 +446,20 @@ pub fn test_lang(test_id: u32) {
 				&Context::with_builtins(),
 			)
 			.unwrap();
+		},
+		4 => {
+			let mut context = Context::with_builtins();
+			context.variables.insert(
+				"jaaj".to_string(),
+				Value::Function(Function {
+					signature: FunctionTypeSignature {
+						arg_types: vec![],
+						return_type: Box::new(Type::Integer),
+					},
+					body: FunctionBody::Expression(Box::new(Expression::Const(Value::Integer(420)))),
+				}),
+			);
+			run("print_integer(jaaj())", &context).unwrap();
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
 	}
