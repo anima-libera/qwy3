@@ -53,10 +53,20 @@ fn interpolate(
 	dst_inf + smooth_ratio * (dst_sup - dst_inf)
 }
 
-fn raw_noise_node(xs: &[i32]) -> f32 {
+#[derive(Clone, Copy)]
+enum CoordOrChannel {
+	Coord(f32),
+	Channel(i32),
+}
+
+fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 	let mut a = 0;
 	let mut b = 0;
 	for (i, x) in xs.iter().copied().enumerate() {
+		let x = match x {
+			CoordOrChannel::Channel(x) => x,
+			CoordOrChannel::Coord(_) => unreachable!(),
+		};
 		a ^= x;
 		b ^= 17 * (i as i32 + 11) + x;
 		std::mem::swap(&mut a, &mut b);
@@ -80,10 +90,12 @@ fn _worst_raw_noise_node(xs: &[i32]) -> f32 {
 	positive_fract(v)
 }
 
-fn raw_noise(xs: &[f32], channels: &[i32]) -> f32 {
-	if xs.is_empty() {
-		raw_noise_node(channels)
-	} else {
+fn raw_noise(xs: &mut [CoordOrChannel]) -> f32 {
+	let coord_index_and_value_opt = xs.iter().enumerate().find_map(|(i, x)| match x {
+		CoordOrChannel::Coord(value) => Some((i, *value)),
+		_ => None,
+	});
+	if let Some((coord_index, coord_value)) = coord_index_and_value_opt {
 		// For every continuous coordinate, we interpolate between
 		// the two closest discreet node values on that axis.
 		// In one dimension (with N <= x < N+1), it looks like this:
@@ -92,27 +104,33 @@ fn raw_noise(xs: &[f32], channels: &[i32]) -> f32 {
 		//      inf         sup
 		// And we can do that by calling this recursively
 		// with N and N+1 as additional channel parameters.
-		let mut channels_inf = Vec::from(channels);
-		let mut channels_sup = Vec::from(channels);
-		channels_inf.push(f32::floor(xs[0]) as i32);
-		channels_sup.push(f32::floor(xs[0]) as i32 + 1);
-		let sub_noise_inf = raw_noise(&xs[1..], &channels_inf);
-		let sub_noise_sup = raw_noise(&xs[1..], &channels_sup);
-		let x_fract = positive_fract(xs[0]);
+		let channel_inf = f32::floor(coord_value) as i32;
+		let channel_sup = f32::floor(coord_value) as i32 + 1;
+		xs[coord_index] = CoordOrChannel::Channel(channel_inf);
+		let sub_noise_inf = raw_noise(xs);
+		xs[coord_index] = CoordOrChannel::Channel(channel_sup);
+		let sub_noise_sup = raw_noise(xs);
+		xs[coord_index] = CoordOrChannel::Coord(coord_value);
+		let x_fract = positive_fract(coord_value);
 		interpolate(&smoothcos, x_fract, 0.0, 1.0, sub_noise_inf, sub_noise_sup)
+	} else {
+		raw_noise_node(xs)
 	}
 }
 
-fn octaves_noise(number_of_octaves: u32, xs: &[f32], channels: &[i32]) -> f32 {
-	let mut xs = Vec::from(xs);
+fn octaves_noise(number_of_octaves: u32, xs: &mut [CoordOrChannel]) -> f32 {
 	let mut value_sum = 0.0;
 	let mut coef_sum = 0.0;
 	let mut coef = 1.0;
 	for _i in 0..number_of_octaves {
-		value_sum += coef * raw_noise(&xs, channels);
+		value_sum += coef * raw_noise(xs);
 		coef_sum += coef;
 		coef /= 2.0;
-		xs.iter_mut().for_each(|x| *x *= 2.0);
+		xs.iter_mut().for_each(|x| {
+			if let CoordOrChannel::Coord(x) = x {
+				*x *= 2.0
+			}
+		});
 	}
 	value_sum / coef_sum
 }
@@ -128,9 +146,18 @@ impl OctavedNoise {
 	}
 
 	pub fn sample(&self, xs: &[f32], additional_channels: &[i32]) -> f32 {
-		let mut channels = self.base_channels.clone();
-		channels.extend(additional_channels);
-		octaves_noise(self.number_of_octaves, xs, &channels)
+		let mut working_xs =
+			Vec::with_capacity(xs.len() + self.base_channels.len() + additional_channels.len());
+		for x in xs {
+			working_xs.push(CoordOrChannel::Coord(*x));
+		}
+		for channel in &self.base_channels {
+			working_xs.push(CoordOrChannel::Channel(*channel));
+		}
+		for channel in additional_channels {
+			working_xs.push(CoordOrChannel::Channel(*channel));
+		}
+		octaves_noise(self.number_of_octaves, &mut working_xs)
 	}
 
 	pub fn sample_2d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
