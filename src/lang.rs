@@ -1,3 +1,10 @@
+//! Qwy3 internal command programming language, named Qwy Script.
+//!
+//! This module handles the parsing and interpretation of programs.
+//! Programs are statically typed (because it feels so much better when
+//! working with values which we know the type of at program writing time,
+//! this is a subjective opinion but this is also my project >w<).
+
 use std::{
 	collections::{HashMap, VecDeque},
 	ops::Deref,
@@ -5,7 +12,7 @@ use std::{
 
 use enum_iterator::Sequence;
 
-/// A type in the language.
+/// A type in Qwy Script.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Type {
 	Nothing,
@@ -14,8 +21,8 @@ pub enum Type {
 	Type,
 }
 
-/// A value in the language.
-#[derive(Clone)]
+/// A value in Qwy Script.
+#[derive(Clone, Debug)]
 pub enum Value {
 	Nothing,
 	Integer(i32),
@@ -38,7 +45,7 @@ impl Value {
 /// Function signatures present such constraints for the argument types instead of directly types,
 /// so that functions such as `type_of` can take a value of any type as its argument.
 #[derive(Clone, PartialEq, Eq, Debug)]
-enum TypeConstraints {
+pub enum TypeConstraints {
 	/// Only one type satisfy the constraints.
 	Only(Type),
 	/// Any type can do.
@@ -62,7 +69,7 @@ pub struct FunctionTypeSignature {
 	return_type: Box<Type>,
 }
 
-#[derive(Clone, Copy, Sequence)]
+#[derive(Clone, Copy, Sequence, Debug)]
 enum BuiltInFunctionBody {
 	PrintInteger,
 	PrintThreeIntegers,
@@ -149,26 +156,30 @@ impl BuiltInFunctionBody {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum FunctionBody {
 	BuiltIn(BuiltInFunctionBody),
 	Expression(Box<Expression>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Function {
 	signature: FunctionTypeSignature,
 	body: FunctionBody,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Expression {
 	Const(Value),
 	Variable(String),
-	FunctionCall { func: Box<Expression>, args: Vec<Expression> },
+	FunctionCall {
+		func: Box<(Expression, Span)>,
+		args: Vec<(Expression, Span)>,
+	},
 }
 
-enum ExpressionTypingError {
+#[derive(Debug)]
+pub enum ExpressionTypingError {
 	FunctionCallOnNotAFunction,
 	FunctionCallOnErroneousType,
 	UnknownVariable,
@@ -186,7 +197,7 @@ impl Expression {
 				}
 			},
 			Expression::FunctionCall { func, .. } => {
-				let func_type = func.get_type(type_context);
+				let func_type = func.0.get_type(type_context);
 				match func_type {
 					Ok(Type::Function(signature)) => Ok(signature.return_type.deref().clone()),
 					Err(_) => Err(ExpressionTypingError::FunctionCallOnErroneousType),
@@ -225,6 +236,14 @@ impl Context {
 	}
 }
 
+/// Indicates a non-empty interval in the qwyllang source code text.
+#[derive(Clone, Debug)]
+pub struct Span {
+	start: usize,
+	/// Included.
+	end: usize,
+}
+
 #[derive(Clone, Debug)]
 pub enum Token {
 	Word(String),
@@ -235,49 +254,57 @@ pub enum Token {
 	Semicolon,
 }
 
-fn tokenize(code: &str) -> Vec<Token> {
+fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 	let mut tokens = vec![];
-	let mut chars = code.chars().peekable();
+	let mut chars = qwy_script_code.chars().enumerate().peekable();
 
 	while chars.peek().is_some() {
 		match chars.peek().copied() {
 			None => break,
-			Some(c) if c.is_whitespace() => {
+			Some((_i, c)) if c.is_whitespace() => {
 				chars.next();
 			},
-			Some(c) if c.is_ascii_alphabetic() || c == '_' => {
+			Some((i, c)) if c.is_ascii_alphabetic() || c == '_' => {
 				let mut word = String::new();
+				let start = i;
+				let mut end = i;
 				while chars
 					.peek()
 					.copied()
-					.is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+					.is_some_and(|(_i, c)| c.is_ascii_alphabetic() || c == '_')
 				{
-					word.push(chars.next().unwrap());
+					let (i, c) = chars.next().unwrap();
+					word.push(c);
+					end = i;
 				}
-				tokens.push(Token::Word(word));
+				tokens.push((Token::Word(word), Span { start, end }));
 			},
-			Some(c) if c.is_ascii_digit() => {
+			Some((i, c)) if c.is_ascii_digit() => {
 				let mut value = 0;
-				while chars.peek().is_some_and(|c| c.is_ascii_digit()) {
-					value = value * 10 + chars.next().unwrap() as i32 - '0' as i32;
+				let start = i;
+				let mut end = i;
+				while chars.peek().is_some_and(|(_i, c)| c.is_ascii_digit()) {
+					let (i, c) = chars.next().unwrap();
+					value = value * 10 + c as i32 - '0' as i32;
+					end = i;
 				}
-				tokens.push(Token::Integer(value));
+				tokens.push((Token::Integer(value), Span { start, end }));
 			},
-			Some('(') => {
+			Some((i, '(')) => {
 				chars.next();
-				tokens.push(Token::OpenParenthesis);
+				tokens.push((Token::OpenParenthesis, Span { start: i, end: i }));
 			},
-			Some(')') => {
+			Some((i, ')')) => {
 				chars.next();
-				tokens.push(Token::CloseParenthesis);
+				tokens.push((Token::CloseParenthesis, Span { start: i, end: i }));
 			},
-			Some(',') => {
+			Some((i, ',')) => {
 				chars.next();
-				tokens.push(Token::Comma);
+				tokens.push((Token::Comma, Span { start: i, end: i }));
 			},
-			Some(';') => {
+			Some((i, ';')) => {
 				chars.next();
-				tokens.push(Token::Semicolon);
+				tokens.push((Token::Semicolon, Span { start: i, end: i }));
 			},
 			_ => todo!(),
 		}
@@ -287,98 +314,109 @@ fn tokenize(code: &str) -> Vec<Token> {
 
 #[derive(Debug)]
 pub enum ExpressionParsingError {
-	NoTokens,
-	UnexpectedToken(Token),
-	ErroneousType,
-	FunctionCallOnNotAFunction,
-	FunctionCallTypeCheckError(FunctionCallTypeCheckError),
-}
-
-#[derive(Debug)]
-pub enum FunctionCallTypeCheckError {
-	WrongNumberOfArguments,
-	ArgumentOfErroneousType,
-	ArgumentOfTheWrongType,
-}
-
-fn check_function_call_argument_types(
-	function_type_signature: FunctionTypeSignature,
-	args: &[Expression],
-	type_context: &TypeContext,
-) -> Result<(), FunctionCallTypeCheckError> {
-	let expected_arg_count = function_type_signature.arg_types.len();
-	let actual_arg_count = args.len();
-	if expected_arg_count != actual_arg_count {
-		return Err(FunctionCallTypeCheckError::WrongNumberOfArguments);
-	}
-	for (arg_i, arg) in args.iter().enumerate() {
-		let type_constraints = &function_type_signature.arg_types[arg_i];
-		let actual_type = match arg.get_type(type_context) {
-			Ok(actual_type) => actual_type,
-			Err(_) => return Err(FunctionCallTypeCheckError::ArgumentOfErroneousType),
-		};
-		if !type_constraints.is_satisfied_by_type(&actual_type) {
-			return Err(FunctionCallTypeCheckError::ArgumentOfTheWrongType);
-		}
-	}
-	Ok(())
+	ExpectedStartOfExpressionButGotNoMoreTokens,
+	ExpectedStartOfExpressionButGotUnexpectedToken(Token, Span),
+	ExpectedCommaToSeparateArgumentsButGotUnexpectedToken(Token, Span),
+	ExpectedCommaOrClosedParenthesisButGotNoMoreTokens,
+	ExpressionTypingError(ExpressionTypingError, Span),
+	/// The actual type of the not-a-function, and its span.
+	FunctionCallOnNotAFunction(Type, Span),
+	/// The span is the span of the whole function call in which there is a typeing error.
+	FunctionCallTypingError(FunctionCallTypingError, Span),
 }
 
 /// Parsing of some amount of tokens into an expression.
 fn parse_expression(
-	tokens: &mut VecDeque<Token>,
+	tokens: &mut VecDeque<(Token, Span)>,
 	type_context: &TypeContext,
-) -> Result<Expression, ExpressionParsingError> {
+) -> Result<(Expression, Span), ExpressionParsingError> {
 	// Parsing a leaf expression, ie an expression that doesn't contain more arbitrary expressions.
-	let mut expression = match tokens.front().cloned() {
-		Some(Token::Integer(value)) => {
+	let (mut expression, mut expression_span) = match tokens.front().cloned() {
+		Some((Token::Integer(value), span)) => {
 			tokens.pop_front();
-			Expression::Const(Value::Integer(value))
+			(Expression::Const(Value::Integer(value)), span)
 		},
-		Some(Token::Word(word)) => {
+		Some((Token::Word(word), span)) => {
 			tokens.pop_front();
-			Expression::Variable(word)
+			(Expression::Variable(word), span)
 		},
-		Some(unexpected_token) => {
-			return Err(ExpressionParsingError::UnexpectedToken(unexpected_token))
+		Some((unexpected_token, span)) => {
+			return Err(
+				ExpressionParsingError::ExpectedStartOfExpressionButGotUnexpectedToken(
+					unexpected_token,
+					span,
+				),
+			)
 		},
-		None => return Err(ExpressionParsingError::NoTokens),
+		None => return Err(ExpressionParsingError::ExpectedStartOfExpressionButGotNoMoreTokens),
 	};
 
+	if let Err(expression_typing_error) = expression.get_type(type_context) {
+		return Err(ExpressionParsingError::ExpressionTypingError(
+			expression_typing_error,
+			expression_span,
+		));
+	}
+
 	// If an open parenthesis follow then it would mean that we are parsing a function call.
-	if matches!(tokens.front(), Some(Token::OpenParenthesis)) {
+	if let Some((Token::OpenParenthesis, open_parenthesis_span)) = tokens.front().cloned() {
 		tokens.pop_front(); // The open parenthesis.
 
 		// Function call.
 		// We are now parsing the potential arguments up until the closing parenthesis.
 		// We still check that `expression` (that is called by this call) is a function.
 
+		let function_span = expression_span.clone();
+		let mut argument_list_in_parenthesis_span = open_parenthesis_span;
+
 		let function_type_signature = match expression.get_type(type_context) {
 			Ok(Type::Function(type_signature)) => type_signature,
-			Ok(_not_a_function_type) => {
-				return Err(ExpressionParsingError::FunctionCallOnNotAFunction)
+			Ok(not_a_function_type) => {
+				return Err(ExpressionParsingError::FunctionCallOnNotAFunction(
+					not_a_function_type,
+					expression_span.clone(),
+				))
 			},
-			Err(_) => return Err(ExpressionParsingError::ErroneousType),
+			Err(_) => unreachable!("handled earlier"),
 		};
 
-		let mut args = vec![];
+		// Comma-separated sequence of arguments, ended by a closed parenthesis.
+		// A comma just before the closed parenthesis is allowed, it makses sense when
+		// having the closing parenthesis on an other line than the last argument.
+		let mut args_and_spans = vec![];
 		let mut comma_needed_before_next_argument = false;
 		loop {
-			if matches!(tokens.front(), Some(Token::CloseParenthesis)) {
+			if let Some((Token::CloseParenthesis, close_parenthesis_span)) = tokens.front() {
+				expression_span.end = close_parenthesis_span.end;
+				argument_list_in_parenthesis_span.end = close_parenthesis_span.end;
 				tokens.pop_front(); // The close parenthesis.
 				break;
 			}
 
-			if comma_needed_before_next_argument && matches!(tokens.front(), Some(Token::Comma)) {
+			if comma_needed_before_next_argument
+				&& matches!(tokens.front(), Some((Token::Comma, _comma_span)))
+			{
 				tokens.pop_front(); // The comma.
 				comma_needed_before_next_argument = false;
 			}
 
-			if !matches!(tokens.front(), Some(Token::CloseParenthesis)) {
+			if !matches!(tokens.front(), Some((Token::CloseParenthesis, _span))) {
 				if comma_needed_before_next_argument {
-					todo!("handle expected comma error");
+					if let Some((unexpected_token, span)) = tokens.pop_front() {
+						return Err(
+							ExpressionParsingError::ExpectedCommaToSeparateArgumentsButGotUnexpectedToken(
+								unexpected_token,
+								span,
+							),
+						);
+					} else {
+						return Err(
+							ExpressionParsingError::ExpectedCommaOrClosedParenthesisButGotNoMoreTokens,
+						);
+					}
 				} else {
-					args.push(parse_expression(tokens, type_context)?);
+					// An argument.
+					args_and_spans.push(parse_expression(tokens, type_context)?);
 					comma_needed_before_next_argument = true;
 				}
 			}
@@ -386,12 +424,111 @@ fn parse_expression(
 
 		// We can now check the types of the arguments againts
 		// the type constraints of the function.
-		check_function_call_argument_types(function_type_signature, &args, type_context)
-			.map_err(ExpressionParsingError::FunctionCallTypeCheckError)?;
-		expression = Expression::FunctionCall { func: Box::new(expression), args };
+		check_function_call_argument_types(
+			function_type_signature,
+			function_span.clone(),
+			argument_list_in_parenthesis_span,
+			&args_and_spans,
+			type_context,
+		)
+		.map_err(|function_type_error| {
+			ExpressionParsingError::FunctionCallTypingError(
+				function_type_error,
+				expression_span.clone(),
+			)
+		})?;
+		expression = Expression::FunctionCall {
+			func: Box::new((expression, function_span)),
+			args: args_and_spans,
+		};
 	}
 
-	Ok(expression)
+	Ok((expression, expression_span))
+}
+
+#[derive(Debug)]
+pub enum FunctionCallTypingError {
+	/// How many arguments are missing.
+	MissingArguments {
+		how_many_args_missing: u32,
+		args_list_in_parenthesis_span: Span,
+		function_span: Span,
+	},
+	/// How many arguments are there above the expected number of arguments.
+	TooManyArguments {
+		how_many_args_in_excess: u32,
+		args_in_excess_span: Span,
+		function_span: Span,
+	},
+	/// Argument expression typing error and argument span.
+	ArgumentExpressionTypingError {
+		arg_typing_error: ExpressionTypingError,
+		faulty_arg_span: Span,
+		function_span: Span,
+	},
+	/// Expected type constraints by the called function type signature,
+	/// the (wrong) type of the faulty argument, and the span of that argument,
+	/// and the span of the called function.
+	ArgumentOfTheWrongType {
+		parameter_type_constraints: TypeConstraints,
+		wrong_argumpent_type: Type,
+		wrong_argument_span: Span,
+		functions_span: Span,
+	},
+}
+
+fn check_function_call_argument_types(
+	function_type_signature: FunctionTypeSignature,
+	function_span: Span,
+	args_list_in_parenthesis_span: Span,
+	args: &[(Expression, Span)],
+	type_context: &TypeContext,
+) -> Result<(), FunctionCallTypingError> {
+	// Check for the number of arguments.
+	let expected_arg_count = function_type_signature.arg_types.len();
+	let actual_arg_count = args.len();
+	if expected_arg_count > actual_arg_count {
+		return Err(FunctionCallTypingError::MissingArguments {
+			how_many_args_missing: (expected_arg_count - actual_arg_count) as u32,
+			args_list_in_parenthesis_span,
+			function_span,
+		});
+	}
+	if expected_arg_count < actual_arg_count {
+		let args_in_excess_span = Span {
+			start: args[expected_arg_count].1.start,
+			end: args[actual_arg_count - 1].1.end,
+		};
+		return Err(FunctionCallTypingError::TooManyArguments {
+			how_many_args_in_excess: (actual_arg_count - expected_arg_count) as u32,
+			args_in_excess_span,
+			function_span,
+		});
+	}
+
+	// Check for the types of the arguments.
+	for (arg_i, (arg, arg_span)) in args.iter().enumerate() {
+		let type_constraints = &function_type_signature.arg_types[arg_i];
+		let actual_type = match arg.get_type(type_context) {
+			Ok(actual_type) => actual_type,
+			Err(type_error) => {
+				return Err(FunctionCallTypingError::ArgumentExpressionTypingError {
+					arg_typing_error: type_error,
+					faulty_arg_span: arg_span.clone(),
+					function_span,
+				})
+			},
+		};
+		if !type_constraints.is_satisfied_by_type(&actual_type) {
+			return Err(FunctionCallTypingError::ArgumentOfTheWrongType {
+				parameter_type_constraints: type_constraints.clone(),
+				wrong_argumpent_type: actual_type,
+				wrong_argument_span: arg_span.clone(),
+				functions_span: function_span,
+			});
+		}
+	}
+	Ok(())
 }
 
 fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
@@ -399,35 +536,37 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 		Expression::Const(value) => value.clone(),
 		Expression::Variable(name) => context.variables.get(name).unwrap().clone(),
 		Expression::FunctionCall { func, args } => {
-			let func_as_value = evaluate_expression(func, context);
-			match func_as_value {
-				Value::Function(Function { body, .. }) => {
-					let arg_values: Vec<_> = args
-						.iter()
-						.map(|arg| evaluate_expression(arg, context))
-						.collect();
-					match body {
-						FunctionBody::Expression(body_expression) => {
-							evaluate_expression(&body_expression, context)
-						},
-						FunctionBody::BuiltIn(built_in_function_body) => {
-							built_in_function_body.evaluate(arg_values)
-						},
-					}
-				},
+			let func_value = evaluate_expression(&func.0, context);
+			let func_body = match func_value {
+				Value::Function(Function { body, .. }) => body,
 				_ => todo!(),
+			};
+			let arg_values: Vec<_> = args
+				.iter()
+				.map(|arg| evaluate_expression(&arg.0, context))
+				.collect();
+			match func_body {
+				FunctionBody::Expression(body_expression) => {
+					evaluate_expression(&body_expression, context)
+				},
+				FunctionBody::BuiltIn(built_in_function_body) => {
+					built_in_function_body.evaluate(arg_values)
+				},
 			}
 		},
 	}
 }
 
-fn parse(code: &str, type_context: &TypeContext) -> Result<Expression, ExpressionParsingError> {
-	let mut tokens = VecDeque::from(tokenize(code));
+fn parse(
+	qwy_script_code: &str,
+	type_context: &TypeContext,
+) -> Result<(Expression, Span), ExpressionParsingError> {
+	let mut tokens = VecDeque::from(tokenize(qwy_script_code));
 	parse_expression(&mut tokens, type_context)
 }
 
-pub fn run(code: &str, context: &Context) -> Result<(), ExpressionParsingError> {
-	let expression = parse(code, &context.get_type_context())?;
+pub fn run(qwy_script_code: &str, context: &Context) -> Result<(), ExpressionParsingError> {
+	let (expression, _span) = parse(qwy_script_code, &context.get_type_context())?;
 	evaluate_expression(&expression, context);
 	Ok(())
 }
@@ -460,6 +599,11 @@ pub fn test_lang(test_id: u32) {
 				}),
 			);
 			run("print_integer(jaaj())", &context).unwrap();
+		},
+		5 => {
+			let context = Context::with_builtins();
+			let parsing_error = parse("print_integer()", &context.get_type_context()).unwrap_err();
+			dbg!(parsing_error);
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
 	}
