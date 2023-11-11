@@ -453,27 +453,33 @@ pub enum FunctionCallTypingError {
 		how_many_args_missing: u32,
 		args_list_in_parenthesis_span: Span,
 		function_span: Span,
+		function_call_span: Span,
 	},
 	/// How many arguments are there above the expected number of arguments.
 	TooManyArguments {
 		how_many_args_in_excess: u32,
 		args_in_excess_span: Span,
 		function_span: Span,
+		function_call_span: Span,
 	},
 	/// Argument expression typing error and argument span.
 	ArgumentExpressionTypingError {
 		arg_typing_error: ExpressionTypingError,
 		faulty_arg_span: Span,
+		faulty_arg_index: usize,
 		function_span: Span,
+		function_call_span: Span,
 	},
 	/// Expected type constraints by the called function type signature,
 	/// the (wrong) type of the faulty argument, and the span of that argument,
 	/// and the span of the called function.
 	ArgumentOfTheWrongType {
 		parameter_type_constraints: TypeConstraints,
-		wrong_argumpent_type: Type,
-		wrong_argument_span: Span,
-		functions_span: Span,
+		wrong_arg_type: Type,
+		wrong_arg_span: Span,
+		wrong_arg_index: usize,
+		function_span: Span,
+		function_call_span: Span,
 	},
 }
 
@@ -484,6 +490,11 @@ fn check_function_call_argument_types(
 	args: &[(Expression, Span)],
 	type_context: &TypeContext,
 ) -> Result<(), FunctionCallTypingError> {
+	let function_call_span = Span {
+		start: function_span.start,
+		end: args_list_in_parenthesis_span.end,
+	};
+
 	// Check for the number of arguments.
 	let expected_arg_count = function_type_signature.arg_types.len();
 	let actual_arg_count = args.len();
@@ -492,6 +503,7 @@ fn check_function_call_argument_types(
 			how_many_args_missing: (expected_arg_count - actual_arg_count) as u32,
 			args_list_in_parenthesis_span,
 			function_span,
+			function_call_span,
 		});
 	}
 	if expected_arg_count < actual_arg_count {
@@ -503,6 +515,7 @@ fn check_function_call_argument_types(
 			how_many_args_in_excess: (actual_arg_count - expected_arg_count) as u32,
 			args_in_excess_span,
 			function_span,
+			function_call_span,
 		});
 	}
 
@@ -515,16 +528,20 @@ fn check_function_call_argument_types(
 				return Err(FunctionCallTypingError::ArgumentExpressionTypingError {
 					arg_typing_error: type_error,
 					faulty_arg_span: arg_span.clone(),
+					faulty_arg_index: arg_i,
 					function_span,
+					function_call_span,
 				})
 			},
 		};
 		if !type_constraints.is_satisfied_by_type(&actual_type) {
 			return Err(FunctionCallTypingError::ArgumentOfTheWrongType {
 				parameter_type_constraints: type_constraints.clone(),
-				wrong_argumpent_type: actual_type,
-				wrong_argument_span: arg_span.clone(),
-				functions_span: function_span,
+				wrong_arg_type: actual_type,
+				wrong_arg_span: arg_span.clone(),
+				wrong_arg_index: arg_i,
+				function_span,
+				function_call_span,
 			});
 		}
 	}
