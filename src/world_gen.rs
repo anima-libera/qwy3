@@ -19,6 +19,7 @@ pub trait WorldGenerator {
 
 pub enum WhichWorldGenerator {
 	Default,
+	Flat,
 	Test001,
 	Test002,
 	Test003,
@@ -44,6 +45,7 @@ impl WhichWorldGenerator {
 	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
 		match name {
 			"default" => Some(WhichWorldGenerator::Default),
+			"flat" => Some(WhichWorldGenerator::Flat),
 			"test001" => Some(WhichWorldGenerator::Test001),
 			"test002" => Some(WhichWorldGenerator::Test002),
 			"test003" => Some(WhichWorldGenerator::Test003),
@@ -71,6 +73,7 @@ impl WhichWorldGenerator {
 	pub fn get_the_actual_generator(self, seed: i32) -> Arc<dyn WorldGenerator + Sync + Send> {
 		match self {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
+			WhichWorldGenerator::Flat => Arc::new(FlatWorldGenerator {}),
 			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed }),
 			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed }),
 			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed }),
@@ -171,7 +174,32 @@ impl WorldGenerator for DefaultWorldGenerator {
 	}
 }
 
-pub struct WorldGeneratorTest001 {
+struct FlatWorldGenerator {}
+
+impl WorldGenerator for FlatWorldGenerator {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			#[allow(clippy::comparison_chain)]
+			{
+				*chunk_blocks.get_mut(coords).unwrap() = if coords.z < 0 {
+					block_type_table.ground_id()
+				} else if coords.z == 0 {
+					block_type_table.kinda_grass_id()
+				} else {
+					block_type_table.air_id()
+				};
+			}
+		}
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorTest001 {
 	pub seed: i32,
 }
 
@@ -247,7 +275,7 @@ impl WorldGenerator for WorldGeneratorTest001 {
 	}
 }
 
-pub struct WorldGeneratorTest002 {
+struct WorldGeneratorTest002 {
 	pub seed: i32,
 }
 
@@ -283,7 +311,7 @@ impl WorldGenerator for WorldGeneratorTest002 {
 	}
 }
 
-pub struct WorldGeneratorTest003 {
+struct WorldGeneratorTest003 {
 	pub seed: i32,
 }
 
@@ -328,7 +356,7 @@ impl WorldGenerator for WorldGeneratorTest003 {
 	}
 }
 
-pub struct WorldGeneratorTest004 {
+struct WorldGeneratorTest004 {
 	pub seed: i32,
 }
 
@@ -397,7 +425,7 @@ fn distance_to_segment(
 	(pa - ba * h).magnitude()
 }
 
-pub struct WorldGeneratorTest005 {
+struct WorldGeneratorTest005 {
 	pub seed: i32,
 }
 
@@ -450,7 +478,7 @@ impl WorldGenerator for WorldGeneratorTest005 {
 	}
 }
 
-pub struct WorldGeneratorTest006 {
+struct WorldGeneratorTest006 {
 	pub seed: i32,
 }
 
@@ -518,7 +546,7 @@ impl WorldGenerator for WorldGeneratorTest006 {
 	}
 }
 
-pub struct WorldGeneratorTest007 {
+struct WorldGeneratorTest007 {
 	pub seed: i32,
 }
 
@@ -596,7 +624,7 @@ impl WorldGenerator for WorldGeneratorTest007 {
 	}
 }
 
-pub struct WorldGeneratorTest008 {
+struct WorldGeneratorTest008 {
 	pub seed: i32,
 }
 
@@ -680,7 +708,7 @@ impl WorldGenerator for WorldGeneratorTest008 {
 	}
 }
 
-pub struct WorldGeneratorTest009 {
+struct WorldGeneratorTest009 {
 	pub seed: i32,
 }
 
@@ -761,7 +789,7 @@ impl WorldGenerator for WorldGeneratorTest009 {
 	}
 }
 
-pub struct WorldGeneratorTest010 {
+struct WorldGeneratorTest010 {
 	pub seed: i32,
 }
 
@@ -865,7 +893,7 @@ impl WorldGenerator for WorldGeneratorTest010 {
 	}
 }
 
-pub struct WorldGeneratorTest011 {
+struct WorldGeneratorTest011 {
 	pub seed: i32,
 }
 
@@ -985,7 +1013,7 @@ impl WorldGenerator for WorldGeneratorTest011 {
 	}
 }
 
-pub struct WorldGeneratorTest012 {
+struct WorldGeneratorTest012 {
 	pub seed: i32,
 }
 
@@ -1080,7 +1108,7 @@ impl WorldGenerator for WorldGeneratorTest012 {
 	}
 }
 
-pub struct WorldGeneratorTest013 {
+struct WorldGeneratorTest013 {
 	pub seed: i32,
 }
 
@@ -1130,7 +1158,7 @@ impl WorldGenerator for WorldGeneratorTest013 {
 	}
 }
 
-pub struct WorldGeneratorTest014 {
+struct WorldGeneratorTest014 {
 	pub seed: i32,
 }
 
@@ -1173,7 +1201,7 @@ impl WorldGenerator for WorldGeneratorTest014 {
 	}
 }
 
-pub struct WorldGeneratorTest015 {
+struct WorldGeneratorTest015 {
 	pub seed: i32,
 }
 
@@ -1223,7 +1251,7 @@ impl WorldGenerator for WorldGeneratorTest015 {
 	}
 }
 
-pub struct WorldGeneratorTest016 {
+struct WorldGeneratorTest016 {
 	pub seed: i32,
 }
 
@@ -1270,7 +1298,7 @@ impl WorldGenerator for WorldGeneratorTest016 {
 	}
 }
 
-pub struct WorldGeneratorTest017 {
+struct WorldGeneratorTest017 {
 	pub seed: i32,
 }
 
@@ -1317,7 +1345,7 @@ impl WorldGenerator for WorldGeneratorTest017 {
 	}
 }
 
-pub struct WorldGeneratorTest018 {
+struct WorldGeneratorTest018 {
 	pub seed: i32,
 }
 
@@ -1363,7 +1391,7 @@ impl WorldGenerator for WorldGeneratorTest018 {
 	}
 }
 
-pub struct WorldGeneratorTest019 {
+struct WorldGeneratorTest019 {
 	pub seed: i32,
 }
 
@@ -1407,7 +1435,7 @@ impl WorldGenerator for WorldGeneratorTest019 {
 	}
 }
 
-pub struct WorldGeneratorTest020 {
+struct WorldGeneratorTest020 {
 	pub seed: i32,
 }
 
