@@ -488,7 +488,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let walking_rightward = false;
 
 	let player_phys = AlignedPhysBox {
-		aligned_box: AlignedBox { pos: (5.5, 5.5, 5.5).into(), dims: (0.8, 0.8, 1.8).into() },
+		aligned_box: AlignedBox { pos: (0.0, 0.0, 2.0).into(), dims: (0.8, 0.8, 1.8).into() },
 		motion: (0.0, 0.0, 0.0).into(),
 		gravity_factor: 1.0,
 	};

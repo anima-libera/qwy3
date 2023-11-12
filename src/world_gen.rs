@@ -20,6 +20,7 @@ pub trait WorldGenerator {
 pub enum WhichWorldGenerator {
 	Default,
 	Flat,
+	Empty,
 	Test001,
 	Test002,
 	Test003,
@@ -46,6 +47,7 @@ impl WhichWorldGenerator {
 		match name {
 			"default" => Some(WhichWorldGenerator::Default),
 			"flat" => Some(WhichWorldGenerator::Flat),
+			"empty" => Some(WhichWorldGenerator::Empty),
 			"test001" => Some(WhichWorldGenerator::Test001),
 			"test002" => Some(WhichWorldGenerator::Test002),
 			"test003" => Some(WhichWorldGenerator::Test003),
@@ -74,6 +76,7 @@ impl WhichWorldGenerator {
 		match self {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
 			WhichWorldGenerator::Flat => Arc::new(FlatWorldGenerator {}),
+			WhichWorldGenerator::Empty => Arc::new(EmptyWorldGenerator {}),
 			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed }),
 			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed }),
 			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed }),
@@ -194,6 +197,27 @@ impl WorldGenerator for FlatWorldGenerator {
 					block_type_table.air_id()
 				};
 			}
+		}
+		chunk_blocks
+	}
+}
+
+struct EmptyWorldGenerator {}
+
+impl WorldGenerator for EmptyWorldGenerator {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			*chunk_blocks.get_mut(coords).unwrap() =
+				if coords.z == -1 && (-3..=3).contains(&coords.x) && (-3..=3).contains(&coords.y) {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.air_id()
+				};
 		}
 		chunk_blocks
 	}
