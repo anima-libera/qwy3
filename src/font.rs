@@ -12,6 +12,9 @@ struct CharacterDetails {
 
 pub struct Font {
 	character_details_map: HashMap<char, CharacterDetails>,
+	/// Character details for the special character that is used to represent errors
+	/// in representing normal characters.
+	error_character_detials: CharacterDetails,
 }
 
 impl Font {
@@ -76,7 +79,9 @@ impl Font {
 			character_details_map.insert(punctuation, details);
 		}
 
-		Font { character_details_map }
+		let error_character_detials = coords_asset_to_details(109, 0, 3, 5);
+
+		Font { character_details_map, error_character_detials }
 	}
 
 	fn character_details(&self, character: char) -> Option<CharacterDetails> {
@@ -102,7 +107,7 @@ impl Font {
 			} else {
 				let character_details = self
 					.character_details(character)
-					.unwrap_or_else(|| self.character_details('?').unwrap());
+					.unwrap_or(self.error_character_detials.clone());
 				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
 					/ (window_width / 2.0)
 					* scale;

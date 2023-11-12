@@ -905,7 +905,8 @@ pub fn run() {
 						0.5,
 					),
 					&format!(
-						"fps: {fps}\n\
+						"²²²²²² ²²²\n\
+						fps: {fps}\n\
 						chunks loaded: {chunk_count}\n\
 						blocks loaded: {block_count}\n\
 						chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
