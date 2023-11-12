@@ -1,6 +1,7 @@
 use std::{f32::consts::TAU, sync::Arc};
 
 use cgmath::{InnerSpace, MetricSpace};
+use enum_iterator::Sequence;
 
 use crate::coords::NonOrientedAxis;
 pub(crate) use crate::{
@@ -17,6 +18,7 @@ pub trait WorldGenerator {
 	) -> ChunkBlocks;
 }
 
+#[derive(Clone, Copy, Sequence)]
 pub enum WhichWorldGenerator {
 	Default,
 	Flat,
@@ -42,33 +44,33 @@ pub enum WhichWorldGenerator {
 	Test019,
 	Test020,
 }
+
 impl WhichWorldGenerator {
-	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
-		match name {
-			"default" => Some(WhichWorldGenerator::Default),
-			"flat" => Some(WhichWorldGenerator::Flat),
-			"empty" => Some(WhichWorldGenerator::Empty),
-			"test001" => Some(WhichWorldGenerator::Test001),
-			"test002" => Some(WhichWorldGenerator::Test002),
-			"test003" => Some(WhichWorldGenerator::Test003),
-			"test004" => Some(WhichWorldGenerator::Test004),
-			"test005" => Some(WhichWorldGenerator::Test005),
-			"test006" => Some(WhichWorldGenerator::Test006),
-			"test007" => Some(WhichWorldGenerator::Test007),
-			"test008" => Some(WhichWorldGenerator::Test008),
-			"test009" => Some(WhichWorldGenerator::Test009),
-			"test010" => Some(WhichWorldGenerator::Test010),
-			"test011" => Some(WhichWorldGenerator::Test011),
-			"test012" => Some(WhichWorldGenerator::Test012),
-			"test013" => Some(WhichWorldGenerator::Test013),
-			"test014" => Some(WhichWorldGenerator::Test014),
-			"test015" => Some(WhichWorldGenerator::Test015),
-			"test016" => Some(WhichWorldGenerator::Test016),
-			"test017" => Some(WhichWorldGenerator::Test017),
-			"test018" => Some(WhichWorldGenerator::Test018),
-			"test019" => Some(WhichWorldGenerator::Test019),
-			"test020" => Some(WhichWorldGenerator::Test020),
-			_ => None,
+	pub fn name(self) -> &'static str {
+		match self {
+			WhichWorldGenerator::Default => "default",
+			WhichWorldGenerator::Flat => "flat",
+			WhichWorldGenerator::Empty => "empty",
+			WhichWorldGenerator::Test001 => "test001",
+			WhichWorldGenerator::Test002 => "test002",
+			WhichWorldGenerator::Test003 => "test003",
+			WhichWorldGenerator::Test004 => "test004",
+			WhichWorldGenerator::Test005 => "test005",
+			WhichWorldGenerator::Test006 => "test006",
+			WhichWorldGenerator::Test007 => "test007",
+			WhichWorldGenerator::Test008 => "test008",
+			WhichWorldGenerator::Test009 => "test009",
+			WhichWorldGenerator::Test010 => "test010",
+			WhichWorldGenerator::Test011 => "test011",
+			WhichWorldGenerator::Test012 => "test012",
+			WhichWorldGenerator::Test013 => "test013",
+			WhichWorldGenerator::Test014 => "test014",
+			WhichWorldGenerator::Test015 => "test015",
+			WhichWorldGenerator::Test016 => "test016",
+			WhichWorldGenerator::Test017 => "test017",
+			WhichWorldGenerator::Test018 => "test018",
+			WhichWorldGenerator::Test019 => "test019",
+			WhichWorldGenerator::Test020 => "test020",
 		}
 	}
 
@@ -98,6 +100,13 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test019 => Arc::new(WorldGeneratorTest019 { seed }),
 			WhichWorldGenerator::Test020 => Arc::new(WorldGeneratorTest020 { seed }),
 		}
+	}
+
+	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
+		// This is actually not that worse from a match from names to variants,
+		// and it allows for the "compile time table" to be in the other direction,
+		// which makes errors less probable.
+		enum_iterator::all::<WhichWorldGenerator>().find(|&variant| variant.name() == name)
 	}
 }
 

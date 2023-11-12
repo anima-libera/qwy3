@@ -92,6 +92,11 @@ pub fn parse_command_line_arguments() -> CommandLineSettings {
 							Argument \"--gen\" is expected to be followed by a world generator name, \
 							but \"{unknown_name}\" is not a knonw generator name"
 						);
+						println!("Here is the list of possible generator names:");
+						for variant in enum_iterator::all::<WhichWorldGenerator>() {
+							let name = variant.name();
+							println!(" - {name}");
+						}
 					},
 					None => {
 						println!(
