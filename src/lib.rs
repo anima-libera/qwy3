@@ -521,9 +521,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
 
-	let window_width = window_surface_config.width as f32;
-	let top_left_info_mesh =
-		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
+	let top_left_info_mesh = SimpleTextureMesh::from_vertices(&device, vec![]);
 
 	// Most useful feature in the known universe.
 	let random_message_pool = [
@@ -549,8 +547,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_display_interface = true;
 
-	let command_line_mesh =
-		font.simple_texture_mesh_from_text(&device, window_width, cgmath::point3(0.0, 0.0, 0.0), "h");
+	let command_line_mesh = SimpleTextureMesh::from_vertices(&device, vec![]);
 	let command_line_content = String::new();
 	let typing_in_command_line = false;
 	let command_confirmed = false;
@@ -896,6 +893,7 @@ pub fn run() {
 					format!("{x},{y},{z}")
 				};
 				let random_message = game.random_message;
+				let settings = font::TextRenderingSettings::new();
 				game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
@@ -904,9 +902,9 @@ pub fn run() {
 						(-4.0 + window_height) / window_width,
 						0.5,
 					),
+					settings,
 					&format!(
-						"²²²²²² ²²²\n\
-						fps: {fps}\n\
+						"fps: {fps}\n\
 						chunks loaded: {chunk_count}\n\
 						blocks loaded: {block_count}\n\
 						chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
@@ -926,10 +924,12 @@ pub fn run() {
 			{
 				let window_width = game.window_surface_config.width as f32;
 				let command_line_content = game.command_line_content.as_str();
+				let settings = font::TextRenderingSettings::new();
 				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
 					cgmath::point3(0.0 + 4.0 / window_width, (-4.0) / window_width, 0.5),
+					settings,
 					command_line_content,
 				);
 			}

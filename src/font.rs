@@ -15,6 +15,7 @@ pub struct Font {
 	/// Character details for the special character that is used to represent errors
 	/// in representing normal characters.
 	error_character_detials: CharacterDetails,
+	max_character_height_in_pixels: i32,
 }
 
 impl Font {
@@ -81,7 +82,13 @@ impl Font {
 
 		let error_character_detials = coords_asset_to_details(109, 0, 3, 5);
 
-		Font { character_details_map, error_character_detials }
+		let max_character_height_in_pixels = 5;
+
+		Font {
+			character_details_map,
+			error_character_detials,
+			max_character_height_in_pixels,
+		}
 	}
 
 	fn character_details(&self, character: char) -> Option<CharacterDetails> {
@@ -93,24 +100,31 @@ impl Font {
 		device: &wgpu::Device,
 		window_width: f32,
 		mut coords: cgmath::Point3<f32>,
+		settings: TextRenderingSettings,
 		text: &str,
 	) -> SimpleTextureMesh {
+		// Size of a screen pixel in Wgpu/Vulkan XY-plane coordinate space.
+		// It would be `1.0 / window_width` if the coord space would go from 0.0 to 1.0,
+		// but since it goes from -1.0 to 1.0 then it is twice as big so we account for that.
+		let screen_pixel_size = 2.0 / window_width;
+
 		let initial_coords = coords;
 		let mut vertices = vec![];
 		for character in text.chars() {
-			let scale = 3.0;
 			if character == ' ' {
-				coords.x += 3.0 / (window_width / 2.0) * scale;
+				coords.x += settings.space_character_scaled_width * screen_pixel_size * settings.scale;
 			} else if character == '\n' {
 				coords.x = initial_coords.x;
-				coords.y -= 6.0 / (window_width / 2.0) * scale;
+				coords.y -=
+					self.max_character_height_in_pixels as f32 * screen_pixel_size * settings.scale
+						+ settings.inbetween_lines_space_height * screen_pixel_size;
 			} else {
 				let character_details = self
 					.character_details(character)
 					.unwrap_or(self.error_character_detials.clone());
 				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
-					/ (window_width / 2.0)
-					* scale;
+					* screen_pixel_size
+					* settings.scale;
 				vertices.extend(SimpleTextureMesh::vertices_for_rect(
 					coords,
 					dimensions,
@@ -118,10 +132,34 @@ impl Font {
 					character_details.rect_in_atlas.texture_rect_in_atlas_wh,
 				));
 				coords.x +=
-					(character_details.dimensions_in_pixels.x + 1) as f32 / (window_width / 2.0) * scale;
+					character_details.dimensions_in_pixels.x as f32 * screen_pixel_size * settings.scale
+						+ settings.inbetween_characters_space_width * screen_pixel_size;
 			}
 		}
 
 		SimpleTextureMesh::from_vertices(device, vertices)
+	}
+}
+
+pub struct TextRenderingSettings {
+	/// Factor by which are stretched the character textures.
+	/// Should be integer values or else it won't render pixel-perfect ><.
+	scale: f32,
+	/// In screen pixels times `scale`.
+	space_character_scaled_width: f32,
+	/// In screen pixels.
+	inbetween_characters_space_width: f32,
+	/// In screen pixels.
+	inbetween_lines_space_height: f32,
+}
+
+impl TextRenderingSettings {
+	pub fn new() -> TextRenderingSettings {
+		TextRenderingSettings {
+			scale: 3.0,
+			space_character_scaled_width: 3.0,
+			inbetween_characters_space_width: 3.0,
+			inbetween_lines_space_height: 3.0,
+		}
 	}
 }
