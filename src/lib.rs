@@ -105,6 +105,7 @@ impl SimpleTextureMesh {
 			dimensions,
 			texture_rect_in_atlas_xy,
 			texture_rect_in_atlas_wh,
+			[1.0, 1.0, 1.0],
 		);
 		SimpleTextureMesh::from_vertices(device, vertices)
 	}
@@ -114,6 +115,7 @@ impl SimpleTextureMesh {
 		dimensions: cgmath::Vector2<f32>,
 		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
 		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+		color_factor: [f32; 3],
 	) -> Vec<shaders::simple_texture_2d::SimpleTextureVertexPod> {
 		use shaders::simple_texture_2d::SimpleTextureVertexPod;
 		let mut vertices = vec![];
@@ -131,12 +133,36 @@ impl SimpleTextureMesh {
 		let atlas_d = texture_rect_in_atlas_xy
 			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(1.0, 1.0));
 
-		vertices.push(SimpleTextureVertexPod { position: a.into(), coords_in_atlas: atlas_a.into() });
-		vertices.push(SimpleTextureVertexPod { position: b.into(), coords_in_atlas: atlas_b.into() });
-		vertices.push(SimpleTextureVertexPod { position: c.into(), coords_in_atlas: atlas_c.into() });
-		vertices.push(SimpleTextureVertexPod { position: c.into(), coords_in_atlas: atlas_c.into() });
-		vertices.push(SimpleTextureVertexPod { position: b.into(), coords_in_atlas: atlas_b.into() });
-		vertices.push(SimpleTextureVertexPod { position: d.into(), coords_in_atlas: atlas_d.into() });
+		vertices.push(SimpleTextureVertexPod {
+			position: a.into(),
+			coords_in_atlas: atlas_a.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: b.into(),
+			coords_in_atlas: atlas_b.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: c.into(),
+			coords_in_atlas: atlas_c.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: c.into(),
+			coords_in_atlas: atlas_c.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: b.into(),
+			coords_in_atlas: atlas_b.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: d.into(),
+			coords_in_atlas: atlas_d.into(),
+			color_factor,
+		});
 
 		vertices
 	}
@@ -405,8 +431,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	for y in 0..font_image.height() {
 		for x in 0..font_image.width() {
 			let pixel_from_image = font_image.as_rgba8().unwrap().get_pixel(x, y);
+			// We keep black as white (to multiply with colors) and discard everything else.
+			let color = if pixel_from_image.0 == [0, 0, 0, 255] {
+				[255, 255, 255, 255]
+			} else {
+				[0, 0, 0, 0]
+			};
 			let index = 4 * ((y as usize + 32) * ATLAS_DIMS.0 + x as usize);
-			atlas_data[index..(index + 4)].clone_from_slice(pixel_from_image.0.as_slice());
+			atlas_data[index..(index + 4)].clone_from_slice(&color);
 		}
 	}
 	let font = font::Font::font_01();

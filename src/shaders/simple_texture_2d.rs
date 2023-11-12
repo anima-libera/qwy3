@@ -9,6 +9,7 @@ pub(crate) use crate::BindingThingy;
 pub struct SimpleTextureVertexPod {
 	pub position: [f32; 3],
 	pub coords_in_atlas: [f32; 2],
+	pub color_factor: [f32; 3],
 }
 
 pub struct BindingThingies<'a> {
@@ -36,6 +37,11 @@ pub fn render_pipeline(
 				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
 				shader_location: 1,
 				format: wgpu::VertexFormat::Float32x2,
+			},
+			wgpu::VertexAttribute {
+				offset: std::mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+				shader_location: 2,
+				format: wgpu::VertexFormat::Float32x3,
 			},
 		],
 	};

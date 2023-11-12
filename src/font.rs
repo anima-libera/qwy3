@@ -130,6 +130,7 @@ impl Font {
 					dimensions,
 					character_details.rect_in_atlas.texture_rect_in_atlas_xy,
 					character_details.rect_in_atlas.texture_rect_in_atlas_wh,
+					settings.color,
 				));
 				coords.x +=
 					character_details.dimensions_in_pixels.x as f32 * screen_pixel_size * settings.scale
@@ -151,6 +152,7 @@ pub struct TextRenderingSettings {
 	inbetween_characters_space_width: f32,
 	/// In screen pixels.
 	inbetween_lines_space_height: f32,
+	color: [f32; 3],
 }
 
 impl TextRenderingSettings {
@@ -160,6 +162,7 @@ impl TextRenderingSettings {
 			space_character_scaled_width: 3.0,
 			inbetween_characters_space_width: 3.0,
 			inbetween_lines_space_height: 3.0,
+			color: [0.0, 0.0, 0.0],
 		}
 	}
 }
