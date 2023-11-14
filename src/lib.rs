@@ -957,10 +957,17 @@ pub fn run() {
 				let window_width = game.window_surface_config.width as f32;
 				let command_line_content = game.command_line_content.as_str();
 				let settings = font::TextRenderingSettings::new();
+				let dimensions =
+					game
+						.font
+						.dimensions_of_text(window_width, settings.clone(), command_line_content);
+				let x = 0.0 + 4.0 / window_width - dimensions.0 / 2.0;
+				// Somehow this makes it pixel perfect, somehow?
+				let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
 				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
-					cgmath::point3(0.0 + 4.0 / window_width, (-4.0) / window_width, 0.5),
+					cgmath::point3(x, (-40.0) / window_width, 0.5),
 					settings,
 					command_line_content,
 				);

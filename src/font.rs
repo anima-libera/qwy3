@@ -95,6 +95,49 @@ impl Font {
 		self.character_details_map.get(&character).cloned()
 	}
 
+	/// Returns (width, height) in screen pixels of the smallest rect
+	/// that would contain the rendering of the given text.
+	pub fn dimensions_of_text(
+		&self,
+		window_width: f32,
+		settings: TextRenderingSettings,
+		text: &str,
+	) -> (f32, f32) {
+		// Size of a screen pixel in Wgpu/Vulkan XY-plane coordinate space.
+		// It would be `1.0 / window_width` if the coord space would go from 0.0 to 1.0,
+		// but since it goes from -1.0 to 1.0 then it is twice as big so we account for that.
+		let screen_pixel_size = 2.0 / window_width;
+
+		let mut max_width = 0.0f32;
+		let mut max_height = 0.0f32;
+
+		let mut coords = cgmath::point2(0.0, 0.0);
+		for character in text.chars() {
+			if character == ' ' {
+				coords.x += settings.space_character_scaled_width * screen_pixel_size * settings.scale;
+			} else if character == '\n' {
+				coords.x = 0.0;
+				coords.y -=
+					self.max_character_height_in_pixels as f32 * screen_pixel_size * settings.scale
+						+ settings.inbetween_lines_space_height * screen_pixel_size;
+			} else {
+				let character_details = self
+					.character_details(character)
+					.unwrap_or(self.error_character_detials.clone());
+				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
+					* screen_pixel_size
+					* settings.scale;
+				max_width = max_width.max(coords.x + dimensions.x);
+				max_height = max_height.max(coords.y + dimensions.y);
+				coords.x +=
+					character_details.dimensions_in_pixels.x as f32 * screen_pixel_size * settings.scale
+						+ settings.inbetween_characters_space_width * screen_pixel_size;
+			}
+		}
+
+		(max_width, max_height)
+	}
+
 	pub fn simple_texture_mesh_from_text(
 		&self,
 		device: &wgpu::Device,
@@ -142,6 +185,7 @@ impl Font {
 	}
 }
 
+#[derive(Clone)]
 pub struct TextRenderingSettings {
 	/// Factor by which are stretched the character textures.
 	/// Should be integer values or else it won't render pixel-perfect ><.
