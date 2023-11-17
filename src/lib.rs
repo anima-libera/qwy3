@@ -942,6 +942,7 @@ pub fn run() {
 					settings.clone(),
 					command_line_content_with_carret.as_str(),
 				);
+				let y = 0.0 + dimensions.1 / 2.0;
 				let x = 0.0 - dimensions.0 / 2.0;
 				// Somehow this makes it pixel perfect, somehow?
 				let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
@@ -953,7 +954,7 @@ pub fn run() {
 				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
-					cgmath::point3(x, (-40.0) / window_width, 0.5),
+					cgmath::point3(x, y, 0.5),
 					settings,
 					text_displayed,
 				);
@@ -1485,6 +1486,7 @@ pub fn run() {
 				render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
+					&& !game.typing_in_command_line
 				{
 					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
