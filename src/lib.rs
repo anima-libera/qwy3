@@ -174,50 +174,6 @@ struct RectInAtlas {
 	texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
 
-fn keycode_to_character(keycode: winit::event::VirtualKeyCode) -> Option<char> {
-	use winit::event::VirtualKeyCode as K;
-	match keycode {
-		K::A => Some('a'),
-		K::B => Some('b'),
-		K::C => Some('c'),
-		K::D => Some('d'),
-		K::E => Some('e'),
-		K::F => Some('f'),
-		K::G => Some('g'),
-		K::H => Some('h'),
-		K::I => Some('i'),
-		K::J => Some('j'),
-		K::K => Some('k'),
-		K::L => Some('l'),
-		K::M => Some('m'),
-		K::N => Some('n'),
-		K::O => Some('o'),
-		K::P => Some('p'),
-		K::Q => Some('q'),
-		K::R => Some('r'),
-		K::S => Some('s'),
-		K::T => Some('t'),
-		K::U => Some('u'),
-		K::V => Some('v'),
-		K::W => Some('w'),
-		K::X => Some('x'),
-		K::Y => Some('y'),
-		K::Z => Some('z'),
-		K::Key0 => Some('0'),
-		K::Key1 => Some('1'),
-		K::Key2 => Some('2'),
-		K::Key3 => Some('3'),
-		K::Key4 => Some('4'),
-		K::Key5 => Some('5'),
-		K::Key6 => Some('6'),
-		K::Key7 => Some('7'),
-		K::Key8 => Some('8'),
-		K::Key9 => Some('9'),
-		K::Space => Some(' '),
-		_ => None,
-	}
-}
-
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -713,8 +669,8 @@ pub fn run() {
 						game.typing_in_command_line = false;
 					} else if matches!(key, VirtualKeyCode::Back) {
 						game.command_line_content.pop();
-					} else if let Some(character) = keycode_to_character(*key) {
-						game.command_line_content.push(character);
+					} else {
+						// Handeled by the `winit::WindowEvent::ReceivedCharacter` case.
 					}
 				} else {
 					game.controls_to_trigger.push(ControlEvent {
@@ -729,6 +685,13 @@ pub fn run() {
 					control: Control::MouseButton(*button),
 					pressed: *state == ElementState::Pressed,
 				});
+			},
+
+			WindowEvent::ReceivedCharacter(character) => {
+				const BACKSPACE: char = '\u{8}';
+				if game.typing_in_command_line && *character != BACKSPACE {
+					game.command_line_content.push(*character);
+				}
 			},
 
 			_ => {},
