@@ -895,7 +895,7 @@ pub fn run() {
 					format!("{x},{y},{z}")
 				};
 				let random_message = game.random_message;
-				let settings = font::TextRenderingSettings::new();
+				let settings = font::TextRenderingSettings::with_scale(3.0);
 				game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
@@ -936,7 +936,7 @@ pub fn run() {
 				let command_line_content = game.command_line_content.as_str();
 				let command_line_content_with_carret =
 					command_line_content.to_string() + carret_text_representation;
-				let settings = font::TextRenderingSettings::new();
+				let settings = font::TextRenderingSettings::with_scale(4.0);
 				let dimensions = game.font.dimensions_of_text(
 					window_width,
 					settings.clone(),

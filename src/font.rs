@@ -192,23 +192,23 @@ impl Font {
 pub struct TextRenderingSettings {
 	/// Factor by which are stretched the character textures.
 	/// Should be integer values or else it won't render pixel-perfect ><.
-	scale: f32,
+	pub scale: f32,
 	/// In screen pixels times `scale`.
-	space_character_scaled_width: f32,
+	pub space_character_scaled_width: f32,
 	/// In screen pixels.
-	inbetween_characters_space_width: f32,
+	pub inbetween_characters_space_width: f32,
 	/// In screen pixels.
-	inbetween_lines_space_height: f32,
-	color: [f32; 3],
+	pub inbetween_lines_space_height: f32,
+	pub color: [f32; 3],
 }
 
 impl TextRenderingSettings {
-	pub fn new() -> TextRenderingSettings {
+	pub fn with_scale(scale: f32) -> TextRenderingSettings {
 		TextRenderingSettings {
-			scale: 3.0,
+			scale,
 			space_character_scaled_width: 3.0,
-			inbetween_characters_space_width: 3.0,
-			inbetween_lines_space_height: 3.0,
+			inbetween_characters_space_width: scale,
+			inbetween_lines_space_height: scale,
 			color: [0.0, 0.0, 0.0],
 		}
 	}
