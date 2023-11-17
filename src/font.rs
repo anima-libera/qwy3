@@ -80,7 +80,9 @@ impl Font {
 			character_details_map.insert(punctuation, details);
 		}
 
-		let error_character_detials = coords_asset_to_details(109, 0, 3, 5);
+		let block_character_details = coords_asset_to_details(109, 0, 3, 5);
+		character_details_map.insert('█', block_character_details.clone());
+		let error_character_detials = block_character_details;
 
 		let max_character_height_in_pixels = 5;
 
@@ -115,6 +117,7 @@ impl Font {
 		for character in text.chars() {
 			if character == ' ' {
 				coords.x += settings.space_character_scaled_width * screen_pixel_size * settings.scale;
+				max_width = max_width.max(coords.x);
 			} else if character == '\n' {
 				coords.x = 0.0;
 				coords.y -=

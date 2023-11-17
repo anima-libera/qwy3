@@ -209,6 +209,7 @@ struct Game {
 	command_line_mesh: SimpleTextureMesh,
 	command_line_content: String,
 	typing_in_command_line: bool,
+	last_command_line_interaction: Option<std::time::Instant>,
 	command_confirmed: bool,
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
 	loading_distance: f32,
@@ -538,6 +539,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let command_line_mesh = SimpleTextureMesh::from_vertices(&device, vec![]);
 	let command_line_content = String::new();
 	let typing_in_command_line = false;
+	let last_command_line_interaction = None;
 	let command_confirmed = false;
 
 	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
@@ -584,6 +586,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		command_line_mesh,
 		command_line_content,
 		typing_in_command_line,
+		last_command_line_interaction,
 		command_confirmed,
 		world_generator,
 		loading_distance,
@@ -667,8 +670,10 @@ pub fn run() {
 					if matches!(key, VirtualKeyCode::Return) {
 						game.command_confirmed = true;
 						game.typing_in_command_line = false;
+						game.last_command_line_interaction = Some(std::time::Instant::now());
 					} else if matches!(key, VirtualKeyCode::Back) {
 						game.command_line_content.pop();
+						game.last_command_line_interaction = Some(std::time::Instant::now());
 					} else {
 						// Handeled by the `winit::WindowEvent::ReceivedCharacter` case.
 					}
@@ -691,6 +696,7 @@ pub fn run() {
 				const BACKSPACE: char = '\u{8}';
 				if game.typing_in_command_line && *character != BACKSPACE {
 					game.command_line_content.push(*character);
+					game.last_command_line_interaction = Some(std::time::Instant::now());
 				}
 			},
 
@@ -844,6 +850,7 @@ pub fn run() {
 						},
 						(Action::OpenCommandLine, true) => {
 							game.typing_in_command_line = true;
+							game.last_command_line_interaction = Some(std::time::Instant::now());
 						},
 						(Action::ToggleDisplayNotSurroundedChunksAsBoxes, true) => {
 							game.enable_display_not_surrounded_chunks_as_boxes =
@@ -917,22 +924,38 @@ pub fn run() {
 				game.command_confirmed = false;
 			}
 			{
+				let carret_blinking_speed = 1.5;
+				let carret_blinking_visibility_ratio = 0.5;
+				let carret_text_representation = "█";
+				let carret_visible = game.typing_in_command_line
+					&& game.last_command_line_interaction.is_some_and(|time| {
+						(time.elapsed().as_secs_f32() * carret_blinking_speed).fract()
+							< carret_blinking_visibility_ratio
+					});
 				let window_width = game.window_surface_config.width as f32;
 				let command_line_content = game.command_line_content.as_str();
+				let command_line_content_with_carret =
+					command_line_content.to_string() + carret_text_representation;
 				let settings = font::TextRenderingSettings::new();
-				let dimensions =
-					game
-						.font
-						.dimensions_of_text(window_width, settings.clone(), command_line_content);
-				let x = 0.0 + 4.0 / window_width - dimensions.0 / 2.0;
+				let dimensions = game.font.dimensions_of_text(
+					window_width,
+					settings.clone(),
+					command_line_content_with_carret.as_str(),
+				);
+				let x = 0.0 - dimensions.0 / 2.0;
 				// Somehow this makes it pixel perfect, somehow?
 				let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
+				let text_displayed = if carret_visible {
+					command_line_content_with_carret.as_str()
+				} else {
+					command_line_content
+				};
 				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
 					&game.device,
 					window_width,
 					cgmath::point3(x, (-40.0) / window_width, 0.5),
 					settings,
-					command_line_content,
+					text_displayed,
 				);
 			}
 
