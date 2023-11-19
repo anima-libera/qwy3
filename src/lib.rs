@@ -31,6 +31,8 @@ use rendering::*;
 use shaders::Vector3Pod;
 use world_gen::WorldGenerator;
 
+use crate::font::TextRenderingSettings;
+
 enum WhichCameraToUse {
 	FirstPerson,
 	ThirdPersonNear,
@@ -174,6 +176,16 @@ struct RectInAtlas {
 	texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
 
+struct LogLine {
+	text: String,
+	settings: font::TextRenderingSettings,
+	dimensions: (f32, f32),
+	target_position: (f32, f32),
+	current_position: (f32, f32),
+	creation_time: std::time::Instant,
+	mesh: SimpleTextureMesh,
+}
+
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -214,6 +226,8 @@ struct Game {
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
 	loading_distance: f32,
 	margin_before_unloading: f32,
+	log: Vec<LogLine>,
+	offset_for_2d_thingy: BindingThingy<wgpu::Buffer>,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -491,6 +505,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let worker_tasks = vec![];
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
+	let offset_for_2d_thingy = init_offset_for_2d_thingy(Arc::clone(&device));
+
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
@@ -502,6 +518,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
 			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
+			offset_for_2d_thingy: &offset_for_2d_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,
@@ -549,6 +566,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 	let enable_temporary_meshing_of_not_surrounded_chunks = true;
 
+	let log = vec![];
+
+	queue.write_buffer(
+		&offset_for_2d_thingy.resource,
+		0,
+		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
+	);
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -591,6 +616,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		world_generator,
 		loading_distance,
 		margin_before_unloading,
+		log,
+		offset_for_2d_thingy,
 
 		worker_tasks,
 		pool,
@@ -920,6 +947,45 @@ pub fn run() {
 			// Command line handling.
 			if game.command_confirmed {
 				println!("Executing command \"{}\"", game.command_line_content);
+
+				let text = game.command_line_content.clone();
+				let settings = font::TextRenderingSettings::with_scale(3.0);
+				let window_width = game.window_surface_config.width as f32;
+				let window_height = game.window_surface_config.height as f32;
+				let dimensions =
+					game
+						.font
+						.dimensions_of_text(window_width, settings.clone(), text.as_str());
+				let mesh = game.font.simple_texture_mesh_from_text(
+					&game.device,
+					window_width,
+					cgmath::point3(0.0, 0.0, 0.0),
+					settings.clone(),
+					&text,
+				);
+				game.log.insert(
+					0,
+					LogLine {
+						text,
+						settings,
+						dimensions,
+						target_position: (0.0, 0.0),
+						current_position: (0.0, 0.0),
+						creation_time: std::time::Instant::now(),
+						mesh,
+					},
+				);
+				for (i, log_line) in game.log.iter_mut().enumerate() {
+					let y =
+						(i + 1) as f32 / window_width * 3.0 * 6.0 * 2.0 - window_height / window_width;
+					let x = -1.0 + 10.0 / window_width;
+					// Somehow this makes it pixel perfect, somehow?
+					let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
+					let position = (x, y);
+					log_line.target_position = position;
+					log_line.current_position = position;
+				}
+
 				game.command_line_content.clear();
 				game.command_confirmed = false;
 			}
@@ -1465,11 +1531,17 @@ pub fn run() {
 
 			// Render pass to draw the interface.
 			{
+				game.queue.write_buffer(
+					&game.offset_for_2d_thingy.resource,
+					0,
+					bytemuck::cast_slice(&[0.0f32, 0.0f32, 0.0f32]),
+				);
+
 				let window_texture_view = window_texture
 					.texture
 					.create_view(&wgpu::TextureViewDescriptor::default());
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass to render "),
+					label: Some("Render Pass to render the interface"),
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
@@ -1506,6 +1578,58 @@ pub fn run() {
 			}
 
 			game.queue.submit(std::iter::once(encoder.finish()));
+
+			// Render passes to draw the log.
+			// TODO: MAKE IT SO THAT WE DONT SUBMIT A WHOLE THING FOR EACH LINE
+			// or make sure that it is not a big deal (but I would not count on that ><).
+			for log_line in game.log.iter() {
+				let mut encoder = game
+					.device
+					.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+						label: Some("Render Encoder for a log line"),
+					});
+
+				{
+					let window_texture_view = window_texture
+						.texture
+						.create_view(&wgpu::TextureViewDescriptor::default());
+					let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+						label: Some("Render Pass to render a log line"),
+						color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+							view: &window_texture_view,
+							resolve_target: None,
+							ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+						})],
+						depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+							view: &game.z_buffer_view,
+							depth_ops: Some(wgpu::Operations {
+								load: wgpu::LoadOp::Clear(1.0),
+								store: true,
+							}),
+							stencil_ops: None,
+						}),
+					});
+
+					render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
+					render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
+
+					let offset = {
+						let (x, y) = log_line.target_position;
+						[x, y, 0.0]
+					};
+					game.queue.write_buffer(
+						&game.offset_for_2d_thingy.resource,
+						0,
+						bytemuck::cast_slice(&[offset]),
+					);
+
+					render_pass.set_vertex_buffer(0, log_line.mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(log_line.mesh.vertices.len() as u32), 0..1);
+				}
+
+				game.queue.submit(std::iter::once(encoder.finish()));
+			}
+
 			window_texture.present();
 
 			if game.close_after_one_frame {

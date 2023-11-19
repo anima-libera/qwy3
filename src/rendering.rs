@@ -89,6 +89,7 @@ pub struct AllBindingThingies<'a> {
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) offset_for_2d_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub fn init_rendering_stuff(
@@ -151,6 +152,7 @@ pub fn init_rendering_stuff(
 				aspect_ratio_thingy: all_binding_thingies.aspect_ratio_thingy,
 				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
 				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
+				offset_for_2d_thingy: all_binding_thingies.offset_for_2d_thingy,
 			},
 			window_surface_format,
 			z_buffer_format,
@@ -380,4 +382,24 @@ pub fn init_atlas_stuff(
 	};
 
 	AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy }
+}
+
+pub fn init_offset_for_2d_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+	let offset_for_2d_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Offset for 2D Buffer"),
+		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let offset_for_2d_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	BindingThingy {
+		binding_type: offset_for_2d_binding_type,
+		resource: offset_for_2d_buffer,
+	}
 }

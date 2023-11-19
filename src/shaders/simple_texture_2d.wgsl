@@ -13,11 +13,13 @@ struct VertexOutput {
 @group(0) @binding(0) var<uniform> uniform_aspect_ratio: f32;
 @group(0) @binding(1) var uniform_atlas_texture: texture_2d<f32>;
 @group(0) @binding(2) var uniform_atlas_sampler: sampler;
+@group(0) @binding(3) var<uniform> uniform_offset_for_2d: vec3<f32>;
 
 @vertex
 fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 	var vertex_output: VertexOutput;
-	vertex_output.screen_position = vec4<f32>(vertex_input.position, 1.0);
+	var position_xyz = vertex_input.position + uniform_offset_for_2d;
+	vertex_output.screen_position = vec4<f32>(position_xyz, 1.0);
 	vertex_output.screen_position.y *= uniform_aspect_ratio;
 	vertex_output.coords_in_atlas = vertex_input.coords_in_atlas;
 	vertex_output.color_factor = vertex_input.color_factor;
