@@ -992,7 +992,14 @@ pub fn run() {
 					log_line.target_position = position;
 					log_line.last_target_position_changing_time = std::time::Instant::now();
 				}
-
+				game.log[0].current_position = cgmath::point2(
+					-1.0 - game.log[0].dimensions.0,
+					game.log[0].target_position.y,
+				);
+				//game.log[0].current_position = cgmath::point2(
+				//	-game.log[0].dimensions.0 / 2.0,
+				//	-game.log[0].dimensions.1 / 2.0,
+				//);
 				game.command_line_content.clear();
 				game.command_confirmed = false;
 			}
