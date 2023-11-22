@@ -16,7 +16,6 @@ pub struct BindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
-	pub(crate) offset_for_2d_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub fn render_pipeline(
@@ -62,10 +61,6 @@ pub fn render_pipeline(
 				.atlas_texture_sampler_thingy
 				.binding_type
 				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
-			binding_thingies
-				.offset_for_2d_thingy
-				.binding_type
-				.layout_entry(3, wgpu::ShaderStages::VERTEX),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -90,13 +85,6 @@ pub fn render_pipeline(
 				binding: 2,
 				resource: binding_thingies
 					.atlas_texture_sampler_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 3,
-				resource: binding_thingies
-					.offset_for_2d_thingy
 					.resource
 					.as_binding_resource(),
 			},

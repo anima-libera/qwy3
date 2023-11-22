@@ -17,7 +17,7 @@ mod world_gen;
 
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
-use cgmath::{ElementWise, InnerSpace, MetricSpace};
+use cgmath::{ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
 use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
@@ -28,10 +28,8 @@ use coords::*;
 use line_meshes::*;
 use physics::AlignedPhysBox;
 use rendering::*;
-use shaders::Vector3Pod;
+use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use world_gen::WorldGenerator;
-
-use crate::font::TextRenderingSettings;
 
 enum WhichCameraToUse {
 	FirstPerson,
@@ -118,8 +116,7 @@ impl SimpleTextureMesh {
 		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
 		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 		color_factor: [f32; 3],
-	) -> Vec<shaders::simple_texture_2d::SimpleTextureVertexPod> {
-		use shaders::simple_texture_2d::SimpleTextureVertexPod;
+	) -> Vec<SimpleTextureVertexPod> {
 		let mut vertices = vec![];
 
 		let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
@@ -180,10 +177,35 @@ struct LogLine {
 	text: String,
 	settings: font::TextRenderingSettings,
 	dimensions: (f32, f32),
-	target_position: (f32, f32),
-	current_position: (f32, f32),
-	creation_time: std::time::Instant,
-	mesh: SimpleTextureMesh,
+	target_position: cgmath::Point2<f32>,
+	current_position: cgmath::Point2<f32>,
+	last_target_position_changing_time: std::time::Instant,
+}
+
+struct InterfaceMeshes {
+	simple_texture_mesh: SimpleTextureMesh,
+}
+
+impl InterfaceMeshes {
+	fn clear(&mut self, device: &wgpu::Device) {
+		self.simple_texture_mesh = SimpleTextureMesh::from_vertices(device, vec![]);
+	}
+
+	fn add_raw_vertices(
+		&mut self,
+		device: &wgpu::Device,
+		mut simple_texture_vertices: Vec<SimpleTextureVertexPod>,
+	) {
+		// TODO: Only append vertices to some vec of vertices here
+		// and only upload to GPU at the end of the generation of the interface meshes.
+		self
+			.simple_texture_mesh
+			.vertices
+			.append(&mut simple_texture_vertices);
+		let mut vertices = vec![];
+		vertices.append(&mut self.simple_texture_mesh.vertices);
+		self.simple_texture_mesh = SimpleTextureMesh::from_vertices(device, vertices);
+	}
 }
 
 struct Game {
@@ -215,10 +237,8 @@ struct Game {
 	rendering: RenderPipelinesAndBindGroups,
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
-	top_left_info_mesh: SimpleTextureMesh,
 	random_message: &'static str,
 	font: font::Font,
-	command_line_mesh: SimpleTextureMesh,
 	command_line_content: String,
 	typing_in_command_line: bool,
 	last_command_line_interaction: Option<std::time::Instant>,
@@ -227,7 +247,7 @@ struct Game {
 	loading_distance: f32,
 	margin_before_unloading: f32,
 	log: Vec<LogLine>,
-	offset_for_2d_thingy: BindingThingy<wgpu::Buffer>,
+	interface_meshes: InterfaceMeshes,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -505,8 +525,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let worker_tasks = vec![];
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
-	let offset_for_2d_thingy = init_offset_for_2d_thingy(Arc::clone(&device));
-
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
@@ -518,7 +536,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
 			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
-			offset_for_2d_thingy: &offset_for_2d_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,
@@ -526,8 +543,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	);
 
 	let cursor_mesh = SimpleLineMesh::interface_2d_cursor(&device);
-
-	let top_left_info_mesh = SimpleTextureMesh::from_vertices(&device, vec![]);
 
 	// Most useful feature in the known universe.
 	let random_message_pool = [
@@ -553,7 +568,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_display_interface = true;
 
-	let command_line_mesh = SimpleTextureMesh::from_vertices(&device, vec![]);
 	let command_line_content = String::new();
 	let typing_in_command_line = false;
 	let last_command_line_interaction = None;
@@ -568,11 +582,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let log = vec![];
 
-	queue.write_buffer(
-		&offset_for_2d_thingy.resource,
-		0,
-		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
-	);
+	let interface_meshes = InterfaceMeshes {
+		simple_texture_mesh: SimpleTextureMesh::from_vertices(&device, vec![]),
+	};
 
 	if verbose {
 		println!("End of initialization");
@@ -605,10 +617,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		rendering,
 		close_after_one_frame,
 		cursor_mesh,
-		top_left_info_mesh,
 		random_message,
 		font,
-		command_line_mesh,
 		command_line_content,
 		typing_in_command_line,
 		last_command_line_interaction,
@@ -617,7 +627,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		loading_distance,
 		margin_before_unloading,
 		log,
-		offset_for_2d_thingy,
+		interface_meshes,
 
 		worker_tasks,
 		pool,
@@ -889,6 +899,8 @@ pub fn run() {
 			}
 			game.controls_to_trigger.clear();
 
+			game.interface_meshes.clear(&game.device);
+
 			// Top left info.
 			{
 				let window_width = game.window_surface_config.width as f32;
@@ -923,8 +935,7 @@ pub fn run() {
 				};
 				let random_message = game.random_message;
 				let settings = font::TextRenderingSettings::with_scale(3.0);
-				game.top_left_info_mesh = game.font.simple_texture_mesh_from_text(
-					&game.device,
+				let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
 					window_width,
 					cgmath::point3(
 						-1.0 + 4.0 / window_width,
@@ -942,6 +953,9 @@ pub fn run() {
 						{random_message}"
 					),
 				);
+				game
+					.interface_meshes
+					.add_raw_vertices(&game.device, simple_texture_vertices);
 			}
 
 			// Command line handling.
@@ -950,40 +964,33 @@ pub fn run() {
 
 				let text = game.command_line_content.clone();
 				let settings = font::TextRenderingSettings::with_scale(3.0);
+
 				let window_width = game.window_surface_config.width as f32;
 				let window_height = game.window_surface_config.height as f32;
 				let dimensions =
 					game
 						.font
 						.dimensions_of_text(window_width, settings.clone(), text.as_str());
-				let mesh = game.font.simple_texture_mesh_from_text(
-					&game.device,
-					window_width,
-					cgmath::point3(0.0, 0.0, 0.0),
-					settings.clone(),
-					&text,
-				);
 				game.log.insert(
 					0,
 					LogLine {
 						text,
 						settings,
 						dimensions,
-						target_position: (0.0, 0.0),
-						current_position: (0.0, 0.0),
-						creation_time: std::time::Instant::now(),
-						mesh,
+						target_position: cgmath::point2(0.0, 0.0),
+						current_position: cgmath::point2(0.0, 0.0),
+						last_target_position_changing_time: std::time::Instant::now(),
 					},
 				);
-				for (i, log_line) in game.log.iter_mut().enumerate() {
-					let y =
-						(i + 1) as f32 / window_width * 3.0 * 6.0 * 2.0 - window_height / window_width;
+				let mut y = 10.0 / window_width - window_height / window_width;
+				for log_line in game.log.iter_mut() {
+					y += log_line.dimensions.1 + 10.0 / window_width;
 					let x = -1.0 + 10.0 / window_width;
 					// Somehow this makes it pixel perfect, somehow?
 					let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
-					let position = (x, y);
+					let position = cgmath::point2(x, y);
 					log_line.target_position = position;
-					log_line.current_position = position;
+					log_line.last_target_position_changing_time = std::time::Instant::now();
 				}
 
 				game.command_line_content.clear();
@@ -1017,13 +1024,39 @@ pub fn run() {
 				} else {
 					command_line_content
 				};
-				game.command_line_mesh = game.font.simple_texture_mesh_from_text(
-					&game.device,
+				let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
 					window_width,
 					cgmath::point3(x, y, 0.5),
 					settings,
 					text_displayed,
 				);
+				game
+					.interface_meshes
+					.add_raw_vertices(&game.device, simple_texture_vertices);
+			}
+
+			// Log handling.
+			{
+				let window_width = game.window_surface_config.width as f32;
+				for log_line in game.log.iter_mut() {
+					let ratio = 0.08;
+					log_line.current_position = log_line.current_position * (1.0 - ratio)
+						+ log_line.target_position.to_vec() * ratio;
+					let position = cgmath::point3(
+						log_line.current_position.x,
+						log_line.current_position.y,
+						0.5,
+					);
+					let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
+						window_width,
+						position,
+						log_line.settings.clone(),
+						&log_line.text,
+					);
+					game
+						.interface_meshes
+						.add_raw_vertices(&game.device, simple_texture_vertices);
+				}
 			}
 
 			// Recieve task results from workers.
@@ -1531,12 +1564,6 @@ pub fn run() {
 
 			// Render pass to draw the interface.
 			{
-				game.queue.write_buffer(
-					&game.offset_for_2d_thingy.resource,
-					0,
-					bytemuck::cast_slice(&[0.0f32, 0.0f32, 0.0f32]),
-				);
-
 				let window_texture_view = window_texture
 					.texture
 					.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1569,66 +1596,13 @@ pub fn run() {
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 				{
-					render_pass.set_vertex_buffer(0, game.top_left_info_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(game.top_left_info_mesh.vertices.len() as u32), 0..1);
-
-					render_pass.set_vertex_buffer(0, game.command_line_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(game.command_line_mesh.vertices.len() as u32), 0..1);
+					let mesh = &game.interface_meshes.simple_texture_mesh;
+					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
 				}
 			}
 
 			game.queue.submit(std::iter::once(encoder.finish()));
-
-			// Render passes to draw the log.
-			// TODO: MAKE IT SO THAT WE DONT SUBMIT A WHOLE THING FOR EACH LINE
-			// or make sure that it is not a big deal (but I would not count on that ><).
-			for log_line in game.log.iter() {
-				let mut encoder = game
-					.device
-					.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-						label: Some("Render Encoder for a log line"),
-					});
-
-				{
-					let window_texture_view = window_texture
-						.texture
-						.create_view(&wgpu::TextureViewDescriptor::default());
-					let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-						label: Some("Render Pass to render a log line"),
-						color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-							view: &window_texture_view,
-							resolve_target: None,
-							ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
-						})],
-						depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-							view: &game.z_buffer_view,
-							depth_ops: Some(wgpu::Operations {
-								load: wgpu::LoadOp::Clear(1.0),
-								store: true,
-							}),
-							stencil_ops: None,
-						}),
-					});
-
-					render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
-
-					let offset = {
-						let (x, y) = log_line.target_position;
-						[x, y, 0.0]
-					};
-					game.queue.write_buffer(
-						&game.offset_for_2d_thingy.resource,
-						0,
-						bytemuck::cast_slice(&[offset]),
-					);
-
-					render_pass.set_vertex_buffer(0, log_line.mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(log_line.mesh.vertices.len() as u32), 0..1);
-				}
-
-				game.queue.submit(std::iter::once(encoder.finish()));
-			}
 
 			window_texture.present();
 

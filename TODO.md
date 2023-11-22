@@ -10,6 +10,19 @@
 - God rays effect when looking at sun. I recall it can be done by rendering just the sun in white and all the world in black and doing some motion blur on the result, maybe?
 - Glow effect.
 
+## UI
+
+- Make a widget tree.
+
+## Command Language
+
+- Add commands to interface with the game.
+- Add strings.
+- Add a logging function.
+- Add a way to define new typed global variables.
+- Add a way to set variables.
+- Add floating point numbers.
+
 ## World
 
 - Procedurally generated types of block.

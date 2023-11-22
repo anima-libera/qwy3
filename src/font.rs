@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::{RectInAtlas, SimpleTextureMesh};
+use crate::{shaders::simple_texture_2d::SimpleTextureVertexPod, RectInAtlas, SimpleTextureMesh};
 
 #[derive(Clone)]
 struct CharacterDetails {
@@ -141,14 +141,13 @@ impl Font {
 		(max_width, max_height)
 	}
 
-	pub fn simple_texture_mesh_from_text(
+	pub fn simple_texture_vertices_from_text(
 		&self,
-		device: &wgpu::Device,
 		window_width: f32,
 		mut coords: cgmath::Point3<f32>,
 		settings: TextRenderingSettings,
 		text: &str,
-	) -> SimpleTextureMesh {
+	) -> Vec<SimpleTextureVertexPod> {
 		// Size of a screen pixel in Wgpu/Vulkan XY-plane coordinate space.
 		// It would be `1.0 / window_width` if the coord space would go from 0.0 to 1.0,
 		// but since it goes from -1.0 to 1.0 then it is twice as big so we account for that.
@@ -184,6 +183,18 @@ impl Font {
 			}
 		}
 
+		vertices
+	}
+
+	pub fn _simple_texture_mesh_from_text(
+		&self,
+		device: &wgpu::Device,
+		window_width: f32,
+		coords: cgmath::Point3<f32>,
+		settings: TextRenderingSettings,
+		text: &str,
+	) -> SimpleTextureMesh {
+		let vertices = self.simple_texture_vertices_from_text(window_width, coords, settings, text);
 		SimpleTextureMesh::from_vertices(device, vertices)
 	}
 }
