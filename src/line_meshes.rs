@@ -11,7 +11,10 @@ pub struct SimpleLineMesh {
 }
 
 impl SimpleLineMesh {
-	fn from_vertices(device: &wgpu::Device, vertices: Vec<SimpleLineVertexPod>) -> SimpleLineMesh {
+	pub fn from_vertices(
+		device: &wgpu::Device,
+		vertices: Vec<SimpleLineVertexPod>,
+	) -> SimpleLineMesh {
 		let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Simple Line Vertex Buffer"),
 			contents: bytemuck::cast_slice(&vertices),

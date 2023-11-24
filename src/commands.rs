@@ -88,6 +88,7 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					"toggle_display_not_surrounded_chunks_as_boxes" => {
 						Action::ToggleDisplayNotSurroundedChunksAsBoxes
 					},
+					"toggle_display_interfaces_debug_boxes" => Action::ToggleDisplayInterfaceDebugBoxes,
 					"toggle_third_person_view" => {
 						println!(
 							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \

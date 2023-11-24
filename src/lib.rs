@@ -67,6 +67,7 @@ enum Action {
 	ToggleDisplayInterface,
 	OpenCommandLine,
 	ToggleDisplayNotSurroundedChunksAsBoxes,
+	ToggleDisplayInterfaceDebugBoxes,
 }
 
 enum WorkerTask {
@@ -182,22 +183,43 @@ struct LogLine {
 	last_target_position_changing_time: std::time::Instant,
 }
 
+fn simple_line_vertices_for_rect(
+	top_left: cgmath::Point3<f32>,
+	dimensions: (f32, f32),
+	color: [f32; 3],
+) -> Vec<SimpleLineVertexPod> {
+	let mut vertices = vec![];
+	let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
+	let b = top_left + cgmath::vec3(dimensions.0, 0.0, 0.0);
+	let c = top_left + cgmath::vec3(0.0, -dimensions.1, 0.0);
+	let d = top_left + cgmath::vec3(dimensions.0, -dimensions.1, 0.0);
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices
+}
+
 struct InterfaceMeshesVertices {
 	simple_texture_vertices: Vec<SimpleTextureVertexPod>,
+	simple_line_vertices: Vec<SimpleLineVertexPod>,
 }
 
 impl InterfaceMeshesVertices {
 	fn new() -> InterfaceMeshesVertices {
-		InterfaceMeshesVertices { simple_texture_vertices: vec![] }
+		InterfaceMeshesVertices { simple_texture_vertices: vec![], simple_line_vertices: vec![] }
 	}
 
-	fn add_simple_texture_vertices(
-		&mut self,
-		mut simple_texture_vertices: Vec<SimpleTextureVertexPod>,
-	) {
-		self
-			.simple_texture_vertices
-			.append(&mut simple_texture_vertices);
+	fn add_simple_texture_vertices(&mut self, mut vertices: Vec<SimpleTextureVertexPod>) {
+		self.simple_texture_vertices.append(&mut vertices);
+	}
+
+	fn add_simple_line_vertices(&mut self, mut vertices: Vec<SimpleLineVertexPod>) {
+		self.simple_line_vertices.append(&mut vertices);
 	}
 }
 
@@ -243,8 +265,8 @@ impl Widget {
 			Widget::MarginsAround { sub_widget, margin } => {
 				let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
 				(
-					sub_width + 2.0 * margin / window_width,
-					sub_height + 2.0 * margin / window_width,
+					sub_width + 2.0 * margin * 2.0 / window_width,
+					sub_height + 2.0 * margin * 2.0 / window_width,
 				)
 			},
 			Widget::List { sub_widgets, interspace } => {
@@ -254,7 +276,7 @@ impl Widget {
 					let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
 					width = width.max(sub_width);
 					if i != 0 {
-						height += interspace / window_width;
+						height += interspace * 2.0 / window_width;
 					}
 					height += sub_height;
 				}
@@ -269,7 +291,9 @@ impl Widget {
 		meshes: &mut InterfaceMeshesVertices,
 		font: &font::Font,
 		window_width: f32,
+		draw_debug_boxes: bool,
 	) {
+		const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
 		match self {
 			Widget::Nothing => {},
 			Widget::SimpleText { settings, text, .. } => {
@@ -282,18 +306,26 @@ impl Widget {
 				meshes.add_simple_texture_vertices(simple_texture_vertices);
 			},
 			Widget::MarginsAround { sub_widget, margin } => {
-				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) / window_width;
-				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width);
+				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) * 2.0 / window_width;
+				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, draw_debug_boxes);
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
 				for sub_widget in sub_widgets.iter() {
-					sub_widget.generate_meshes(top_left, meshes, font, window_width);
+					sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
 					let (_sub_width, sub_height) = sub_widget.dimensions(font, window_width);
 					top_left.y -= sub_height;
-					top_left.y -= interspace / window_width;
+					top_left.y -= interspace * 2.0 / window_width;
 				}
 			},
+		}
+		if draw_debug_boxes {
+			let (width, height) = self.dimensions(font, window_width);
+			meshes.add_simple_line_vertices(simple_line_vertices_for_rect(
+				top_left,
+				(width, height),
+				DEBUG_HITBOXES_COLOR,
+			));
 		}
 	}
 }
@@ -338,6 +370,7 @@ struct Game {
 	margin_before_unloading: f32,
 	log: Vec<LogLine>,
 	widget_tree_root: Widget,
+	enable_interface_draw_debug_boxes: bool,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -686,6 +719,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		5.0,
 	);
 
+	let enable_interface_draw_debug_boxes = false;
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -728,6 +763,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		margin_before_unloading,
 		log,
 		widget_tree_root,
+		enable_interface_draw_debug_boxes,
 
 		worker_tasks,
 		pool,
@@ -993,6 +1029,10 @@ pub fn run() {
 							game.enable_display_not_surrounded_chunks_as_boxes =
 								!game.enable_display_not_surrounded_chunks_as_boxes;
 						},
+						(Action::ToggleDisplayInterfaceDebugBoxes, true) => {
+							game.enable_interface_draw_debug_boxes =
+								!game.enable_interface_draw_debug_boxes;
+						},
 						(_, false) => {},
 					}
 				}
@@ -1169,6 +1209,7 @@ pub fn run() {
 					&mut interface_meshes_vertices,
 					&game.font,
 					window_width,
+					game.enable_interface_draw_debug_boxes,
 				);
 			}
 
@@ -1584,6 +1625,10 @@ pub fn run() {
 				&game.device,
 				interface_meshes_vertices.simple_texture_vertices,
 			);
+			let interface_simple_line_mesh = SimpleLineMesh::from_vertices(
+				&game.device,
+				interface_meshes_vertices.simple_line_vertices,
+			);
 
 			let mut encoder = game
 				.device
@@ -1699,22 +1744,28 @@ pub fn run() {
 					}),
 				});
 
-				render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 					&& !game.typing_in_command_line
 				{
+					render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
+					render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
 				}
 
-				render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 				{
+					render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
+					render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
 					let mesh = &interface_simple_texture_mesh;
+					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
+
+					render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
+					render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
+					let mesh = &interface_simple_line_mesh;
 					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
 				}
