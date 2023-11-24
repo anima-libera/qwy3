@@ -208,6 +208,104 @@ impl InterfaceMeshes {
 	}
 }
 
+enum Widget {
+	Nothing,
+	SimpleText {
+		text: String,
+		settings: font::TextRenderingSettings,
+	},
+	MarginsAround {
+		sub_widget: Box<Widget>,
+		margin: f32,
+	},
+	List {
+		sub_widgets: Vec<Widget>,
+		interspace: f32,
+	},
+}
+
+impl Widget {
+	fn new_nothing() -> Widget {
+		Widget::Nothing
+	}
+
+	fn new_simple_text(text: String, settings: font::TextRenderingSettings) -> Widget {
+		Widget::SimpleText { text, settings }
+	}
+
+	fn new_margins_around(margin: f32, around_what: Box<Widget>) -> Widget {
+		Widget::MarginsAround { sub_widget: around_what, margin }
+	}
+
+	fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
+		Widget::List { sub_widgets, interspace }
+	}
+
+	fn dimensions(&self, font: &font::Font, window_width: f32) -> (f32, f32) {
+		match self {
+			Widget::Nothing => (0.0, 0.0),
+			Widget::SimpleText { text, settings } => {
+				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
+			},
+			Widget::MarginsAround { sub_widget, margin } => {
+				let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
+				(
+					sub_width + 2.0 * margin / window_width,
+					sub_height + 2.0 * margin / window_width,
+				)
+			},
+			Widget::List { sub_widgets, interspace } => {
+				let mut width: f32 = 0.0;
+				let mut height: f32 = 0.0;
+				for (i, sub_widget) in sub_widgets.iter().enumerate() {
+					let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
+					width = width.max(sub_width);
+					if i != 0 {
+						height += interspace / window_width;
+					}
+					height += sub_height;
+				}
+				(width, height)
+			},
+		}
+	}
+
+	fn generate_meshes(
+		&self,
+		top_left: cgmath::Point3<f32>,
+		meshes: &mut InterfaceMeshes,
+		font: &font::Font,
+		window_width: f32,
+		device: &wgpu::Device,
+	) {
+		match self {
+			Widget::Nothing => {},
+			Widget::SimpleText { settings, text, .. } => {
+				let simple_texture_vertices = font.simple_texture_vertices_from_text(
+					window_width,
+					top_left,
+					settings.clone(),
+					text,
+				);
+				meshes.add_raw_vertices(device, simple_texture_vertices);
+			},
+			Widget::MarginsAround { sub_widget, margin } => {
+				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) / window_width;
+				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, device);
+			},
+			Widget::List { sub_widgets, interspace } => {
+				let mut top_left = top_left;
+				for sub_widget in sub_widgets.iter() {
+					sub_widget.generate_meshes(top_left, meshes, font, window_width, device);
+					let (_sub_width, sub_height) = sub_widget.dimensions(font, window_width);
+					top_left.y -= sub_height;
+					top_left.y -= interspace / window_width;
+				}
+			},
+		}
+	}
+}
+
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -248,6 +346,7 @@ struct Game {
 	margin_before_unloading: f32,
 	log: Vec<LogLine>,
 	interface_meshes: InterfaceMeshes,
+	widget_tree_root: Widget,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -586,6 +685,20 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		simple_texture_mesh: SimpleTextureMesh::from_vertices(&device, vec![]),
 	};
 
+	let widget_tree_root = Widget::new_list(
+		vec![
+			Widget::new_margins_around(200.0, Box::new(Widget::new_nothing())),
+			Widget::new_margins_around(
+				10.0,
+				Box::new(Widget::new_simple_text(
+					"test".to_string(),
+					font::TextRenderingSettings::with_scale(3.0),
+				)),
+			),
+		],
+		5.0,
+	);
+
 	if verbose {
 		println!("End of initialization");
 	}
@@ -628,6 +741,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		margin_before_unloading,
 		log,
 		interface_meshes,
+		widget_tree_root,
 
 		worker_tasks,
 		pool,
@@ -992,14 +1106,14 @@ pub fn run() {
 					log_line.target_position = position;
 					log_line.last_target_position_changing_time = std::time::Instant::now();
 				}
-				game.log[0].current_position = cgmath::point2(
-					-1.0 - game.log[0].dimensions.0,
-					game.log[0].target_position.y,
-				);
 				//game.log[0].current_position = cgmath::point2(
-				//	-game.log[0].dimensions.0 / 2.0,
-				//	-game.log[0].dimensions.1 / 2.0,
+				//	-1.0 - game.log[0].dimensions.0,
+				//	game.log[0].target_position.y,
 				//);
+				game.log[0].current_position = cgmath::point2(
+					-game.log[0].dimensions.0 / 2.0,
+					-game.log[0].dimensions.1 / 2.0,
+				);
 				game.command_line_content.clear();
 				game.command_confirmed = false;
 			}
@@ -1064,6 +1178,19 @@ pub fn run() {
 						.interface_meshes
 						.add_raw_vertices(&game.device, simple_texture_vertices);
 				}
+			}
+
+			// Interface widget tree.
+			{
+				let window_width = game.window_surface_config.width as f32;
+				let window_height = game.window_surface_config.height as f32;
+				game.widget_tree_root.generate_meshes(
+					cgmath::point3(-1.0, window_height / window_width, 0.5),
+					&mut game.interface_meshes,
+					&game.font,
+					window_width,
+					&game.device,
+				);
 			}
 
 			// Recieve task results from workers.
