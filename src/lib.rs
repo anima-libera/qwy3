@@ -182,29 +182,22 @@ struct LogLine {
 	last_target_position_changing_time: std::time::Instant,
 }
 
-struct InterfaceMeshes {
-	simple_texture_mesh: SimpleTextureMesh,
+struct InterfaceMeshesVertices {
+	simple_texture_vertices: Vec<SimpleTextureVertexPod>,
 }
 
-impl InterfaceMeshes {
-	fn clear(&mut self, device: &wgpu::Device) {
-		self.simple_texture_mesh = SimpleTextureMesh::from_vertices(device, vec![]);
+impl InterfaceMeshesVertices {
+	fn new() -> InterfaceMeshesVertices {
+		InterfaceMeshesVertices { simple_texture_vertices: vec![] }
 	}
 
-	fn add_raw_vertices(
+	fn add_simple_texture_vertices(
 		&mut self,
-		device: &wgpu::Device,
 		mut simple_texture_vertices: Vec<SimpleTextureVertexPod>,
 	) {
-		// TODO: Only append vertices to some vec of vertices here
-		// and only upload to GPU at the end of the generation of the interface meshes.
 		self
-			.simple_texture_mesh
-			.vertices
+			.simple_texture_vertices
 			.append(&mut simple_texture_vertices);
-		let mut vertices = vec![];
-		vertices.append(&mut self.simple_texture_mesh.vertices);
-		self.simple_texture_mesh = SimpleTextureMesh::from_vertices(device, vertices);
 	}
 }
 
@@ -273,10 +266,9 @@ impl Widget {
 	fn generate_meshes(
 		&self,
 		top_left: cgmath::Point3<f32>,
-		meshes: &mut InterfaceMeshes,
+		meshes: &mut InterfaceMeshesVertices,
 		font: &font::Font,
 		window_width: f32,
-		device: &wgpu::Device,
 	) {
 		match self {
 			Widget::Nothing => {},
@@ -287,16 +279,16 @@ impl Widget {
 					settings.clone(),
 					text,
 				);
-				meshes.add_raw_vertices(device, simple_texture_vertices);
+				meshes.add_simple_texture_vertices(simple_texture_vertices);
 			},
 			Widget::MarginsAround { sub_widget, margin } => {
 				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) / window_width;
-				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, device);
+				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width);
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
 				for sub_widget in sub_widgets.iter() {
-					sub_widget.generate_meshes(top_left, meshes, font, window_width, device);
+					sub_widget.generate_meshes(top_left, meshes, font, window_width);
 					let (_sub_width, sub_height) = sub_widget.dimensions(font, window_width);
 					top_left.y -= sub_height;
 					top_left.y -= interspace / window_width;
@@ -345,7 +337,6 @@ struct Game {
 	loading_distance: f32,
 	margin_before_unloading: f32,
 	log: Vec<LogLine>,
-	interface_meshes: InterfaceMeshes,
 	widget_tree_root: Widget,
 
 	worker_tasks: Vec<WorkerTask>,
@@ -681,10 +672,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let log = vec![];
 
-	let interface_meshes = InterfaceMeshes {
-		simple_texture_mesh: SimpleTextureMesh::from_vertices(&device, vec![]),
-	};
-
 	let widget_tree_root = Widget::new_list(
 		vec![
 			Widget::new_margins_around(200.0, Box::new(Widget::new_nothing())),
@@ -740,7 +727,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		loading_distance,
 		margin_before_unloading,
 		log,
-		interface_meshes,
 		widget_tree_root,
 
 		worker_tasks,
@@ -1013,7 +999,7 @@ pub fn run() {
 			}
 			game.controls_to_trigger.clear();
 
-			game.interface_meshes.clear(&game.device);
+			let mut interface_meshes_vertices = InterfaceMeshesVertices::new();
 
 			// Top left info.
 			{
@@ -1067,9 +1053,7 @@ pub fn run() {
 						{random_message}"
 					),
 				);
-				game
-					.interface_meshes
-					.add_raw_vertices(&game.device, simple_texture_vertices);
+				interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
 			}
 
 			// Command line handling.
@@ -1151,9 +1135,7 @@ pub fn run() {
 					settings,
 					text_displayed,
 				);
-				game
-					.interface_meshes
-					.add_raw_vertices(&game.device, simple_texture_vertices);
+				interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
 			}
 
 			// Log handling.
@@ -1174,9 +1156,7 @@ pub fn run() {
 						log_line.settings.clone(),
 						&log_line.text,
 					);
-					game
-						.interface_meshes
-						.add_raw_vertices(&game.device, simple_texture_vertices);
+					interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
 				}
 			}
 
@@ -1186,10 +1166,9 @@ pub fn run() {
 				let window_height = game.window_surface_config.height as f32;
 				game.widget_tree_root.generate_meshes(
 					cgmath::point3(-1.0, window_height / window_width, 0.5),
-					&mut game.interface_meshes,
+					&mut interface_meshes_vertices,
 					&game.font,
 					window_width,
-					&game.device,
 				);
 			}
 
@@ -1601,6 +1580,11 @@ pub fn run() {
 				bytemuck::cast_slice(&[sun_light_direction]),
 			);
 
+			let interface_simple_texture_mesh = SimpleTextureMesh::from_vertices(
+				&game.device,
+				interface_meshes_vertices.simple_texture_vertices,
+			);
+
 			let mut encoder = game
 				.device
 				.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1730,7 +1714,7 @@ pub fn run() {
 				if game.enable_display_interface
 					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
 				{
-					let mesh = &game.interface_meshes.simple_texture_mesh;
+					let mesh = &interface_simple_texture_mesh;
 					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
 				}
