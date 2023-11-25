@@ -12,7 +12,6 @@
 
 ## UI
 
-- Make a widget tree.
 - Maybe introduce type aliases to better label weather we are after or before the correction by `2.0/window_with`.
 
 ## Command Language

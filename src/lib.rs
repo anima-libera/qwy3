@@ -238,9 +238,12 @@ enum Widget {
 		sub_widget: Box<Widget>,
 		label: WidgetLabel,
 	},
-	MarginsAround {
+	Margins {
 		sub_widget: Box<Widget>,
-		margin: f32,
+		margin_left: f32,
+		margin_top: f32,
+		margin_right: f32,
+		margin_bottom: f32,
 	},
 	List {
 		sub_widgets: Vec<Widget>,
@@ -261,8 +264,11 @@ impl Widget {
 		Widget::Label { sub_widget: Box::new(Widget::new_nothing()), label }
 	}
 
-	fn new_margins_around(margin: f32, around_what: Box<Widget>) -> Widget {
-		Widget::MarginsAround { sub_widget: around_what, margin }
+	fn new_margins(
+		(margin_left, margin_top, margin_right, margin_bottom): (f32, f32, f32, f32),
+		sub_widget: Box<Widget>,
+	) -> Widget {
+		Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom }
 	}
 
 	fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
@@ -275,7 +281,7 @@ impl Widget {
 			Widget::SimpleText { .. } => None,
 			Widget::Label { label, .. } if *label == label_to_find => Some(self),
 			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
-			Widget::MarginsAround { sub_widget, .. } => sub_widget.find_label(label_to_find),
+			Widget::Margins { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::List { sub_widgets, .. } => sub_widgets
 				.iter_mut()
 				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
@@ -299,9 +305,11 @@ impl Widget {
 				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
 			},
 			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_width),
-			Widget::MarginsAround { sub_widget, margin } => {
+			Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom } => {
 				let sub_dimensions = sub_widget.dimensions(font, window_width);
-				sub_dimensions + cgmath::vec2(2.0 * margin, 2.0 * margin) * 2.0 / window_width
+				sub_dimensions
+					+ cgmath::vec2(margin_left + margin_right, margin_top + margin_bottom)
+						* (2.0 / window_width)
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
@@ -309,7 +317,7 @@ impl Widget {
 					let sub_dimensions = sub_widget.dimensions(font, window_width);
 					dimensions.x = dimensions.x.max(sub_dimensions.x);
 					if i != 0 {
-						dimensions.y += interspace * 2.0 / window_width;
+						dimensions.y += interspace * (2.0 / window_width);
 					}
 					dimensions.y += sub_dimensions.y;
 				}
@@ -341,8 +349,9 @@ impl Widget {
 			Widget::Label { sub_widget, .. } => {
 				sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
 			},
-			Widget::MarginsAround { sub_widget, margin } => {
-				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) * 2.0 / window_width;
+			Widget::Margins { sub_widget, margin_left, margin_top, .. } => {
+				let sub_top_left =
+					top_left + cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_width);
 				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, draw_debug_boxes);
 			},
 			Widget::List { sub_widgets, interspace } => {
@@ -351,7 +360,7 @@ impl Widget {
 					sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
 					let sub_height = sub_widget.dimensions(font, window_width).y;
 					top_left.y -= sub_height;
-					top_left.y -= interspace * 2.0 / window_width;
+					top_left.y -= interspace * (2.0 / window_width);
 				}
 			},
 		}
@@ -743,22 +752,18 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let log = vec![];
 
-	let widget_tree_root = Widget::new_list(
-		vec![
-			Widget::new_margins_around(200.0, Box::new(Widget::new_nothing())),
-			Widget::new_margins_around(
-				10.0,
-				Box::new(Widget::new_simple_text(
+	let widget_tree_root = Widget::new_margins(
+		(5.0, 5.0, 0.0, 0.0),
+		Box::new(Widget::new_list(
+			vec![
+				Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo),
+				Widget::new_simple_text(
 					"test".to_string(),
 					font::TextRenderingSettings::with_scale(3.0),
-				)),
-			),
-			Widget::new_margins_around(
-				40.0,
-				Box::new(Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo)),
-			),
-		],
-		5.0,
+				),
+			],
+			5.0,
+		)),
 	);
 
 	let enable_interface_draw_debug_boxes = false;
