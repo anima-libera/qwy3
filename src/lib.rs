@@ -177,7 +177,7 @@ struct RectInAtlas {
 struct LogLine {
 	text: String,
 	settings: font::TextRenderingSettings,
-	dimensions: (f32, f32),
+	dimensions: cgmath::Vector2<f32>,
 	target_position: cgmath::Point2<f32>,
 	current_position: cgmath::Point2<f32>,
 	last_target_position_changing_time: std::time::Instant,
@@ -185,14 +185,14 @@ struct LogLine {
 
 fn simple_line_vertices_for_rect(
 	top_left: cgmath::Point3<f32>,
-	dimensions: (f32, f32),
+	dimensions: cgmath::Vector2<f32>,
 	color: [f32; 3],
 ) -> Vec<SimpleLineVertexPod> {
 	let mut vertices = vec![];
 	let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
-	let b = top_left + cgmath::vec3(dimensions.0, 0.0, 0.0);
-	let c = top_left + cgmath::vec3(0.0, -dimensions.1, 0.0);
-	let d = top_left + cgmath::vec3(dimensions.0, -dimensions.1, 0.0);
+	let b = top_left + cgmath::vec3(dimensions.x, 0.0, 0.0);
+	let c = top_left + cgmath::vec3(0.0, -dimensions.y, 0.0);
+	let d = top_left + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
 	vertices.push(SimpleLineVertexPod { position: a.into(), color });
 	vertices.push(SimpleLineVertexPod { position: b.into(), color });
 	vertices.push(SimpleLineVertexPod { position: b.into(), color });
@@ -292,32 +292,28 @@ impl Widget {
 		})
 	}
 
-	fn dimensions(&self, font: &font::Font, window_width: f32) -> (f32, f32) {
+	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
 		match self {
-			Widget::Nothing => (0.0, 0.0),
+			Widget::Nothing => cgmath::vec2(0.0, 0.0),
 			Widget::SimpleText { text, settings } => {
 				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
 			},
 			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_width),
 			Widget::MarginsAround { sub_widget, margin } => {
-				let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
-				(
-					sub_width + 2.0 * margin * 2.0 / window_width,
-					sub_height + 2.0 * margin * 2.0 / window_width,
-				)
+				let sub_dimensions = sub_widget.dimensions(font, window_width);
+				sub_dimensions + cgmath::vec2(2.0 * margin, 2.0 * margin) * 2.0 / window_width
 			},
 			Widget::List { sub_widgets, interspace } => {
-				let mut width: f32 = 0.0;
-				let mut height: f32 = 0.0;
+				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for (i, sub_widget) in sub_widgets.iter().enumerate() {
-					let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
-					width = width.max(sub_width);
+					let sub_dimensions = sub_widget.dimensions(font, window_width);
+					dimensions.x = dimensions.x.max(sub_dimensions.x);
 					if i != 0 {
-						height += interspace * 2.0 / window_width;
+						dimensions.y += interspace * 2.0 / window_width;
 					}
-					height += sub_height;
+					dimensions.y += sub_dimensions.y;
 				}
-				(width, height)
+				dimensions
 			},
 		}
 	}
@@ -353,19 +349,19 @@ impl Widget {
 				let mut top_left = top_left;
 				for sub_widget in sub_widgets.iter() {
 					sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
-					let (_sub_width, sub_height) = sub_widget.dimensions(font, window_width);
+					let sub_height = sub_widget.dimensions(font, window_width).y;
 					top_left.y -= sub_height;
 					top_left.y -= interspace * 2.0 / window_width;
 				}
 			},
 		}
 		if draw_debug_boxes {
-			let (width, height) = self.dimensions(font, window_width);
+			let dimensions = self.dimensions(font, window_width);
 			let mut top_left = top_left;
 			top_left.z = 0.0;
 			meshes.add_simple_line_vertices(simple_line_vertices_for_rect(
 				top_left,
-				(width, height),
+				dimensions,
 				DEBUG_HITBOXES_COLOR,
 			));
 		}
@@ -1160,7 +1156,7 @@ pub fn run() {
 				);
 				let mut y = 10.0 / window_width - window_height / window_width;
 				for log_line in game.log.iter_mut() {
-					y += log_line.dimensions.1 + 10.0 / window_width;
+					y += log_line.dimensions.y + 10.0 / window_width;
 					let x = -1.0 + 10.0 / window_width;
 					// Somehow this makes it pixel perfect, somehow?
 					let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
@@ -1169,12 +1165,12 @@ pub fn run() {
 					log_line.last_target_position_changing_time = std::time::Instant::now();
 				}
 				//game.log[0].current_position = cgmath::point2(
-				//	-1.0 - game.log[0].dimensions.0,
+				//	-1.0 - game.log[0].dimensions.x,
 				//	game.log[0].target_position.y,
 				//);
 				game.log[0].current_position = cgmath::point2(
-					-game.log[0].dimensions.0 / 2.0,
-					-game.log[0].dimensions.1 / 2.0,
+					-game.log[0].dimensions.x / 2.0,
+					-game.log[0].dimensions.y / 2.0,
 				);
 				game.command_line_content.clear();
 				game.command_confirmed = false;
@@ -1198,8 +1194,8 @@ pub fn run() {
 					settings.clone(),
 					command_line_content_with_carret.as_str(),
 				);
-				let y = 0.0 + dimensions.1 / 2.0;
-				let x = 0.0 - dimensions.0 / 2.0;
+				let y = 0.0 + dimensions.y / 2.0;
+				let x = 0.0 - dimensions.x / 2.0;
 				// Somehow this makes it pixel perfect, somehow?
 				let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
 				let text_displayed = if carret_visible {

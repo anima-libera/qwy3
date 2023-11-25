@@ -104,7 +104,7 @@ impl Font {
 		window_width: f32,
 		settings: TextRenderingSettings,
 		text: &str,
-	) -> (f32, f32) {
+	) -> cgmath::Vector2<f32> {
 		// Size of a screen pixel in Wgpu/Vulkan XY-plane coordinate space.
 		// It would be `1.0 / window_width` if the coord space would go from 0.0 to 1.0,
 		// but since it goes from -1.0 to 1.0 then it is twice as big so we account for that.
@@ -138,7 +138,7 @@ impl Font {
 			}
 		}
 
-		(max_width, max_height)
+		cgmath::vec2(max_width, max_height)
 	}
 
 	pub fn simple_texture_vertices_from_text(
