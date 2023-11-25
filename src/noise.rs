@@ -146,8 +146,9 @@ impl OctavedNoise {
 	}
 
 	pub fn sample(&self, xs: &[f32], additional_channels: &[i32]) -> f32 {
-		let mut working_xs =
-			Vec::with_capacity(xs.len() + self.base_channels.len() + additional_channels.len());
+		let mut working_xs = smallvec::SmallVec::<[CoordOrChannel; 8]>::with_capacity(
+			xs.len() + self.base_channels.len() + additional_channels.len(),
+		);
 		for x in xs {
 			working_xs.push(CoordOrChannel::Coord(*x));
 		}
