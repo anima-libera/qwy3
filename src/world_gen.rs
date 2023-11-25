@@ -44,6 +44,7 @@ pub enum WhichWorldGenerator {
 	Test019,
 	Test020,
 	Test021,
+	Test022,
 }
 
 impl WhichWorldGenerator {
@@ -73,6 +74,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test019 => "test019",
 			WhichWorldGenerator::Test020 => "test020",
 			WhichWorldGenerator::Test021 => "test021",
+			WhichWorldGenerator::Test022 => "test022",
 		}
 	}
 
@@ -102,6 +104,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test019 => Arc::new(WorldGeneratorTest019 { seed }),
 			WhichWorldGenerator::Test020 => Arc::new(WorldGeneratorTest020 { seed }),
 			WhichWorldGenerator::Test021 => Arc::new(WorldGeneratorTest021 { seed }),
+			WhichWorldGenerator::Test022 => Arc::new(WorldGeneratorTest022 { seed }),
 		}
 	}
 
@@ -1559,6 +1562,97 @@ impl WorldGenerator for WorldGeneratorTest021 {
 			let n = biome_heights.len() as i32;
 			let mut values: Vec<_> = (0..n)
 				.map(|i| (i as usize, noise_biomes.sample_2d(coordsf_xy / scale, &[i])))
+				.collect();
+			values.sort_by(|value_a, value_b| value_a.1.partial_cmp(&value_b.1).unwrap());
+			values.reverse();
+			fn get_height(
+				i: usize,
+				values: &[(usize, f32)],
+				biome_heights: &[Height; 5],
+			) -> (Height, f32) {
+				let get_diff = |i: usize| values[i].1 - values[i + 1].1;
+				let max_diff = 0.06;
+				let get_coef = |i: usize| get_diff(i).clamp(0.0, max_diff) / max_diff;
+				let get_base_height = |i: usize| -> Height { biome_heights[i] };
+
+				if i == values.len() - 1 {
+					(get_base_height(values[i].0), 1.0)
+				} else {
+					let coef = get_coef(i);
+					let base = get_base_height(values[i].0);
+					if false {
+						(base, 1.0)
+					} else {
+						let (after, after_part) = get_height(i + 1, values, biome_heights);
+						let part = 2.0 - after_part;
+						let height = interpolate(&smoothing, 1.0 - coef, 0.0, part, base, after);
+						(height, (1.0 - coef) / part)
+					}
+				}
+			}
+			get_height(0, &values, &biome_heights).0
+		};
+
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let height = coords_to_biome_height(coords);
+			let coordsf = coords.map(|x| x as f32);
+			coordsf.z < height
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			// Test chunk generation.
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+		}
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorTest022 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest022 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		fn interpolate(
+			smoothing: &dyn Fn(f32) -> f32,
+			x: f32,
+			x_inf: f32,
+			x_sup: f32,
+			dst_inf: f32,
+			dst_sup: f32,
+		) -> f32 {
+			let ratio = (x - x_inf) / (x_sup - x_inf);
+			let smooth_ratio = smoothing(ratio);
+			dst_inf + smooth_ratio * (dst_sup - dst_inf)
+		}
+		fn smoothing(x: f32) -> f32 {
+			x
+		}
+
+		let noise_biomes = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		type Height = f32;
+		let biome_heights: [Height; 5] = [0.0, 5.0, 10.0, 30.0, 100.0];
+
+		let coords_to_biome_height = |coords: BlockCoords| -> f32 {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 120.0;
+			let n = biome_heights.len() as i32;
+			let mut values: Vec<_> = (0..n)
+				.map(|i| (i as usize, noise_biomes.sample_3d(coordsf / scale, &[i])))
 				.collect();
 			values.sort_by(|value_a, value_b| value_a.1.partial_cmp(&value_b.1).unwrap());
 			values.reverse();
