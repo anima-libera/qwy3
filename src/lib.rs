@@ -321,6 +321,8 @@ impl Widget {
 		}
 		if draw_debug_boxes {
 			let (width, height) = self.dimensions(font, window_width);
+			let mut top_left = top_left;
+			top_left.z = 0.0;
 			meshes.add_simple_line_vertices(simple_line_vertices_for_rect(
 				top_left,
 				(width, height),
