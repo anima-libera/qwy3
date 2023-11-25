@@ -258,16 +258,6 @@ enum Widget {
 	},
 }
 
-fn smoothed_animation_progression_ratio(
-	animation_start_time: std::time::Instant,
-	animation_duration: std::time::Duration,
-) -> f32 {
-	let ratio =
-		(animation_start_time.elapsed().as_secs_f32() / animation_duration.as_secs_f32()).min(1.0);
-	// Smoothing the end of the animation a bit (arount when the ratio is 1.0).
-	1.0 - (1.0 - ratio).powi(3)
-}
-
 impl Widget {
 	fn new_nothing() -> Widget {
 		Widget::Nothing
@@ -334,6 +324,19 @@ impl Widget {
 		})
 	}
 
+	fn smoothed_animation_progression_ratio(&self) -> f32 {
+		match self {
+			Widget::SmoothlyIncoming { animation_start_time, animation_duration, .. } => {
+				let ratio = (animation_start_time.elapsed().as_secs_f32()
+					/ animation_duration.as_secs_f32())
+				.min(1.0);
+				// Smoothing the end of the animation a bit (arount when the ratio is 1.0).
+				1.0 - (1.0 - ratio).powi(3)
+			},
+			_ => 1.0,
+		}
+	}
+
 	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
 		match self {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
@@ -347,23 +350,30 @@ impl Widget {
 					+ cgmath::vec2(margin_left + margin_right, margin_top + margin_bottom)
 						* (2.0 / window_width)
 			},
-			Widget::SmoothlyIncoming {
-				sub_widget, animation_start_time, animation_duration, ..
-			} => {
-				let progression =
-					smoothed_animation_progression_ratio(*animation_start_time, *animation_duration);
+			Widget::SmoothlyIncoming { sub_widget, .. } => {
+				let progression = self.smoothed_animation_progression_ratio();
 				let sub_dimensions = sub_widget.dimensions(font, window_width);
 				sub_dimensions * progression
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
-				for (i, sub_widget) in sub_widgets.iter().enumerate() {
-					let sub_dimensions = sub_widget.dimensions(font, window_width);
-					dimensions.x = dimensions.x.max(sub_dimensions.x);
-					if i != 0 {
-						dimensions.y += interspace * (2.0 / window_width);
-					}
+				for i in 0..sub_widgets.len() {
+					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
 					dimensions.y += sub_dimensions.y;
+					dimensions.x = dimensions.x.max(sub_dimensions.x);
+					// Now we add the interspaces between the current sub widget and the
+					// next sub widget.
+					// If the current or next (or both) sub widgets have not fully arrived
+					// then the interspace should also not be fully developped (so that everything
+					// in the list make space in a smooth manner, even the interspaces).
+					if i != sub_widgets.len() - 1 {
+						let current_sub_progression =
+							sub_widgets[i].smoothed_animation_progression_ratio();
+						let next_sub_progression =
+							sub_widgets[i + 1].smoothed_animation_progression_ratio();
+						let mean_progression = (current_sub_progression + next_sub_progression) / 2.0;
+						dimensions.y += interspace * mean_progression * (2.0 / window_width);
+					}
 				}
 				dimensions
 			},
@@ -398,14 +408,8 @@ impl Widget {
 					top_left + cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_width);
 				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, draw_debug_boxes);
 			},
-			Widget::SmoothlyIncoming {
-				sub_widget,
-				start_top_left,
-				animation_start_time,
-				animation_duration,
-			} => {
-				let progression =
-					smoothed_animation_progression_ratio(*animation_start_time, *animation_duration);
+			Widget::SmoothlyIncoming { sub_widget, start_top_left, .. } => {
+				let progression = self.smoothed_animation_progression_ratio();
 				let current_top_left = top_left.to_vec() * progression
 					+ start_top_left.to_vec().extend(top_left.z) * (1.0 - progression);
 				sub_widget.generate_meshes(
@@ -418,11 +422,31 @@ impl Widget {
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
-				for sub_widget in sub_widgets.iter() {
-					sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
-					let sub_height = sub_widget.dimensions(font, window_width).y;
-					top_left.y -= sub_height;
-					top_left.y -= interspace * (2.0 / window_width);
+				for i in 0..sub_widgets.len() {
+					sub_widgets[i].generate_meshes(
+						top_left,
+						meshes,
+						font,
+						window_width,
+						draw_debug_boxes,
+					);
+
+					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
+					top_left.y -= sub_dimensions.y;
+
+					// Now we add the interspaces between the current sub widget and the
+					// next sub widget.
+					// If the current or next (or both) sub widgets have not fully arrived
+					// then the interspace should also not be fully developped (so that everything
+					// in the list make space in a smooth manner, even the interspaces).
+					if i != sub_widgets.len() - 1 {
+						let current_sub_progression =
+							sub_widgets[i].smoothed_animation_progression_ratio();
+						let next_sub_progression =
+							sub_widgets[i + 1].smoothed_animation_progression_ratio();
+						let mean_progression = (current_sub_progression + next_sub_progression) / 2.0;
+						top_left.y -= interspace * mean_progression * (2.0 / window_width);
+					}
 				}
 			},
 		}
