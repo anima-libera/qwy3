@@ -45,6 +45,8 @@ fn simple_line_vertices_for_diamond(
 	vertices
 }
 
+/// Vertices for mutliple meshes used to render the interface.
+/// Widgets can draw themselves by adding vertices in here.
 pub struct InterfaceMeshesVertices {
 	pub simple_texture_vertices: Vec<SimpleTextureVertexPod>,
 	pub simple_line_vertices: Vec<SimpleLineVertexPod>,
@@ -76,6 +78,8 @@ pub enum Widget {
 		text: String,
 		settings: font::TextRenderingSettings,
 	},
+	/// A wrapper around a widget that tags it with a label.
+	/// It allows for some code to find the contained widget via the label easily.
 	Label {
 		sub_widget: Box<Widget>,
 		label: WidgetLabel,
@@ -87,6 +91,10 @@ pub enum Widget {
 		margin_right: f32,
 		margin_bottom: f32,
 	},
+	/// A wrapper around a widget that has to arrive at the wrapper's location over a period
+	/// during an animation that takes some time.
+	/// The wrapper begins as almost non-existant in the layout and progressively takes
+	/// the space that will take the contained widget when it finally arrives.
 	SmoothlyIncoming {
 		sub_widget: Box<Widget>,
 		start_top_left: cgmath::Point2<f32>,
@@ -141,6 +149,7 @@ impl Widget {
 		Widget::List { sub_widgets, interspace }
 	}
 
+	/// Returns the first found label widget that matches with the given label.
 	fn find_label(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
 		match self {
 			Widget::Nothing => None,
@@ -155,6 +164,7 @@ impl Widget {
 		}
 	}
 
+	/// Returns the content of the first found label widget that matches with the given label.
 	pub fn find_label_content(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
 		self.find_label(label_to_find).map(|label_widget| {
 			if let Widget::Label { sub_widget, .. } = label_widget {
@@ -165,6 +175,8 @@ impl Widget {
 		})
 	}
 
+	/// Returns a value between 0.0 and 1.0 that represents the progression of the
+	/// "incoming" animation of the widget.
 	fn smoothed_animation_progression_ratio(&self) -> f32 {
 		match self {
 			Widget::SmoothlyIncoming { animation_start_time, animation_duration, .. } => {
@@ -178,6 +190,7 @@ impl Widget {
 		}
 	}
 
+	/// Returns the dimensions of the widget, already corrected to wgsl coords space.
 	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
 		match self {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
@@ -221,7 +234,8 @@ impl Widget {
 		}
 	}
 
-	pub fn generate_meshes(
+	/// Generates the mesh vertices in the given `meshes` that draw the widget.
+	pub fn generate_mesh_vertices(
 		&self,
 		top_left: cgmath::Point3<f32>,
 		meshes: &mut InterfaceMeshesVertices,
@@ -241,18 +255,30 @@ impl Widget {
 				meshes.add_simple_texture_vertices(simple_texture_vertices);
 			},
 			Widget::Label { sub_widget, .. } => {
-				sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
+				sub_widget.generate_mesh_vertices(
+					top_left,
+					meshes,
+					font,
+					window_width,
+					draw_debug_boxes,
+				);
 			},
 			Widget::Margins { sub_widget, margin_left, margin_top, .. } => {
 				let sub_top_left =
 					top_left + cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_width);
-				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, draw_debug_boxes);
+				sub_widget.generate_mesh_vertices(
+					sub_top_left,
+					meshes,
+					font,
+					window_width,
+					draw_debug_boxes,
+				);
 			},
 			Widget::SmoothlyIncoming { sub_widget, start_top_left, .. } => {
 				let progression = self.smoothed_animation_progression_ratio();
 				let current_top_left = top_left.to_vec() * progression
 					+ start_top_left.to_vec().extend(top_left.z) * (1.0 - progression);
-				sub_widget.generate_meshes(
+				sub_widget.generate_mesh_vertices(
 					cgmath::Point3::<f32>::from_vec(current_top_left),
 					meshes,
 					font,
@@ -263,7 +289,7 @@ impl Widget {
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
 				for i in 0..sub_widgets.len() {
-					sub_widgets[i].generate_meshes(
+					sub_widgets[i].generate_mesh_vertices(
 						top_left,
 						meshes,
 						font,
@@ -290,6 +316,7 @@ impl Widget {
 				}
 			},
 		}
+
 		if draw_debug_boxes {
 			const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
 			const DEBUG_HITBOXES_DIAMOND_COLOR: [f32; 3] = [0.0, 0.0, 1.0];

@@ -18,7 +18,7 @@ mod world_gen;
 
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
-use cgmath::{ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
+use cgmath::{ElementWise, InnerSpace, MetricSpace};
 use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
@@ -176,15 +176,6 @@ struct RectInAtlas {
 	texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
 
-struct LogLine {
-	text: String,
-	settings: font::TextRenderingSettings,
-	dimensions: cgmath::Vector2<f32>,
-	target_position: cgmath::Point2<f32>,
-	current_position: cgmath::Point2<f32>,
-	last_target_position_changing_time: std::time::Instant,
-}
-
 struct Game {
 	window: winit::window::Window,
 	window_surface: wgpu::Surface,
@@ -223,7 +214,6 @@ struct Game {
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
 	loading_distance: f32,
 	margin_before_unloading: f32,
-	log: Vec<LogLine>,
 	widget_tree_root: Widget,
 	enable_interface_draw_debug_boxes: bool,
 
@@ -558,8 +548,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 	let enable_temporary_meshing_of_not_surrounded_chunks = true;
 
-	let log = vec![];
-
 	let widget_tree_root = Widget::new_margins(
 		(5.0, 5.0, 0.0, 0.0),
 		Box::new(Widget::new_list(
@@ -629,7 +617,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		world_generator,
 		loading_distance,
 		margin_before_unloading,
-		log,
 		widget_tree_root,
 		enable_interface_draw_debug_boxes,
 
@@ -963,42 +950,6 @@ pub fn run() {
 				let text = game.command_line_content.clone();
 				let settings = font::TextRenderingSettings::with_scale(3.0);
 
-				let window_width = game.window_surface_config.width as f32;
-				let window_height = game.window_surface_config.height as f32;
-				let dimensions =
-					game
-						.font
-						.dimensions_of_text(window_width, settings.clone(), text.as_str());
-				game.log.insert(
-					0,
-					LogLine {
-						text: text.clone(),
-						settings,
-						dimensions,
-						target_position: cgmath::point2(0.0, 0.0),
-						current_position: cgmath::point2(0.0, 0.0),
-						last_target_position_changing_time: std::time::Instant::now(),
-					},
-				);
-				let mut y = 10.0 / window_width - window_height / window_width;
-				for log_line in game.log.iter_mut() {
-					y += log_line.dimensions.y + 10.0 / window_width;
-					let x = -1.0 + 10.0 / window_width;
-					// Somehow this makes it pixel perfect, somehow?
-					let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
-					let position = cgmath::point2(x, y);
-					log_line.target_position = position;
-					log_line.last_target_position_changing_time = std::time::Instant::now();
-				}
-				//game.log[0].current_position = cgmath::point2(
-				//	-1.0 - game.log[0].dimensions.x,
-				//	game.log[0].target_position.y,
-				//);
-				game.log[0].current_position = cgmath::point2(
-					-game.log[0].dimensions.x / 2.0,
-					-game.log[0].dimensions.y / 2.0,
-				);
-
 				if let Some(Widget::List { sub_widgets, .. }) = game
 					.widget_tree_root
 					.find_label_content(WidgetLabel::LogLineList)
@@ -1007,10 +958,7 @@ pub fn run() {
 						cgmath::point2(0.0, 0.0),
 						std::time::Instant::now(),
 						std::time::Duration::from_secs_f32(1.0),
-						Box::new(Widget::new_simple_text(
-							text,
-							font::TextRenderingSettings::with_scale(3.0),
-						)),
+						Box::new(Widget::new_simple_text(text, settings)),
 					));
 				}
 
@@ -1054,33 +1002,11 @@ pub fn run() {
 				interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
 			}
 
-			// Log handling.
-			{
-				let window_width = game.window_surface_config.width as f32;
-				for log_line in game.log.iter_mut() {
-					let ratio = 0.08;
-					log_line.current_position = log_line.current_position * (1.0 - ratio)
-						+ log_line.target_position.to_vec() * ratio;
-					let position = cgmath::point3(
-						log_line.current_position.x,
-						log_line.current_position.y,
-						0.5,
-					);
-					let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
-						window_width,
-						position,
-						log_line.settings.clone(),
-						&log_line.text,
-					);
-					interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
-				}
-			}
-
 			// Interface widget tree.
 			{
 				let window_width = game.window_surface_config.width as f32;
 				let window_height = game.window_surface_config.height as f32;
-				game.widget_tree_root.generate_meshes(
+				game.widget_tree_root.generate_mesh_vertices(
 					cgmath::point3(-1.0, window_height / window_width, 0.5),
 					&mut interface_meshes_vertices,
 					&game.font,
