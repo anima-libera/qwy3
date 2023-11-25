@@ -965,6 +965,24 @@ pub fn run() {
 						std::time::Duration::from_secs_f32(1.0),
 						Box::new(Widget::new_simple_text(text, settings)),
 					));
+
+					if sub_widgets
+						.iter()
+						.filter(|widget| !widget.is_diappearing())
+						.count() > 25
+					{
+						let window_width = game.window_surface_config.width as f32;
+						sub_widgets
+							.iter_mut()
+							.find(|widget| !widget.is_diappearing())
+							.expect("we just checked that there are at meast some amout of them")
+							.pop_while_smoothly_closing_space(
+								std::time::Instant::now(),
+								std::time::Duration::from_secs_f32(1.0),
+								&game.font,
+								window_width,
+							);
+					}
 				}
 
 				game.command_line_content.clear();

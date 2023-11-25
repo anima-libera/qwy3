@@ -101,6 +101,11 @@ pub enum Widget {
 		animation_start_time: std::time::Instant,
 		animation_duration: std::time::Duration,
 	},
+	SmoothlyDisappearingEmptySpace {
+		start_dimensions: cgmath::Vector2<f32>,
+		animation_start_time: std::time::Instant,
+		animation_duration: std::time::Duration,
+	},
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
@@ -149,6 +154,26 @@ impl Widget {
 		Widget::List { sub_widgets, interspace }
 	}
 
+	pub fn pop_while_smoothly_closing_space(
+		&mut self,
+		animation_start_time: std::time::Instant,
+		animation_duration: std::time::Duration,
+		font: &font::Font,
+		window_width: f32,
+	) -> Widget {
+		let mut widget = Widget::SmoothlyDisappearingEmptySpace {
+			start_dimensions: self.dimensions(font, window_width),
+			animation_start_time,
+			animation_duration,
+		};
+		std::mem::swap(self, &mut widget);
+		widget
+	}
+
+	pub fn is_diappearing(&self) -> bool {
+		matches!(self, Widget::SmoothlyDisappearingEmptySpace { .. })
+	}
+
 	/// Returns the first found label widget that matches with the given label.
 	fn find_label(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
 		match self {
@@ -158,6 +183,7 @@ impl Widget {
 			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::Margins { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.find_label(label_to_find),
+			Widget::SmoothlyDisappearingEmptySpace { .. } => None,
 			Widget::List { sub_widgets, .. } => sub_widgets
 				.iter_mut()
 				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
@@ -175,9 +201,11 @@ impl Widget {
 		})
 	}
 
-	/// Returns a value between 0.0 and 1.0 that represents the progression of the
-	/// "incoming" animation of the widget.
-	fn smoothed_animation_progression_ratio(&self) -> f32 {
+	/// Returns a value between 0.0 and 1.0 that represents how much the widget "exists".
+	/// For example, a widget that is a wrapper with an apparition animation will
+	/// have an existence ratio that slowly goes from 0.0 to 1.0, and a wrapper that
+	/// has a disappearing animation will have a ratio that goes from 1.0 to 0.0.
+	fn existence_ratio(&self) -> f32 {
 		match self {
 			Widget::SmoothlyIncoming { animation_start_time, animation_duration, .. } => {
 				let ratio = (animation_start_time.elapsed().as_secs_f32()
@@ -185,6 +213,18 @@ impl Widget {
 				.min(1.0);
 				// Smoothing the end of the animation a bit (arount when the ratio is 1.0).
 				1.0 - (1.0 - ratio).powi(3)
+			},
+			Widget::SmoothlyDisappearingEmptySpace {
+				animation_start_time,
+				animation_duration,
+				..
+			} => {
+				let ratio = (animation_start_time.elapsed().as_secs_f32()
+					/ animation_duration.as_secs_f32())
+				.min(1.0);
+				let ratio = 1.0 - ratio;
+				// Smoothing the end of the animation a bit (arount when the ratio is 0.0).
+				ratio.powi(3)
 			},
 			_ => 1.0,
 		}
@@ -205,9 +245,13 @@ impl Widget {
 						* (2.0 / window_width)
 			},
 			Widget::SmoothlyIncoming { sub_widget, .. } => {
-				let progression = self.smoothed_animation_progression_ratio();
+				let ratio = self.existence_ratio();
 				let sub_dimensions = sub_widget.dimensions(font, window_width);
-				sub_dimensions * progression
+				sub_dimensions * ratio
+			},
+			Widget::SmoothlyDisappearingEmptySpace { start_dimensions, .. } => {
+				let ratio = self.existence_ratio();
+				start_dimensions * ratio
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
@@ -221,12 +265,10 @@ impl Widget {
 					// then the interspace should also not be fully developped (so that everything
 					// in the list make space in a smooth manner, even the interspaces).
 					if i != sub_widgets.len() - 1 {
-						let current_sub_progression =
-							sub_widgets[i].smoothed_animation_progression_ratio();
-						let next_sub_progression =
-							sub_widgets[i + 1].smoothed_animation_progression_ratio();
-						let mean_progression = (current_sub_progression + next_sub_progression) / 2.0;
-						dimensions.y += interspace * mean_progression * (2.0 / window_width);
+						let current_sub_ratio = sub_widgets[i].existence_ratio();
+						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
+						let mean_ratio = (current_sub_ratio + next_sub_ratio) / 2.0;
+						dimensions.y += interspace * mean_ratio * (2.0 / window_width);
 					}
 				}
 				dimensions
@@ -275,7 +317,7 @@ impl Widget {
 				);
 			},
 			Widget::SmoothlyIncoming { sub_widget, start_top_left, .. } => {
-				let progression = self.smoothed_animation_progression_ratio();
+				let progression = self.existence_ratio();
 				let current_top_left = top_left.to_vec() * progression
 					+ start_top_left.to_vec().extend(top_left.z) * (1.0 - progression);
 				sub_widget.generate_mesh_vertices(
@@ -286,6 +328,7 @@ impl Widget {
 					draw_debug_boxes,
 				);
 			},
+			Widget::SmoothlyDisappearingEmptySpace { .. } => {},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
 				for i in 0..sub_widgets.len() {
@@ -306,10 +349,8 @@ impl Widget {
 					// then the interspace should also not be fully developped (so that everything
 					// in the list make space in a smooth manner, even the interspaces).
 					if i != sub_widgets.len() - 1 {
-						let current_sub_progression =
-							sub_widgets[i].smoothed_animation_progression_ratio();
-						let next_sub_progression =
-							sub_widgets[i + 1].smoothed_animation_progression_ratio();
+						let current_sub_progression = sub_widgets[i].existence_ratio();
+						let next_sub_progression = sub_widgets[i + 1].existence_ratio();
 						let mean_progression = (current_sub_progression + next_sub_progression) / 2.0;
 						top_left.y -= interspace * mean_progression * (2.0 / window_width);
 					}
@@ -317,6 +358,7 @@ impl Widget {
 			},
 		}
 
+		// If asked for, we can draw boxes around widgets to help debugging widget tree layout.
 		if draw_debug_boxes {
 			const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
 			const DEBUG_HITBOXES_DIAMOND_COLOR: [f32; 3] = [0.0, 0.0, 1.0];
