@@ -131,7 +131,7 @@ impl Font {
 					* screen_pixel_size
 					* settings.scale;
 				max_width = max_width.max(coords.x + dimensions.x);
-				max_height = max_height.max(coords.y + dimensions.y);
+				max_height = max_height.max(-coords.y + dimensions.y);
 				coords.x +=
 					character_details.dimensions_in_pixels.x as f32 * screen_pixel_size * settings.scale
 						+ settings.inbetween_characters_space_width * screen_pixel_size;

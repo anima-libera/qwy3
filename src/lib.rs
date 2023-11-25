@@ -223,11 +223,20 @@ impl InterfaceMeshesVertices {
 	}
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum WidgetLabel {
+	GeneralDebugInfo,
+}
+
 enum Widget {
 	Nothing,
 	SimpleText {
 		text: String,
 		settings: font::TextRenderingSettings,
+	},
+	Label {
+		sub_widget: Box<Widget>,
+		label: WidgetLabel,
 	},
 	MarginsAround {
 		sub_widget: Box<Widget>,
@@ -248,6 +257,10 @@ impl Widget {
 		Widget::SimpleText { text, settings }
 	}
 
+	fn new_labeled_nothing(label: WidgetLabel) -> Widget {
+		Widget::Label { sub_widget: Box::new(Widget::new_nothing()), label }
+	}
+
 	fn new_margins_around(margin: f32, around_what: Box<Widget>) -> Widget {
 		Widget::MarginsAround { sub_widget: around_what, margin }
 	}
@@ -256,12 +269,36 @@ impl Widget {
 		Widget::List { sub_widgets, interspace }
 	}
 
+	fn find_label(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
+		match self {
+			Widget::Nothing => None,
+			Widget::SimpleText { .. } => None,
+			Widget::Label { label, .. } if *label == label_to_find => Some(self),
+			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
+			Widget::MarginsAround { sub_widget, .. } => sub_widget.find_label(label_to_find),
+			Widget::List { sub_widgets, .. } => sub_widgets
+				.iter_mut()
+				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
+		}
+	}
+
+	fn find_label_content(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
+		self.find_label(label_to_find).map(|label_widget| {
+			if let Widget::Label { sub_widget, .. } = label_widget {
+				Box::as_mut(sub_widget)
+			} else {
+				unreachable!("`find_label` returns a label");
+			}
+		})
+	}
+
 	fn dimensions(&self, font: &font::Font, window_width: f32) -> (f32, f32) {
 		match self {
 			Widget::Nothing => (0.0, 0.0),
 			Widget::SimpleText { text, settings } => {
 				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
 			},
+			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_width),
 			Widget::MarginsAround { sub_widget, margin } => {
 				let (sub_width, sub_height) = sub_widget.dimensions(font, window_width);
 				(
@@ -304,6 +341,9 @@ impl Widget {
 					text,
 				);
 				meshes.add_simple_texture_vertices(simple_texture_vertices);
+			},
+			Widget::Label { sub_widget, .. } => {
+				sub_widget.generate_meshes(top_left, meshes, font, window_width, draw_debug_boxes);
 			},
 			Widget::MarginsAround { sub_widget, margin } => {
 				let sub_top_left = top_left + cgmath::vec3(*margin, -*margin, 0.0) * 2.0 / window_width;
@@ -717,6 +757,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 					font::TextRenderingSettings::with_scale(3.0),
 				)),
 			),
+			Widget::new_margins_around(
+				40.0,
+				Box::new(Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo)),
+			),
 		],
 		5.0,
 	);
@@ -1044,9 +1088,10 @@ pub fn run() {
 			let mut interface_meshes_vertices = InterfaceMeshesVertices::new();
 
 			// Top left info.
+			if let Some(general_debug_info_widget) = game
+				.widget_tree_root
+				.find_label_content(WidgetLabel::GeneralDebugInfo)
 			{
-				let window_width = game.window_surface_config.width as f32;
-				let window_height = game.window_surface_config.height as f32;
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.map.len();
 				let block_count = chunk_count * game.cd.number_of_blocks();
@@ -1077,25 +1122,16 @@ pub fn run() {
 				};
 				let random_message = game.random_message;
 				let settings = font::TextRenderingSettings::with_scale(3.0);
-				let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
-					window_width,
-					cgmath::point3(
-						-1.0 + 4.0 / window_width,
-						(-4.0 + window_height) / window_width,
-						0.5,
-					),
-					settings,
-					&format!(
-						"fps: {fps}\n\
-						chunks loaded: {chunk_count}\n\
-						blocks loaded: {block_count}\n\
-						chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
-							{chunk_meshed_count}\n\
-						player coords: {player_block_coords_str}\n\
-						{random_message}"
-					),
+				let text = format!(
+					"fps: {fps}\n\
+					chunks loaded: {chunk_count}\n\
+					blocks loaded: {block_count}\n\
+					chunks meshed: {chunk_def_meshed_count} def + {chunk_tmp_meshed_count} tmp = \
+						{chunk_meshed_count}\n\
+					player coords: {player_block_coords_str}\n\
+					{random_message}"
 				);
-				interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
+				*general_debug_info_widget = Widget::new_simple_text(text, settings);
 			}
 
 			// Command line handling.

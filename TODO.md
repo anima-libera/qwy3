@@ -13,8 +13,7 @@
 ## UI
 
 - Make a widget tree.
-- Fix the fact that we have to multiply by `2.0/window_with` instead of `1.0/window_width`.
-  - Maybe introduce type aliases to better label weather we are after or before the correction.
+- Maybe introduce type aliases to better label weather we are after or before the correction by `2.0/window_with`.
 
 ## Command Language
 
