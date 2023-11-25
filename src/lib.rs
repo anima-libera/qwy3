@@ -945,15 +945,17 @@ pub fn run() {
 
 			// Command line handling.
 			if game.command_confirmed {
-				println!("Executing command \"{}\"", game.command_line_content);
-
 				let text = game.command_line_content.clone();
-				let text = if text.is_empty() {
-					"uwu test".to_string()
+
+				let widget = if text.is_empty() {
+					let scale = rand::thread_rng().gen_range(1..=3) as f32;
+					let settings = font::TextRenderingSettings::with_scale(scale);
+					let text = "uwu test".to_string();
+					Widget::new_simple_text(text, settings)
 				} else {
-					text
+					let settings = font::TextRenderingSettings::with_scale(3.0);
+					Widget::new_simple_text(text, settings)
 				};
-				let settings = font::TextRenderingSettings::with_scale(3.0);
 
 				if let Some(Widget::List { sub_widgets, .. }) = game
 					.widget_tree_root
@@ -963,7 +965,7 @@ pub fn run() {
 						cgmath::point2(0.0, 0.0),
 						std::time::Instant::now(),
 						std::time::Duration::from_secs_f32(1.0),
-						Box::new(Widget::new_simple_text(text, settings)),
+						Box::new(widget),
 					));
 
 					if sub_widgets
