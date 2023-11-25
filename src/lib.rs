@@ -948,6 +948,11 @@ pub fn run() {
 				println!("Executing command \"{}\"", game.command_line_content);
 
 				let text = game.command_line_content.clone();
+				let text = if text.is_empty() {
+					"uwu test".to_string()
+				} else {
+					text
+				};
 				let settings = font::TextRenderingSettings::with_scale(3.0);
 
 				if let Some(Widget::List { sub_widgets, .. }) = game
