@@ -267,8 +267,8 @@ impl Widget {
 					if i != sub_widgets.len() - 1 {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
-						let mean_ratio = (current_sub_ratio + next_sub_ratio) / 2.0;
-						dimensions.y += interspace * mean_ratio * (2.0 / window_width);
+						let ratio = current_sub_ratio * next_sub_ratio;
+						dimensions.y += interspace * ratio * (2.0 / window_width);
 					}
 				}
 				dimensions
@@ -349,10 +349,10 @@ impl Widget {
 					// then the interspace should also not be fully developped (so that everything
 					// in the list make space in a smooth manner, even the interspaces).
 					if i != sub_widgets.len() - 1 {
-						let current_sub_progression = sub_widgets[i].existence_ratio();
-						let next_sub_progression = sub_widgets[i + 1].existence_ratio();
-						let mean_progression = (current_sub_progression + next_sub_progression) / 2.0;
-						top_left.y -= interspace * mean_progression * (2.0 / window_width);
+						let current_sub_ratio = sub_widgets[i].existence_ratio();
+						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
+						let ratio = current_sub_ratio * next_sub_ratio;
+						top_left.y -= interspace * ratio * (2.0 / window_width);
 					}
 				}
 			},
