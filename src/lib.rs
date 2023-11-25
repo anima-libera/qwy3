@@ -226,6 +226,7 @@ impl InterfaceMeshesVertices {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WidgetLabel {
 	GeneralDebugInfo,
+	LogLineList,
 }
 
 enum Widget {
@@ -245,10 +246,26 @@ enum Widget {
 		margin_right: f32,
 		margin_bottom: f32,
 	},
+	SmoothlyIncoming {
+		sub_widget: Box<Widget>,
+		start_top_left: cgmath::Point2<f32>,
+		animation_start_time: std::time::Instant,
+		animation_duration: std::time::Duration,
+	},
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
 	},
+}
+
+fn smoothed_animation_progression_ratio(
+	animation_start_time: std::time::Instant,
+	animation_duration: std::time::Duration,
+) -> f32 {
+	let ratio =
+		(animation_start_time.elapsed().as_secs_f32() / animation_duration.as_secs_f32()).min(1.0);
+	// Smoothing the end of the animation a bit (arount when the ratio is 1.0).
+	1.0 - (1.0 - ratio).powi(3)
 }
 
 impl Widget {
@@ -264,11 +281,29 @@ impl Widget {
 		Widget::Label { sub_widget: Box::new(Widget::new_nothing()), label }
 	}
 
+	fn new_label(label: WidgetLabel, sub_widget: Box<Widget>) -> Widget {
+		Widget::Label { sub_widget, label }
+	}
+
 	fn new_margins(
 		(margin_left, margin_top, margin_right, margin_bottom): (f32, f32, f32, f32),
 		sub_widget: Box<Widget>,
 	) -> Widget {
 		Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom }
+	}
+
+	fn new_smoothly_incoming(
+		start_top_left: cgmath::Point2<f32>,
+		animation_start_time: std::time::Instant,
+		animation_duration: std::time::Duration,
+		sub_widget: Box<Widget>,
+	) -> Widget {
+		Widget::SmoothlyIncoming {
+			sub_widget,
+			start_top_left,
+			animation_start_time,
+			animation_duration,
+		}
 	}
 
 	fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
@@ -282,6 +317,7 @@ impl Widget {
 			Widget::Label { label, .. } if *label == label_to_find => Some(self),
 			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::Margins { sub_widget, .. } => sub_widget.find_label(label_to_find),
+			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::List { sub_widgets, .. } => sub_widgets
 				.iter_mut()
 				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
@@ -310,6 +346,14 @@ impl Widget {
 				sub_dimensions
 					+ cgmath::vec2(margin_left + margin_right, margin_top + margin_bottom)
 						* (2.0 / window_width)
+			},
+			Widget::SmoothlyIncoming {
+				sub_widget, animation_start_time, animation_duration, ..
+			} => {
+				let progression =
+					smoothed_animation_progression_ratio(*animation_start_time, *animation_duration);
+				let sub_dimensions = sub_widget.dimensions(font, window_width);
+				sub_dimensions * progression
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
@@ -353,6 +397,24 @@ impl Widget {
 				let sub_top_left =
 					top_left + cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_width);
 				sub_widget.generate_meshes(sub_top_left, meshes, font, window_width, draw_debug_boxes);
+			},
+			Widget::SmoothlyIncoming {
+				sub_widget,
+				start_top_left,
+				animation_start_time,
+				animation_duration,
+			} => {
+				let progression =
+					smoothed_animation_progression_ratio(*animation_start_time, *animation_duration);
+				let current_top_left = top_left.to_vec() * progression
+					+ start_top_left.to_vec().extend(top_left.z) * (1.0 - progression);
+				sub_widget.generate_meshes(
+					cgmath::Point3::<f32>::from_vec(current_top_left),
+					meshes,
+					font,
+					window_width,
+					draw_debug_boxes,
+				);
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
@@ -757,8 +819,21 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		Box::new(Widget::new_list(
 			vec![
 				Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo),
+				Widget::new_smoothly_incoming(
+					cgmath::point2(1.0, 0.0),
+					std::time::Instant::now(),
+					std::time::Duration::from_secs_f32(1.0),
+					Box::new(Widget::new_simple_text(
+						"nyoom >w<".to_string(),
+						font::TextRenderingSettings::with_scale(3.0),
+					)),
+				),
+				Widget::new_label(
+					WidgetLabel::LogLineList,
+					Box::new(Widget::new_list(vec![], 5.0)),
+				),
 				Widget::new_simple_text(
-					"test".to_string(),
+					"test (stays below log)".to_string(),
 					font::TextRenderingSettings::with_scale(3.0),
 				),
 			],
@@ -1151,7 +1226,7 @@ pub fn run() {
 				game.log.insert(
 					0,
 					LogLine {
-						text,
+						text: text.clone(),
 						settings,
 						dimensions,
 						target_position: cgmath::point2(0.0, 0.0),
@@ -1177,6 +1252,22 @@ pub fn run() {
 					-game.log[0].dimensions.x / 2.0,
 					-game.log[0].dimensions.y / 2.0,
 				);
+
+				if let Some(Widget::List { sub_widgets, .. }) = game
+					.widget_tree_root
+					.find_label_content(WidgetLabel::LogLineList)
+				{
+					sub_widgets.push(Widget::new_smoothly_incoming(
+						cgmath::point2(0.0, 0.0),
+						std::time::Instant::now(),
+						std::time::Duration::from_secs_f32(1.0),
+						Box::new(Widget::new_simple_text(
+							text,
+							font::TextRenderingSettings::with_scale(3.0),
+						)),
+					));
+				}
+
 				game.command_line_content.clear();
 				game.command_confirmed = false;
 			}
