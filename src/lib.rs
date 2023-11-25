@@ -204,6 +204,27 @@ fn simple_line_vertices_for_rect(
 	vertices
 }
 
+fn simple_line_vertices_for_diamond(
+	center: cgmath::Point3<f32>,
+	dimensions: cgmath::Vector2<f32>,
+	color: [f32; 3],
+) -> Vec<SimpleLineVertexPod> {
+	let mut vertices = vec![];
+	let a = center + cgmath::vec3(0.0, dimensions.y, 0.0) / 2.0;
+	let b = center + cgmath::vec3(dimensions.x, 0.0, 0.0) / 2.0;
+	let c = center + cgmath::vec3(0.0, -dimensions.y, 0.0) / 2.0;
+	let d = center + cgmath::vec3(-dimensions.x, 0.0, 0.0) / 2.0;
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices
+}
+
 struct InterfaceMeshesVertices {
 	simple_texture_vertices: Vec<SimpleTextureVertexPod>,
 	simple_line_vertices: Vec<SimpleLineVertexPod>,
@@ -388,7 +409,6 @@ impl Widget {
 		window_width: f32,
 		draw_debug_boxes: bool,
 	) {
-		const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
 		match self {
 			Widget::Nothing => {},
 			Widget::SimpleText { settings, text, .. } => {
@@ -451,6 +471,9 @@ impl Widget {
 			},
 		}
 		if draw_debug_boxes {
+			const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
+			const DEBUG_HITBOXES_DIAMOND_COLOR: [f32; 3] = [0.0, 0.0, 1.0];
+
 			let dimensions = self.dimensions(font, window_width);
 			let mut top_left = top_left;
 			top_left.z = 0.0;
@@ -458,6 +481,12 @@ impl Widget {
 				top_left,
 				dimensions,
 				DEBUG_HITBOXES_COLOR,
+			));
+
+			meshes.add_simple_line_vertices(simple_line_vertices_for_diamond(
+				top_left,
+				cgmath::vec2(6.0, 6.0) * (2.0 / window_width),
+				DEBUG_HITBOXES_DIAMOND_COLOR,
 			));
 		}
 	}
