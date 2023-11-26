@@ -98,7 +98,7 @@ impl ChunkBlocks {
 		}
 	}
 
-	fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
+	pub fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
 		Some(self.blocks[self.coords_span.internal_index(coords)?])
 	}
 
