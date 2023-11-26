@@ -2043,6 +2043,9 @@ impl WorldGenerator for WorldGeneratorTest025 {
 					}
 					if structure_origin_can_link(other_origin_coords) {
 						// Hehe found one, let's decide if we link.
+						// We get two noise values that we will also get (in the other order)
+						// in the other structure, and when we add them we get the same value
+						// that the other would get, so we can agree on something that way ^^.
 						let value_us_to_other = noise_a.sample(
 							&[],
 							&[
@@ -2065,7 +2068,10 @@ impl WorldGenerator for WorldGeneratorTest025 {
 								origin_block_coords.z,
 							],
 						);
-						let link = value_us_to_other + value_other_to_us < 0.1;
+						// We only link to a few other structures because if we linked
+						// to everyone we could then it fills the world with links
+						// and it becomes difficult to see and appreciate the generation.
+						let link = (value_us_to_other + value_other_to_us) * 0.5 < 0.08;
 
 						if link {
 							// Let's link!
@@ -2094,11 +2100,15 @@ impl WorldGenerator for WorldGeneratorTest025 {
 				}
 			}
 
-			for coords in crate::coords::iter_3d_cube_center_radius(
-				origin_block_coords,
-				structure_max_blocky_radius.min(4),
-			) {
-				structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+			let ball_radius = structure_max_blocky_radius.min(4);
+			for coords in crate::coords::iter_3d_cube_center_radius(origin_block_coords, ball_radius) {
+				if coords
+					.map(|x| x as f32)
+					.distance(origin_block_coords.map(|x| x as f32))
+					< ball_radius as f32
+				{
+					structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+				}
 			}
 		};
 
