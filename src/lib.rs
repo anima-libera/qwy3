@@ -19,6 +19,7 @@ mod world_gen;
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
 use cgmath::{ElementWise, InnerSpace, MetricSpace};
+use image::GenericImage;
 use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
@@ -348,75 +349,81 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
-	let mut atlas_data: [u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1] = [0; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1];
-	for y in 0..16 {
-		for x in 0..16 {
-			let index = 4 * (y * ATLAS_DIMS.0 + x);
-			let grey = rand::thread_rng().gen_range(240..=255);
-			atlas_data[index..(index + 4)].clone_from_slice(&[grey, grey, grey, 255]);
-		}
-	}
-	for y in 0..16 {
-		for x in (0..16).map(|x| x + 16) {
-			let index = 4 * (y * ATLAS_DIMS.0 + x);
-			atlas_data[index..(index + 4)].clone_from_slice(&[
-				rand::thread_rng().gen_range(80..100),
-				rand::thread_rng().gen_range(230..=255),
-				rand::thread_rng().gen_range(10..30),
-				255,
-			]);
-		}
-	}
-	for y in 0..16 {
-		for x in (0..16).map(|x| x + 32) {
-			let index = 4 * (y * ATLAS_DIMS.0 + x);
-			let tx = x - 32;
-			let tp = cgmath::vec2(tx as f32, y as f32 / 2.0);
-			let bottom_center = cgmath::vec2(8.0, 0.0);
-			if bottom_center.distance(tp) > 8.0 {
-				atlas_data[index..(index + 4)].clone_from_slice(&[0, 0, 0, 0]);
-			} else {
-				atlas_data[index..(index + 4)].clone_from_slice(&[
-					rand::thread_rng().gen_range(80..100),
-					rand::thread_rng().gen_range(230..=255),
-					rand::thread_rng().gen_range(10..30),
-					255,
-				]);
+	let mut atlas_image: image::RgbaImage =
+		image::ImageBuffer::new(ATLAS_DIMS.0 as u32, ATLAS_DIMS.1 as u32);
+
+	// Rock block
+	{
+		let mut view = atlas_image.sub_image(0, 0, 16, 16);
+		for y in 0..16 {
+			for x in 0..16 {
+				let grey = rand::thread_rng().gen_range(240..=255);
+				view.put_pixel(x, y, image::Rgba::from([grey, grey, grey, 255]));
 			}
 		}
 	}
 
-	let font_image = image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
-	for y in 0..font_image.height() {
-		for x in 0..font_image.width() {
-			let pixel_from_image = font_image.as_rgba8().unwrap().get_pixel(x, y);
-			// We keep black as white (to multiply with colors) and discard everything else.
-			let color = if pixel_from_image.0 == [0, 0, 0, 255] {
-				[255, 255, 255, 255]
-			} else {
-				[0, 0, 0, 0]
-			};
-			let index = 4 * ((y as usize + 32) * ATLAS_DIMS.0 + x as usize);
-			atlas_data[index..(index + 4)].clone_from_slice(&color);
+	// Grass block
+	{
+		let mut view = atlas_image.sub_image(16, 0, 16, 16);
+		for y in 0..16 {
+			for x in 0..16 {
+				let r = rand::thread_rng().gen_range(80..100);
+				let g = rand::thread_rng().gen_range(230..=255);
+				let b = rand::thread_rng().gen_range(10..30);
+				view.put_pixel(x, y, image::Rgba::from([r, g, b, 255]));
+			}
 		}
 	}
+
+	// Grass bush-like thingy
+	{
+		let mut view = atlas_image.sub_image(32, 0, 16, 16);
+		for y in 0..16 {
+			for x in 0..16 {
+				let tp = cgmath::vec2(x as f32, y as f32 / 2.0);
+				let bottom_center = cgmath::vec2(8.0, 0.0);
+				let (r, g, b, a) = if bottom_center.distance(tp) > 8.0 {
+					(0, 0, 0, 0)
+				} else {
+					(
+						rand::thread_rng().gen_range(80..100),
+						rand::thread_rng().gen_range(230..=255),
+						rand::thread_rng().gen_range(10..30),
+						255,
+					)
+				};
+				view.put_pixel(x, y, image::Rgba::from([r, g, b, a]));
+			}
+		}
+	}
+
+	// Font
+	let mut font_image = image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
+	font_image
+		.as_mut_rgba8()
+		.unwrap()
+		.pixels_mut()
+		.for_each(|pixel| {
+			// We keep black as white (to multiply with colors) and discard everything else.
+			*pixel = if pixel.0 == [0, 0, 0, 255] {
+				image::Rgba::from([255, 255, 255, 255])
+			} else {
+				image::Rgba::from([0, 0, 0, 0])
+			}
+		});
+	atlas_image.copy_from(&font_image, 0, 32).unwrap();
 	let font = font::Font::font_01();
 
 	if output_atlas {
 		let path = "atlas.png";
 		println!("Outputting atlas to \"{path}\"");
-		image::save_buffer_with_format(
-			path,
-			&atlas_data,
-			ATLAS_DIMS.0 as u32,
-			ATLAS_DIMS.1 as u32,
-			image::ColorType::Rgba8,
-			image::ImageFormat::Png,
-		)
-		.unwrap();
+		atlas_image
+			.save_with_format(path, image::ImageFormat::Png)
+			.unwrap();
 	}
 	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
-		init_atlas_stuff(Arc::clone(&device), &queue, &atlas_data);
+		init_atlas_stuff(Arc::clone(&device), &queue, atlas_image.as_ref());
 
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),

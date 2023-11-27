@@ -316,8 +316,10 @@ pub struct AtlasStuff {
 pub fn init_atlas_stuff(
 	device: Arc<wgpu::Device>,
 	queue: &wgpu::Queue,
-	atlas_data: &[u8; 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1],
+	atlas_data: &[u8],
 ) -> AtlasStuff {
+	assert_eq!(atlas_data.len(), 4 * ATLAS_DIMS.0 * ATLAS_DIMS.1);
+
 	let atlas_texture_size = wgpu::Extent3d {
 		width: ATLAS_DIMS.0 as u32,
 		height: ATLAS_DIMS.1 as u32,
