@@ -19,7 +19,7 @@ mod world_gen;
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
 use cgmath::{ElementWise, InnerSpace, MetricSpace};
-use image::GenericImage;
+use image::{GenericImage, GenericImageView};
 use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
@@ -394,6 +394,70 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 					)
 				};
 				view.put_pixel(x, y, image::Rgba::from([r, g, b, a]));
+			}
+		}
+	}
+
+	// Wood block
+	{
+		let mut view = atlas_image.sub_image(48, 0, 16, 16);
+		for y in 0..16 {
+			for x in 0..16 {
+				let brown = rand::thread_rng().gen_range(100..200);
+				let r = brown;
+				let g = brown / 2;
+				let b = rand::thread_rng().gen_range(50..70);
+				view.put_pixel(x, y, image::Rgba::from([r, g, b, 255]));
+			}
+		}
+		for _i in 0..8 {
+			for y in 0..16 {
+				for x in 0..16 {
+					if rand::thread_rng().gen_range(0..5) == 0 {
+						let y_above = if y == 0 { 15 } else { y - 1 };
+						let pixel = view.get_pixel(x, y_above);
+						view.put_pixel(x, y, pixel);
+					}
+				}
+			}
+		}
+	}
+
+	// Leaf block
+	{
+		let mut view = atlas_image.sub_image(64, 0, 16, 16);
+		for y in 0..16 {
+			for x in 0..16 {
+				let r = 0;
+				let g = rand::thread_rng().gen_range(50..255);
+				let b = 0;
+				view.put_pixel(x, y, image::Rgba::from([r, g, b, 255]));
+			}
+		}
+		for _i in 0..3 {
+			for y in 0..16 {
+				for x in 0..16 {
+					if rand::thread_rng().gen_range(0..5) == 0 {
+						let neighbor_x = x as i32 + rand::thread_rng().gen_range((-1i32)..=1);
+						let neighbor_x = if neighbor_x < 0 {
+							15
+						} else if neighbor_x == 16 {
+							0
+						} else {
+							neighbor_x as u32
+						};
+						let neighbor_y = y as i32 + rand::thread_rng().gen_range((-1i32)..=1);
+						let neighbor_y = if neighbor_y < 0 {
+							15
+						} else if neighbor_y == 16 {
+							0
+						} else {
+							neighbor_y as u32
+						};
+						let pixel = view.get_pixel(neighbor_x, neighbor_y);
+						view.put_pixel(x, y, pixel);
+					}
+				}
 			}
 		}
 	}

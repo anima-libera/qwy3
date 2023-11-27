@@ -39,6 +39,8 @@ impl BlockTypeTable {
 				BlockType::Solid { texture_coords_on_atlas: (0, 0).into() },
 				BlockType::Solid { texture_coords_on_atlas: (16, 0).into() },
 				BlockType::XShaped { texture_coords_on_atlas: (32, 0).into() },
+				BlockType::Solid { texture_coords_on_atlas: (48, 0).into() },
+				BlockType::Solid { texture_coords_on_atlas: (64, 0).into() },
 			],
 		}
 	}
@@ -65,6 +67,14 @@ impl BlockTypeTable {
 
 	pub fn kinda_grass_blades_id(&self) -> BlockTypeId {
 		BlockTypeId::new(3)
+	}
+
+	pub fn kinda_wood_id(&self) -> BlockTypeId {
+		BlockTypeId::new(4)
+	}
+
+	pub fn kinda_leaf_id(&self) -> BlockTypeId {
+		BlockTypeId::new(5)
 	}
 }
 
