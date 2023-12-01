@@ -19,6 +19,7 @@ pub enum Type {
 	Integer,
 	Function(FunctionTypeSignature),
 	Type,
+	Name,
 }
 
 /// A value in Qwy Script.
@@ -28,6 +29,7 @@ pub enum Value {
 	Integer(i32),
 	Function(Function),
 	Type(Type),
+	Name(String),
 }
 
 impl Value {
@@ -37,6 +39,7 @@ impl Value {
 			Value::Integer(_) => Type::Integer,
 			Value::Function(Function { signature, .. }) => Type::Function(signature.clone()),
 			Value::Type(_) => Type::Type,
+			Value::Name(_) => Type::Name,
 		}
 	}
 }
@@ -75,10 +78,11 @@ enum BuiltInFunctionBody {
 	PrintThreeIntegers,
 	ToType,
 	PrintType,
+	DeclareAndSetGlobalVariable,
 }
 
 impl BuiltInFunctionBody {
-	fn evaluate(self, arg_values: Vec<Value>) -> Value {
+	fn evaluate(self, arg_values: Vec<Value>, context: &mut Context) -> Value {
 		match self {
 			BuiltInFunctionBody::PrintInteger => {
 				let integer_value = match arg_values[0] {
@@ -111,6 +115,20 @@ impl BuiltInFunctionBody {
 				println!("printing type {type_value:?}");
 				Value::Nothing
 			},
+			BuiltInFunctionBody::DeclareAndSetGlobalVariable => {
+				let mut arg_values = arg_values.into_iter();
+				let name_as_string = match arg_values.next().unwrap() {
+					Value::Name(name_as_string) => name_as_string,
+					_ => todo!(),
+				};
+				let value = arg_values.next().unwrap();
+				println!("declaring {name_as_string} and setting it to {value:?}");
+				let previous_value = context.variables.insert(name_as_string, value);
+				if previous_value.is_some() {
+					panic!("declaring global variable that was already declared");
+				}
+				Value::Nothing
+			},
 		}
 	}
 
@@ -120,6 +138,7 @@ impl BuiltInFunctionBody {
 			BuiltInFunctionBody::PrintThreeIntegers => "print_three_integers",
 			BuiltInFunctionBody::ToType => "type_of",
 			BuiltInFunctionBody::PrintType => "print_type",
+			BuiltInFunctionBody::DeclareAndSetGlobalVariable => "declare_and_set_global_variable",
 		}
 	}
 
@@ -143,6 +162,10 @@ impl BuiltInFunctionBody {
 			},
 			BuiltInFunctionBody::PrintType => FunctionTypeSignature {
 				arg_types: vec![TypeConstraints::Only(Type::Type)],
+				return_type: Box::new(Type::Nothing),
+			},
+			BuiltInFunctionBody::DeclareAndSetGlobalVariable => FunctionTypeSignature {
+				arg_types: vec![TypeConstraints::Only(Type::Name), TypeConstraints::Any],
 				return_type: Box::new(Type::Nothing),
 			},
 		}
@@ -252,6 +275,7 @@ pub enum Token {
 	CloseParenthesis,
 	Comma,
 	Semicolon,
+	Sigil,
 }
 
 fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
@@ -306,6 +330,10 @@ fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 				chars.next();
 				tokens.push((Token::Semicolon, Span { start: i, end: i }));
 			},
+			Some((i, '$')) => {
+				chars.next();
+				tokens.push((Token::Sigil, Span { start: i, end: i }));
+			},
 			_ => todo!(),
 		}
 	}
@@ -323,6 +351,8 @@ pub enum ExpressionParsingError {
 	FunctionCallOnNotAFunction(Type, Span),
 	/// The span is the span of the whole function call in which there is a typeing error.
 	FunctionCallTypingError(FunctionCallTypingError, Span),
+	ExpectedWordAfterSigilButGotUnexpectedToken(Token, Span),
+	ExpectedWordAfterSigilButGotNoMoreTokens,
 }
 
 /// Parsing of some amount of tokens into an expression.
@@ -339,6 +369,24 @@ fn parse_expression(
 		Some((Token::Word(word), span)) => {
 			tokens.pop_front();
 			(Expression::Variable(word), span)
+		},
+		Some((Token::Sigil, sigil_span)) => {
+			tokens.pop_front();
+			match tokens.pop_front() {
+				Some((Token::Word(name), name_span)) => (
+					Expression::Const(Value::Name(name)),
+					Span { start: sigil_span.start, end: name_span.end },
+				),
+				Some((unexpected_token, span)) => {
+					return Err(
+						ExpressionParsingError::ExpectedWordAfterSigilButGotUnexpectedToken(
+							unexpected_token,
+							span,
+						),
+					)
+				},
+				None => return Err(ExpressionParsingError::ExpectedWordAfterSigilButGotNoMoreTokens),
+			}
 		},
 		Some((unexpected_token, span)) => {
 			return Err(
@@ -548,7 +596,7 @@ fn check_function_call_argument_types(
 	Ok(())
 }
 
-fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
+fn evaluate_expression(expression: &Expression, context: &mut Context) -> Value {
 	match expression {
 		Expression::Const(value) => value.clone(),
 		Expression::Variable(name) => context.variables.get(name).unwrap().clone(),
@@ -567,7 +615,7 @@ fn evaluate_expression(expression: &Expression, context: &Context) -> Value {
 					evaluate_expression(&body_expression, context)
 				},
 				FunctionBody::BuiltIn(built_in_function_body) => {
-					built_in_function_body.evaluate(arg_values)
+					built_in_function_body.evaluate(arg_values, context)
 				},
 			}
 		},
@@ -582,7 +630,7 @@ fn parse(
 	parse_expression(&mut tokens, type_context)
 }
 
-pub fn run(qwy_script_code: &str, context: &Context) -> Result<(), ExpressionParsingError> {
+pub fn run(qwy_script_code: &str, context: &mut Context) -> Result<(), ExpressionParsingError> {
 	let (expression, _span) = parse(qwy_script_code, &context.get_type_context())?;
 	evaluate_expression(&expression, context);
 	Ok(())
@@ -591,15 +639,19 @@ pub fn run(qwy_script_code: &str, context: &Context) -> Result<(), ExpressionPar
 pub fn test_lang(test_id: u32) {
 	match test_id {
 		1 => {
-			run("print_integer(69)", &Context::with_builtins()).unwrap();
+			run("print_integer(69)", &mut Context::with_builtins()).unwrap();
 		},
 		2 => {
-			run("print_three_integers(42, 2, 8)", &Context::with_builtins()).unwrap();
+			run(
+				"print_three_integers(42, 2, 8)",
+				&mut Context::with_builtins(),
+			)
+			.unwrap();
 		},
 		3 => {
 			run(
 				"print_type(type_of(print_integer))",
-				&Context::with_builtins(),
+				&mut Context::with_builtins(),
 			)
 			.unwrap();
 		},
@@ -615,12 +667,17 @@ pub fn test_lang(test_id: u32) {
 					body: FunctionBody::Expression(Box::new(Expression::Const(Value::Integer(420)))),
 				}),
 			);
-			run("print_integer(jaaj())", &context).unwrap();
+			run("print_integer(jaaj())", &mut context).unwrap();
 		},
 		5 => {
 			let context = Context::with_builtins();
 			let parsing_error = parse("print_integer()", &context.get_type_context()).unwrap_err();
 			dbg!(parsing_error);
+		},
+		6 => {
+			let mut context = Context::with_builtins();
+			run("declare_and_set_global_variable($test, 8)", &mut context).unwrap();
+			run("print_integer(test)", &mut context).unwrap();
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
 	}
