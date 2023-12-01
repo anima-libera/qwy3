@@ -295,7 +295,7 @@ fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 				while chars
 					.peek()
 					.copied()
-					.is_some_and(|(_i, c)| c.is_ascii_alphabetic() || c == '_')
+					.is_some_and(|(_i, c)| c.is_ascii_alphanumeric() || c == '_')
 				{
 					let (i, c) = chars.next().unwrap();
 					word.push(c);
