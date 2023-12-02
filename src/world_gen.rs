@@ -2975,7 +2975,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 								let radius_max = 7.0;
 								let radius = radius_min + smooth_progression * (radius_max - radius_min);
 								structure_place_ball(placing_head, radius, chunk_blocks);
-								placing_head += direction * 0.1;
+								placing_head += direction * 0.8;
 								let dist_to_other_after_step = other.distance(placing_head);
 								if dist_to_other_before_step < dist_to_other_after_step {
 									// We are moving away from other, which means we already
