@@ -24,36 +24,36 @@ pub enum WhichWorldGenerator {
 	Default,
 	Flat,
 	Empty,
-	Test001,
-	Test002,
-	Test003,
-	Test004,
-	Test005,
-	Test006,
-	Test007,
-	Test008,
-	Test009,
-	Test010,
-	Test011,
-	Test012,
-	Test013,
-	Test014,
-	Test015,
-	Test016,
-	Test017,
-	Test018,
-	Test019,
-	Test020,
-	Test021,
-	Test022,
-	Test023,
-	Test024,
-	Test025,
-	Test026,
-	Test027,
-	Test028,
-	Test029,
-	Test030,
+	Lines01,
+	Volumes01,
+	BallsSameSize,
+	BallsDifferentSizes,
+	LinksXRaw,
+	LinksX,
+	Links01,
+	LinksGround,
+	LinksCaves,
+	Links02,
+	LinksFlat,
+	SkyIslands,
+	Volumes02,
+	Volumes03,
+	Height01,
+	Plane01,
+	WierdTerrain01,
+	Plane02,
+	WierdTerrain02,
+	Height02,
+	HeightBiomes,
+	HeightBiomesVolume,
+	Height03,
+	StructuresPoc,
+	StructuresLinksPoc,
+	StructuresTrees,
+	StructuresSpikes,
+	Lines02,
+	Lines03,
+	StructuresLinksSmooth,
 }
 
 impl WhichWorldGenerator {
@@ -62,36 +62,36 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Default => "default",
 			WhichWorldGenerator::Flat => "flat",
 			WhichWorldGenerator::Empty => "empty",
-			WhichWorldGenerator::Test001 => "test001",
-			WhichWorldGenerator::Test002 => "test002",
-			WhichWorldGenerator::Test003 => "test003",
-			WhichWorldGenerator::Test004 => "test004",
-			WhichWorldGenerator::Test005 => "test005",
-			WhichWorldGenerator::Test006 => "test006",
-			WhichWorldGenerator::Test007 => "test007",
-			WhichWorldGenerator::Test008 => "test008",
-			WhichWorldGenerator::Test009 => "test009",
-			WhichWorldGenerator::Test010 => "test010",
-			WhichWorldGenerator::Test011 => "test011",
-			WhichWorldGenerator::Test012 => "test012",
-			WhichWorldGenerator::Test013 => "test013",
-			WhichWorldGenerator::Test014 => "test014",
-			WhichWorldGenerator::Test015 => "test015",
-			WhichWorldGenerator::Test016 => "test016",
-			WhichWorldGenerator::Test017 => "test017",
-			WhichWorldGenerator::Test018 => "test018",
-			WhichWorldGenerator::Test019 => "test019",
-			WhichWorldGenerator::Test020 => "test020",
-			WhichWorldGenerator::Test021 => "test021",
-			WhichWorldGenerator::Test022 => "test022",
-			WhichWorldGenerator::Test023 => "test023",
-			WhichWorldGenerator::Test024 => "test024",
-			WhichWorldGenerator::Test025 => "test025",
-			WhichWorldGenerator::Test026 => "test026",
-			WhichWorldGenerator::Test027 => "test027",
-			WhichWorldGenerator::Test028 => "test028",
-			WhichWorldGenerator::Test029 => "test029",
-			WhichWorldGenerator::Test030 => "test030",
+			WhichWorldGenerator::Lines01 => "lines-01",
+			WhichWorldGenerator::Volumes01 => "volumes-01",
+			WhichWorldGenerator::BallsSameSize => "balls-same-size",
+			WhichWorldGenerator::BallsDifferentSizes => "balls-different-sizes",
+			WhichWorldGenerator::LinksXRaw => "links-x-raw",
+			WhichWorldGenerator::LinksX => "links-x",
+			WhichWorldGenerator::Links01 => "links-01",
+			WhichWorldGenerator::LinksGround => "links-ground",
+			WhichWorldGenerator::LinksCaves => "links-caves",
+			WhichWorldGenerator::Links02 => "links-02",
+			WhichWorldGenerator::LinksFlat => "links-flat",
+			WhichWorldGenerator::SkyIslands => "sky-islands",
+			WhichWorldGenerator::Volumes02 => "volumes-02",
+			WhichWorldGenerator::Volumes03 => "volumes-03",
+			WhichWorldGenerator::Height01 => "height-01",
+			WhichWorldGenerator::Plane01 => "plane-01",
+			WhichWorldGenerator::WierdTerrain01 => "wierd-terrain-01",
+			WhichWorldGenerator::Plane02 => "plane-02",
+			WhichWorldGenerator::WierdTerrain02 => "wierd-terrain-02",
+			WhichWorldGenerator::Height02 => "height-02",
+			WhichWorldGenerator::HeightBiomes => "height-biomes",
+			WhichWorldGenerator::HeightBiomesVolume => "height-biomes-volume",
+			WhichWorldGenerator::Height03 => "height-03",
+			WhichWorldGenerator::StructuresPoc => "structures-poc",
+			WhichWorldGenerator::StructuresLinksPoc => "structures-links-poc",
+			WhichWorldGenerator::StructuresTrees => "structures-trees",
+			WhichWorldGenerator::StructuresSpikes => "structures-spikes",
+			WhichWorldGenerator::Lines02 => "lines-02",
+			WhichWorldGenerator::Lines03 => "lines-03",
+			WhichWorldGenerator::StructuresLinksSmooth => "structures-links-smooth",
 		}
 	}
 
@@ -100,36 +100,44 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
 			WhichWorldGenerator::Flat => Arc::new(FlatWorldGenerator {}),
 			WhichWorldGenerator::Empty => Arc::new(EmptyWorldGenerator {}),
-			WhichWorldGenerator::Test001 => Arc::new(WorldGeneratorTest001 { seed }),
-			WhichWorldGenerator::Test002 => Arc::new(WorldGeneratorTest002 { seed }),
-			WhichWorldGenerator::Test003 => Arc::new(WorldGeneratorTest003 { seed }),
-			WhichWorldGenerator::Test004 => Arc::new(WorldGeneratorTest004 { seed }),
-			WhichWorldGenerator::Test005 => Arc::new(WorldGeneratorTest005 { seed }),
-			WhichWorldGenerator::Test006 => Arc::new(WorldGeneratorTest006 { seed }),
-			WhichWorldGenerator::Test007 => Arc::new(WorldGeneratorTest007 { seed }),
-			WhichWorldGenerator::Test008 => Arc::new(WorldGeneratorTest008 { seed }),
-			WhichWorldGenerator::Test009 => Arc::new(WorldGeneratorTest009 { seed }),
-			WhichWorldGenerator::Test010 => Arc::new(WorldGeneratorTest010 { seed }),
-			WhichWorldGenerator::Test011 => Arc::new(WorldGeneratorTest011 { seed }),
-			WhichWorldGenerator::Test012 => Arc::new(WorldGeneratorTest012 { seed }),
-			WhichWorldGenerator::Test013 => Arc::new(WorldGeneratorTest013 { seed }),
-			WhichWorldGenerator::Test014 => Arc::new(WorldGeneratorTest014 { seed }),
-			WhichWorldGenerator::Test015 => Arc::new(WorldGeneratorTest015 { seed }),
-			WhichWorldGenerator::Test016 => Arc::new(WorldGeneratorTest016 { seed }),
-			WhichWorldGenerator::Test017 => Arc::new(WorldGeneratorTest017 { seed }),
-			WhichWorldGenerator::Test018 => Arc::new(WorldGeneratorTest018 { seed }),
-			WhichWorldGenerator::Test019 => Arc::new(WorldGeneratorTest019 { seed }),
-			WhichWorldGenerator::Test020 => Arc::new(WorldGeneratorTest020 { seed }),
-			WhichWorldGenerator::Test021 => Arc::new(WorldGeneratorTest021 { seed }),
-			WhichWorldGenerator::Test022 => Arc::new(WorldGeneratorTest022 { seed }),
-			WhichWorldGenerator::Test023 => Arc::new(WorldGeneratorTest023 { seed }),
-			WhichWorldGenerator::Test024 => Arc::new(WorldGeneratorTest024 { seed }),
-			WhichWorldGenerator::Test025 => Arc::new(WorldGeneratorTest025 { seed }),
-			WhichWorldGenerator::Test026 => Arc::new(WorldGeneratorTest026 { seed }),
-			WhichWorldGenerator::Test027 => Arc::new(WorldGeneratorTest027 { seed }),
-			WhichWorldGenerator::Test028 => Arc::new(WorldGeneratorTest028 { seed }),
-			WhichWorldGenerator::Test029 => Arc::new(WorldGeneratorTest029 { seed }),
-			WhichWorldGenerator::Test030 => Arc::new(WorldGeneratorTest030 { seed }),
+			WhichWorldGenerator::Lines01 => Arc::new(WorldGeneratorLines01 { seed }),
+			WhichWorldGenerator::Volumes01 => Arc::new(WorldGeneratorVolumes01 { seed }),
+			WhichWorldGenerator::BallsSameSize => Arc::new(WorldGeneratorBallsSameSize { seed }),
+			WhichWorldGenerator::BallsDifferentSizes => {
+				Arc::new(WorldGeneratorBallsDifferentSizes { seed })
+			},
+			WhichWorldGenerator::LinksXRaw => Arc::new(WorldGeneratorLinksXRaw { seed }),
+			WhichWorldGenerator::LinksX => Arc::new(WorldGeneratorLinksX { seed }),
+			WhichWorldGenerator::Links01 => Arc::new(WorldGeneratorLinks { seed }),
+			WhichWorldGenerator::LinksGround => Arc::new(WorldGeneratorLinksGround { seed }),
+			WhichWorldGenerator::LinksCaves => Arc::new(WorldGeneratorLinksCaves { seed }),
+			WhichWorldGenerator::Links02 => Arc::new(WorldGeneratorLinks02 { seed }),
+			WhichWorldGenerator::LinksFlat => Arc::new(WorldGeneratorLinksFlat { seed }),
+			WhichWorldGenerator::SkyIslands => Arc::new(WorldGeneratorSkyIslands { seed }),
+			WhichWorldGenerator::Volumes02 => Arc::new(WorldGeneratorVolumes02 { seed }),
+			WhichWorldGenerator::Volumes03 => Arc::new(WorldGeneratorVolumes03 { seed }),
+			WhichWorldGenerator::Height01 => Arc::new(WorldGeneratorHeight01 { seed }),
+			WhichWorldGenerator::Plane01 => Arc::new(WorldGeneratorPlane01 { seed }),
+			WhichWorldGenerator::WierdTerrain01 => Arc::new(WorldGeneratorWierdTerrain01 { seed }),
+			WhichWorldGenerator::Plane02 => Arc::new(WorldGeneratorPlane02 { seed }),
+			WhichWorldGenerator::WierdTerrain02 => Arc::new(WorldGeneratorWierdTerrain02 { seed }),
+			WhichWorldGenerator::Height02 => Arc::new(WorldGeneratorHeight02 { seed }),
+			WhichWorldGenerator::HeightBiomes => Arc::new(WorldGeneratorHeightBiomes { seed }),
+			WhichWorldGenerator::HeightBiomesVolume => {
+				Arc::new(WorldGeneratorHeightBiomesVolume { seed })
+			},
+			WhichWorldGenerator::Height03 => Arc::new(WorldGeneratorHeight03 { seed }),
+			WhichWorldGenerator::StructuresPoc => Arc::new(WorldGeneratorStructuresPoc { seed }),
+			WhichWorldGenerator::StructuresLinksPoc => {
+				Arc::new(WorldGeneratorStructuresLinksPoc { seed })
+			},
+			WhichWorldGenerator::StructuresTrees => Arc::new(WorldGeneratorStructuresTrees { seed }),
+			WhichWorldGenerator::StructuresSpikes => Arc::new(WorldGeneratorStructuresSpikes { seed }),
+			WhichWorldGenerator::Lines02 => Arc::new(WorldGeneratorLines02 { seed }),
+			WhichWorldGenerator::Lines03 => Arc::new(WorldGeneratorLines03 { seed }),
+			WhichWorldGenerator::StructuresLinksSmooth => {
+				Arc::new(WorldGeneratorStructuresLinksSmooth { seed })
+			},
 		}
 	}
 
@@ -262,11 +270,11 @@ impl WorldGenerator for EmptyWorldGenerator {
 	}
 }
 
-struct WorldGeneratorTest001 {
+struct WorldGeneratorLines01 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest001 {
+impl WorldGenerator for WorldGeneratorLines01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -337,11 +345,11 @@ impl WorldGenerator for WorldGeneratorTest001 {
 	}
 }
 
-struct WorldGeneratorTest002 {
+struct WorldGeneratorVolumes01 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest002 {
+impl WorldGenerator for WorldGeneratorVolumes01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -372,11 +380,11 @@ impl WorldGenerator for WorldGeneratorTest002 {
 	}
 }
 
-struct WorldGeneratorTest003 {
+struct WorldGeneratorBallsSameSize {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest003 {
+impl WorldGenerator for WorldGeneratorBallsSameSize {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -416,11 +424,11 @@ impl WorldGenerator for WorldGeneratorTest003 {
 	}
 }
 
-struct WorldGeneratorTest004 {
+struct WorldGeneratorBallsDifferentSizes {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest004 {
+impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -484,11 +492,11 @@ fn distance_to_segment(
 	(pa - ba * h).magnitude()
 }
 
-struct WorldGeneratorTest005 {
+struct WorldGeneratorLinksXRaw {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest005 {
+impl WorldGenerator for WorldGeneratorLinksXRaw {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -536,11 +544,11 @@ impl WorldGenerator for WorldGeneratorTest005 {
 	}
 }
 
-struct WorldGeneratorTest006 {
+struct WorldGeneratorLinksX {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest006 {
+impl WorldGenerator for WorldGeneratorLinksX {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -603,11 +611,11 @@ impl WorldGenerator for WorldGeneratorTest006 {
 	}
 }
 
-struct WorldGeneratorTest007 {
+struct WorldGeneratorLinks {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest007 {
+impl WorldGenerator for WorldGeneratorLinks {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -680,11 +688,11 @@ impl WorldGenerator for WorldGeneratorTest007 {
 	}
 }
 
-struct WorldGeneratorTest008 {
+struct WorldGeneratorLinksGround {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest008 {
+impl WorldGenerator for WorldGeneratorLinksGround {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -763,11 +771,11 @@ impl WorldGenerator for WorldGeneratorTest008 {
 	}
 }
 
-struct WorldGeneratorTest009 {
+struct WorldGeneratorLinksCaves {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest009 {
+impl WorldGenerator for WorldGeneratorLinksCaves {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -843,11 +851,11 @@ impl WorldGenerator for WorldGeneratorTest009 {
 	}
 }
 
-struct WorldGeneratorTest010 {
+struct WorldGeneratorLinks02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest010 {
+impl WorldGenerator for WorldGeneratorLinks02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -946,11 +954,11 @@ impl WorldGenerator for WorldGeneratorTest010 {
 	}
 }
 
-struct WorldGeneratorTest011 {
+struct WorldGeneratorLinksFlat {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest011 {
+impl WorldGenerator for WorldGeneratorLinksFlat {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1065,11 +1073,11 @@ impl WorldGenerator for WorldGeneratorTest011 {
 	}
 }
 
-struct WorldGeneratorTest012 {
+struct WorldGeneratorSkyIslands {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest012 {
+impl WorldGenerator for WorldGeneratorSkyIslands {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1159,11 +1167,11 @@ impl WorldGenerator for WorldGeneratorTest012 {
 	}
 }
 
-struct WorldGeneratorTest013 {
+struct WorldGeneratorVolumes02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest013 {
+impl WorldGenerator for WorldGeneratorVolumes02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1208,11 +1216,11 @@ impl WorldGenerator for WorldGeneratorTest013 {
 	}
 }
 
-struct WorldGeneratorTest014 {
+struct WorldGeneratorVolumes03 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest014 {
+impl WorldGenerator for WorldGeneratorVolumes03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1250,11 +1258,11 @@ impl WorldGenerator for WorldGeneratorTest014 {
 	}
 }
 
-struct WorldGeneratorTest015 {
+struct WorldGeneratorHeight01 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest015 {
+impl WorldGenerator for WorldGeneratorHeight01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1299,11 +1307,11 @@ impl WorldGenerator for WorldGeneratorTest015 {
 	}
 }
 
-struct WorldGeneratorTest016 {
+struct WorldGeneratorPlane01 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest016 {
+impl WorldGenerator for WorldGeneratorPlane01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1345,11 +1353,11 @@ impl WorldGenerator for WorldGeneratorTest016 {
 	}
 }
 
-struct WorldGeneratorTest017 {
+struct WorldGeneratorWierdTerrain01 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest017 {
+impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1391,11 +1399,11 @@ impl WorldGenerator for WorldGeneratorTest017 {
 	}
 }
 
-struct WorldGeneratorTest018 {
+struct WorldGeneratorPlane02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest018 {
+impl WorldGenerator for WorldGeneratorPlane02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1436,11 +1444,11 @@ impl WorldGenerator for WorldGeneratorTest018 {
 	}
 }
 
-struct WorldGeneratorTest019 {
+struct WorldGeneratorWierdTerrain02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest019 {
+impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1479,11 +1487,11 @@ impl WorldGenerator for WorldGeneratorTest019 {
 	}
 }
 
-struct WorldGeneratorTest020 {
+struct WorldGeneratorHeight02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest020 {
+impl WorldGenerator for WorldGeneratorHeight02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1529,11 +1537,11 @@ impl WorldGenerator for WorldGeneratorTest020 {
 	}
 }
 
-struct WorldGeneratorTest021 {
+struct WorldGeneratorHeightBiomes {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest021 {
+impl WorldGenerator for WorldGeneratorHeightBiomes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1620,11 +1628,11 @@ impl WorldGenerator for WorldGeneratorTest021 {
 	}
 }
 
-struct WorldGeneratorTest022 {
+struct WorldGeneratorHeightBiomesVolume {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest022 {
+impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1710,11 +1718,11 @@ impl WorldGenerator for WorldGeneratorTest022 {
 	}
 }
 
-struct WorldGeneratorTest023 {
+struct WorldGeneratorHeight03 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest023 {
+impl WorldGenerator for WorldGeneratorHeight03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1746,11 +1754,11 @@ impl WorldGenerator for WorldGeneratorTest023 {
 	}
 }
 
-struct WorldGeneratorTest024 {
+struct WorldGeneratorStructuresPoc {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest024 {
+impl WorldGenerator for WorldGeneratorStructuresPoc {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -1913,11 +1921,11 @@ impl WorldGenerator for WorldGeneratorTest024 {
 	}
 }
 
-struct WorldGeneratorTest025 {
+struct WorldGeneratorStructuresLinksPoc {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest025 {
+impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -2184,11 +2192,11 @@ impl WorldGenerator for WorldGeneratorTest025 {
 	}
 }
 
-struct WorldGeneratorTest026 {
+struct WorldGeneratorStructuresTrees {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest026 {
+impl WorldGenerator for WorldGeneratorStructuresTrees {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -2377,11 +2385,11 @@ impl WorldGenerator for WorldGeneratorTest026 {
 	}
 }
 
-struct WorldGeneratorTest027 {
+struct WorldGeneratorStructuresSpikes {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest027 {
+impl WorldGenerator for WorldGeneratorStructuresSpikes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -2590,11 +2598,11 @@ impl WorldGenerator for WorldGeneratorTest027 {
 	}
 }
 
-struct WorldGeneratorTest028 {
+struct WorldGeneratorLines02 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest028 {
+impl WorldGenerator for WorldGeneratorLines02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -2668,11 +2676,11 @@ impl WorldGenerator for WorldGeneratorTest028 {
 	}
 }
 
-struct WorldGeneratorTest029 {
+struct WorldGeneratorLines03 {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest029 {
+impl WorldGenerator for WorldGeneratorLines03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -2752,11 +2760,11 @@ impl WorldGenerator for WorldGeneratorTest029 {
 	}
 }
 
-struct WorldGeneratorTest030 {
+struct WorldGeneratorStructuresLinksSmooth {
 	pub seed: i32,
 }
 
-impl WorldGenerator for WorldGeneratorTest030 {
+impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
