@@ -78,6 +78,7 @@ enum BuiltInFunctionBody {
 	PrintThreeIntegers,
 	ToType,
 	PrintType,
+	/// TODO: Maybe move this feature somewhere else than a function >w<.
 	DeclareAndSetGlobalVariable,
 }
 
@@ -199,6 +200,7 @@ enum Expression {
 		func: Box<(Expression, Span)>,
 		args: Vec<(Expression, Span)>,
 	},
+	Block(Vec<(Expression, Span)>),
 }
 
 #[derive(Debug)]
@@ -227,6 +229,7 @@ impl Expression {
 					Ok(_) => Err(ExpressionTypingError::FunctionCallOnNotAFunction),
 				}
 			},
+			Expression::Block(expr_sequence) => expr_sequence.last().unwrap().0.get_type(type_context),
 		}
 	}
 }
@@ -274,6 +277,8 @@ pub enum Token {
 	OpenParenthesis,
 	CloseParenthesis,
 	Comma,
+	OpenCurly,
+	CloseCurly,
 	Semicolon,
 	Sigil,
 }
@@ -326,6 +331,14 @@ fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 				chars.next();
 				tokens.push((Token::Comma, Span { start: i, end: i }));
 			},
+			Some((i, '{')) => {
+				chars.next();
+				tokens.push((Token::OpenCurly, Span { start: i, end: i }));
+			},
+			Some((i, '}')) => {
+				chars.next();
+				tokens.push((Token::CloseCurly, Span { start: i, end: i }));
+			},
 			Some((i, ';')) => {
 				chars.next();
 				tokens.push((Token::Semicolon, Span { start: i, end: i }));
@@ -353,15 +366,19 @@ pub enum ExpressionParsingError {
 	FunctionCallTypingError(FunctionCallTypingError, Span),
 	ExpectedWordAfterSigilButGotUnexpectedToken(Token, Span),
 	ExpectedWordAfterSigilButGotNoMoreTokens,
+	ExpectedSemicolonToSeparateExpressionsInBlockButGotUnexpectedToken(Token, Span),
+	ExpectedSemicolonOrClosedCurlyButGotNoMoreTokens,
 }
 
 /// Parsing of some amount of tokens into an expression.
-fn parse_expression(
+/// This focuses on leaf expressions, ie expressions that do not contain sub expressions,
+/// leafs in the AST.
+fn parse_leaf_expression(
 	tokens: &mut VecDeque<(Token, Span)>,
 	type_context: &TypeContext,
 ) -> Result<(Expression, Span), ExpressionParsingError> {
 	// Parsing a leaf expression, ie an expression that doesn't contain more arbitrary expressions.
-	let (mut expression, mut expression_span) = match tokens.front().cloned() {
+	let (expression, expression_span) = match tokens.front().cloned() {
 		Some((Token::Integer(value), span)) => {
 			tokens.pop_front();
 			(Expression::Const(Value::Integer(value)), span)
@@ -400,11 +417,23 @@ fn parse_expression(
 	};
 
 	if let Err(expression_typing_error) = expression.get_type(type_context) {
-		return Err(ExpressionParsingError::ExpressionTypingError(
+		Err(ExpressionParsingError::ExpressionTypingError(
 			expression_typing_error,
 			expression_span,
-		));
+		))
+	} else {
+		Ok((expression, expression_span))
 	}
+}
+
+/// Parsing of some amount of tokens into an expression.
+/// /// This focuses on leaf expressions or call expressions.
+fn parse_leaf_or_call_expression(
+	tokens: &mut VecDeque<(Token, Span)>,
+	type_context: &TypeContext,
+) -> Result<(Expression, Span), ExpressionParsingError> {
+	// Parsing a leaf expression, ie an expression that doesn't contain more arbitrary expressions.
+	let (mut expression, mut expression_span) = parse_leaf_expression(tokens, type_context)?;
 
 	// If an open parenthesis follow then it would mean that we are parsing a function call.
 	if let Some((Token::OpenParenthesis, open_parenthesis_span)) = tokens.front().cloned() {
@@ -490,6 +519,50 @@ fn parse_expression(
 			args: args_and_spans,
 		};
 	}
+
+	Ok((expression, expression_span))
+}
+
+/// Parsing of some amount of tokens into an expression.
+fn parse_expression(
+	tokens: &mut VecDeque<(Token, Span)>,
+	type_context: &TypeContext,
+) -> Result<(Expression, Span), ExpressionParsingError> {
+	// If we find an open curly for starters then it would mean that we are parsing a block.
+	let (expression, expression_span) = if let Some((Token::OpenCurly, open_curly_span)) =
+		tokens.front().cloned()
+	{
+		tokens.pop_front(); // The open curly.
+
+		let mut expression_sequence = vec![];
+
+		let block_span = loop {
+			expression_sequence.push(parse_expression(tokens, type_context)?);
+
+			match tokens.front().cloned() {
+				Some((Token::CloseCurly, close_curly_span)) => {
+					tokens.pop_front(); // The close curly.
+					break Span { start: open_curly_span.start, end: close_curly_span.end };
+				},
+				Some((Token::Semicolon, _semicolon_span)) => {
+					tokens.pop_front(); // The semicolon.
+				},
+				Some((unexpected_token, unexpected_token_span)) => {
+					return Err(ExpressionParsingError::ExpectedSemicolonToSeparateExpressionsInBlockButGotUnexpectedToken(unexpected_token, unexpected_token_span));
+				},
+				None => {
+					return Err(
+						ExpressionParsingError::ExpectedSemicolonOrClosedCurlyButGotNoMoreTokens,
+					);
+				},
+			}
+		};
+
+		(Expression::Block(expression_sequence), block_span)
+	} else {
+		// Parsing an expression without handling blocks.
+		parse_leaf_or_call_expression(tokens, type_context)?
+	};
 
 	Ok((expression, expression_span))
 }
@@ -619,6 +692,14 @@ fn evaluate_expression(expression: &Expression, context: &mut Context) -> Value 
 				},
 			}
 		},
+		Expression::Block(expr_sequence) => {
+			let ((last_expr, _last_span), expr_sequence_before_last) =
+				expr_sequence.split_last().unwrap();
+			for (expr, _span) in expr_sequence_before_last {
+				evaluate_expression(expr, context);
+			}
+			evaluate_expression(last_expr, context)
+		},
 	}
 }
 
@@ -677,6 +758,22 @@ pub fn test_lang(test_id: u32) {
 		6 => {
 			let mut context = Context::with_builtins();
 			run("declare_and_set_global_variable($test, 8)", &mut context).unwrap();
+			run("print_integer(test)", &mut context).unwrap();
+		},
+		7 => {
+			run(
+				"{print_integer(1); print_integer(2); print_integer(3)}",
+				&mut Context::with_builtins(),
+			)
+			.unwrap();
+		},
+		8 => {
+			let mut context = Context::with_builtins();
+			run(
+				"declare_and_set_global_variable($test, {print_integer(42); 8})",
+				&mut context,
+			)
+			.unwrap();
 			run("print_integer(test)", &mut context).unwrap();
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
