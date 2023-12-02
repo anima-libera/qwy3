@@ -51,6 +51,8 @@ pub enum WhichWorldGenerator {
 	Test025,
 	Test026,
 	Test027,
+	Test028,
+	Test029,
 }
 
 impl WhichWorldGenerator {
@@ -86,6 +88,8 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test025 => "test025",
 			WhichWorldGenerator::Test026 => "test026",
 			WhichWorldGenerator::Test027 => "test027",
+			WhichWorldGenerator::Test028 => "test028",
+			WhichWorldGenerator::Test029 => "test029",
 		}
 	}
 
@@ -121,6 +125,8 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Test025 => Arc::new(WorldGeneratorTest025 { seed }),
 			WhichWorldGenerator::Test026 => Arc::new(WorldGeneratorTest026 { seed }),
 			WhichWorldGenerator::Test027 => Arc::new(WorldGeneratorTest027 { seed }),
+			WhichWorldGenerator::Test028 => Arc::new(WorldGeneratorTest028 { seed }),
+			WhichWorldGenerator::Test029 => Arc::new(WorldGeneratorTest029 { seed }),
 		}
 	}
 
@@ -2577,6 +2583,168 @@ impl WorldGenerator for WorldGeneratorTest027 {
 			}
 		}
 
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorTest028 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest028 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
+		let noise_no_grass = noise::OctavedNoise::new(5, vec![self.seed, 3]);
+		let noise_grass_a = noise::OctavedNoise::new(2, vec![self.seed, 1, 1]);
+		let noise_grass_b = noise::OctavedNoise::new(2, vec![self.seed, 1, 2]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 100.0;
+			let a = noise_a.sample_3d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			let v = 0.03;
+			(a - c).abs() < v && (b - c).abs() < v && (a - b).abs() < v
+		};
+		let coords_to_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 30.0;
+			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let density = if d < 0.1 {
+				d * 0.9 + 0.1
+			} else if d < 0.3 {
+				0.1
+			} else {
+				0.01
+			};
+			noise_grass_b.sample_3d(coordsf, &[]) < density
+		};
+		let coords_to_no_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					let no_grass = coords_to_no_grass(coords);
+					if no_grass {
+						block_type_table.ground_id()
+					} else {
+						block_type_table.kinda_grass_id()
+					}
+				}
+			} else {
+				let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
+				if ground_below {
+					let no_grass_below = coords_to_no_grass(coords + cgmath::vec3(0, 0, -1));
+					if no_grass_below {
+						block_type_table.air_id()
+					} else if coords_to_grass(coords) {
+						block_type_table.kinda_grass_blades_id()
+					} else {
+						block_type_table.air_id()
+					}
+				} else {
+					block_type_table.air_id()
+				}
+			};
+		}
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorTest029 {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorTest029 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
+		let noise_no_grass = noise::OctavedNoise::new(5, vec![self.seed, 3]);
+		let noise_grass_a = noise::OctavedNoise::new(2, vec![self.seed, 1, 1]);
+		let noise_grass_b = noise::OctavedNoise::new(2, vec![self.seed, 1, 2]);
+		let sorted_noises = |coordsf: cgmath::Point3<f32>| -> [(usize, f32); 3] {
+			let mut array = [
+				(0, noise_a.sample_3d(coordsf, &[])),
+				(1, noise_b.sample_3d(coordsf, &[])),
+				(2, noise_c.sample_3d(coordsf, &[])),
+			];
+			array.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
+			array
+		};
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 100.0;
+			let sn = sorted_noises(coordsf / scale);
+			sn[0].1 - sn[1].1 < 0.02 && sn[0].1 - sn[2].1 < 0.02
+		};
+		let coords_to_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 30.0;
+			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let density = if d < 0.1 {
+				d * 0.9 + 0.1
+			} else if d < 0.3 {
+				0.1
+			} else {
+				0.01
+			};
+			noise_grass_b.sample_3d(coordsf, &[]) < density
+		};
+		let coords_to_no_grass = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+		};
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			let ground = coords_to_ground(coords);
+			*chunk_blocks.get_mut(coords).unwrap() = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					let no_grass = coords_to_no_grass(coords);
+					if no_grass {
+						block_type_table.ground_id()
+					} else {
+						block_type_table.kinda_grass_id()
+					}
+				}
+			} else {
+				let ground_below = coords_to_ground(coords + cgmath::vec3(0, 0, -1));
+				if ground_below {
+					let no_grass_below = coords_to_no_grass(coords + cgmath::vec3(0, 0, -1));
+					if no_grass_below {
+						block_type_table.air_id()
+					} else if coords_to_grass(coords) {
+						block_type_table.kinda_grass_blades_id()
+					} else {
+						block_type_table.air_id()
+					}
+				} else {
+					block_type_table.air_id()
+				}
+			};
+		}
 		chunk_blocks
 	}
 }
