@@ -243,6 +243,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	// and we do want to see the errors very much.
 	env_logger::init();
 
+	if cfg!(debug_assertions) {
+		println!(
+			"Running a debug build.\n\
+			Note that better performances are possible with a release build,\n\
+			using the command `cargo run --release -- [arguments for Qwy3]`"
+		);
+	}
+
 	let cmdline::CommandLineSettings {
 		number_of_threads,
 		close_after_one_frame,
