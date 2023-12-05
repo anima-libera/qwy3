@@ -14,6 +14,11 @@
 
 - Maybe introduce type aliases to better label weather we are after or before the correction by `2.0/window_with`.
 
+## Binary command line interface
+
+- Use the clap crate.
+- Allow to provide qwy script commands at binary invocation time that are to be executed during loading or after the first frame or something.
+
 ## Command Language
 
 - Add commands to interface with the game.
@@ -31,9 +36,7 @@
 - Generation of (procedurally generated types of) structures.
   - Structure types are procedurally generated (meaning that a type of tree found in a world will not be found in other worlds).
     - This can be done by making the structure type be an algorithm that can be procedurally generated (it is just a tree).
-  - We have to make sure that the world generation remains the same no matter the order in which chunks are generated, and is not influenced by the grid of chunk (i.e. if the chunks were of a different size and with a different offset then the would generation would generate the same world). This is a problem when for example the world generation (that must act in a way that ignores chunks in its design of the world) decides to generate a structure with some blocks of the structure in a chunk and some blocks in an other chunk... Qwy2 solved this by making the structure generation a separate step from the terrain generation, and making sure that structure generation in a chunk only happens when we have the terrain generated in the whole 3x3x3 chunk cube (but i mean terrain generation is slow enough, we don't really want a whole thick 1-chunk layer of terrain-generated chunks that we can't generate the structures in because they are on the surface of the generated area >.<).
-  - **IDEA:** We have to make sure that the terrain generation is querriable and deterministic (not very hard, we just have to keep using noises like we have been in `world_gen.rs`). Then, we consider a 3D grid of cubes, like in the world generator that generates balls (one per cell of the grid). Each cell gives (via noises) a number N of structs that it will attempt to generate, and then we querry a noise in this cell N times to get N block coords in the cell (and an index that indicates a structure type), so we have N structures to attempt to generate in this cell (we have their coords and types). A structure has a bounded box of some size in which it can place blocks, so when we generate a chunk we may have to generate the structs that start from outside of the chunk (even from outside of the cells that overlap with the chunk if some such cells are near enough). A struct type is a (one day procedurally generated) algorithm that can querry the terrain generation (which is deterministic and so can be querried even outside of the generated chunks without too much calculations and memory usage overhead) and can generate a list of modifications to the terrain (like "place a block of some type at some coords" or "break (=replace by air) the block at some coords", etc.). The modifications that are about blocks in the chunk we are generating are the ones that we are intrested in, we apply them to the chunk and discard the others. To handle the conflicting modifications (modifications from different structs on the same block), we just have to decide on a way to totally order all the structs of the world (like we can decide on the lexicographic order of (z, x, y) where (x, y, z) are the coords of their origin point).
-  - **IDEA:** Structures can be made aware (during generation) of the origin locations of nearby structures. They could generate links or bridges or move a bit to ensure minimal distance or something.
+  - Foactorize ot of the world generators that uses structures the structure generation "engine"! And make it actually readable.
 
 ## Gameplay
 
@@ -57,4 +60,3 @@
 
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
-
