@@ -511,10 +511,12 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let selected_camera = WhichCameraToUse::FirstPerson;
 
 	let cursor_is_captured = true;
-	window
+	let cusror_was_actually_captured = window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-		.unwrap();
-	window.set_cursor_visible(false);
+		.is_ok();
+	if cusror_was_actually_captured {
+		window.set_cursor_visible(false);
+	}
 
 	// First is the block of matter that is targeted,
 	// second is the empty block near it that would be filled if a block was placed now.
