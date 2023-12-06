@@ -9,6 +9,12 @@ edition = "2021"
 opt-level = 3
 # This makes debug builds a bit more usable but we really should stick to release builds.
 
+[profile.release-debug]
+inherits = "release"
+debug = true
+# Release build but with debug symbols for profiling.
+# perf script -F +pid > jaaj.perf
+
 [dependencies]
 bitvec = "1.0.1"
 bytemuck = { version = "1.13.1", features = [ "derive" ] }

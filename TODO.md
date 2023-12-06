@@ -58,5 +58,6 @@
 
 ## Other
 
+- Profile (maybe with https://github.com/killercup/cargo-flamegraph or something else).
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.

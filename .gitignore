@@ -3,5 +3,9 @@
 /.vscode
 /private
 
+*.perf
+perf.*
+flamegraph.svg
+
 controls.qwy3_controls
 atlas.png
