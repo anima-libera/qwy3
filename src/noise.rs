@@ -72,7 +72,17 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 		std::mem::swap(&mut a, &mut b);
 		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
 	}
-	positive_fract(f32::cos(a as f32 + b as f32))
+	if false {
+		// Disabled due to `cos` being actually slow.
+		positive_fract(f32::cos(a as f32 + b as f32))
+	} else {
+		// Faster (? probably) than a `cos`.
+		// TODO: Does it allows for values arbitrarly close to any arbitrary value
+		// in the range `0.0..=1.0`? It is actually important, the `cos` allows that,
+		// does this allow it to.
+		let uwu = 2.84929;
+		((a as f32 + b as f32) % uwu).abs() / uwu
+	}
 }
 
 fn _worst_raw_noise_node(xs: &[i32]) -> f32 {
