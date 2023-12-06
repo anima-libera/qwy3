@@ -44,75 +44,84 @@ impl ThreadPool {
 		// Here we spawn the manager thread.
 		// We do not need to keep the `JoinHandle`, we can just send it an `OrderToManager::End`
 		// to make it end its thread (after making sure all the workers also end).
-		thread::spawn(move || {
-			// When a worker is done with its task (or has just spawned), it tells the manager
-			// so that the manager can give them a new task, maybe immediately.
-			// Each worker will take a clone of the sender.
-			let (asking_for_more_sender_to_manager, manager_receiver_of_worker_asking_for_more) =
-				mpsc::channel::<WorkerId>();
-			type WorkerId = usize;
+		thread::Builder::new()
+			.name("Threadpool Manager".to_string())
+			.spawn(move || {
+				// When a worker is done with its task (or has just spawned), it tells the manager
+				// so that the manager can give them a new task, maybe immediately.
+				// Each worker will take a clone of the sender.
+				let (asking_for_more_sender_to_manager, manager_receiver_of_worker_asking_for_more) =
+					mpsc::channel::<WorkerId>();
+				type WorkerId = usize;
 
-			enum OrderToWorker {
-				/// The worker will perform the given task, and then ask for more.
-				Task(Task),
-				/// The worker will end its loop, letting its thread rest in piece, free at last.
-				End,
-			}
-
-			// Here we spawn the desired number of worker threads.
-			// The manager will keep an array of senders, one for each worker, so that the manager can
-			// order around every worker.
-			// We do not need to keep the `JoinHandle`s, the manager can just send them
-			// `OrderToWorker::End` to make them end their threads.
-			let mut order_sender_to_worker_array = Vec::with_capacity(number_of_workers);
-			for worker_id in 0..number_of_workers {
-				let (order_sender_to_worker, worker_order_receiver) = mpsc::channel::<OrderToWorker>();
-				order_sender_to_worker_array.push(order_sender_to_worker);
-				let asking_for_more_sender_to_manager = asking_for_more_sender_to_manager.clone();
-				thread::spawn(move || loop {
-					// Either we (a worker) just spawned (and thus are ready to be given a first task)
-					// or we just finished, in either case we are ready to take the next order.
-					let manager_is_gone = asking_for_more_sender_to_manager.send(worker_id).is_err();
-					if manager_is_gone {
-						// If the manager is gone, then we are free to go as well.
-						return;
-					}
-
-					// The manager gave an order, so we obey.
-					let order = worker_order_receiver.recv();
-					match order {
-						Ok(OrderToWorker::Task(task)) => task(),
-						Ok(OrderToWorker::End) | Err(_) => return,
-					}
-				});
-			}
-
-			// We don't keep a clone of this sender, clones of this are for workers only.
-			drop(asking_for_more_sender_to_manager);
-
-			// Setup is done, now as the manager we enter a loop in which we dispatch tasks
-			// to available workers until the end. We live in a society.
-			loop {
-				let order = manager_order_receiver.recv();
-				match order {
-					Ok(OrderToManager::Task(task)) => {
-						let worker_asking_for_more =
-							manager_receiver_of_worker_asking_for_more.recv().unwrap();
-						order_sender_to_worker_array[worker_asking_for_more]
-							.send(OrderToWorker::Task(task))
-							.unwrap();
-					},
-					Ok(OrderToManager::_End) | Err(_) => {
-						for worker_asking_for_more in manager_receiver_of_worker_asking_for_more.iter() {
-							order_sender_to_worker_array[worker_asking_for_more]
-								.send(OrderToWorker::End)
-								.unwrap();
-						}
-						return;
-					},
+				enum OrderToWorker {
+					/// The worker will perform the given task, and then ask for more.
+					Task(Task),
+					/// The worker will end its loop, letting its thread rest in piece, free at last.
+					End,
 				}
-			}
-		});
+
+				// Here we spawn the desired number of worker threads.
+				// The manager will keep an array of senders, one for each worker, so that the manager can
+				// order around every worker.
+				// We do not need to keep the `JoinHandle`s, the manager can just send them
+				// `OrderToWorker::End` to make them end their threads.
+				let mut order_sender_to_worker_array = Vec::with_capacity(number_of_workers);
+				for worker_id in 0..number_of_workers {
+					let (order_sender_to_worker, worker_order_receiver) =
+						mpsc::channel::<OrderToWorker>();
+					order_sender_to_worker_array.push(order_sender_to_worker);
+					let asking_for_more_sender_to_manager = asking_for_more_sender_to_manager.clone();
+					thread::Builder::new()
+						.name(format!("Worker {worker_id}"))
+						.spawn(move || loop {
+							// Either we (a worker) just spawned (and thus are ready to be given a first task)
+							// or we just finished, in either case we are ready to take the next order.
+							let manager_is_gone =
+								asking_for_more_sender_to_manager.send(worker_id).is_err();
+							if manager_is_gone {
+								// If the manager is gone, then we are free to go as well.
+								return;
+							}
+
+							// The manager gave an order, so we obey.
+							let order = worker_order_receiver.recv();
+							match order {
+								Ok(OrderToWorker::Task(task)) => task(),
+								Ok(OrderToWorker::End) | Err(_) => return,
+							}
+						})
+						.unwrap();
+				}
+
+				// We don't keep a clone of this sender, clones of this are for workers only.
+				drop(asking_for_more_sender_to_manager);
+
+				// Setup is done, now as the manager we enter a loop in which we dispatch tasks
+				// to available workers until the end. We live in a society.
+				loop {
+					let order = manager_order_receiver.recv();
+					match order {
+						Ok(OrderToManager::Task(task)) => {
+							let worker_asking_for_more =
+								manager_receiver_of_worker_asking_for_more.recv().unwrap();
+							order_sender_to_worker_array[worker_asking_for_more]
+								.send(OrderToWorker::Task(task))
+								.unwrap();
+						},
+						Ok(OrderToManager::_End) | Err(_) => {
+							for worker_asking_for_more in manager_receiver_of_worker_asking_for_more.iter()
+							{
+								order_sender_to_worker_array[worker_asking_for_more]
+									.send(OrderToWorker::End)
+									.unwrap();
+							}
+							return;
+						},
+					}
+				}
+			})
+			.unwrap();
 
 		ThreadPool { order_sender_to_manager, number_of_workers }
 	}
