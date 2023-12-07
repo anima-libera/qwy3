@@ -72,8 +72,8 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 		std::mem::swap(&mut a, &mut b);
 		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
 	}
-	if false {
-		// Disabled due to `cos` being actually slow.
+	if true {
+		// Uh `cos` is actually slow.
 		positive_fract(f32::cos(a as f32 + b as f32))
 	} else {
 		// Faster (? probably) than a `cos`.
