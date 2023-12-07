@@ -4,7 +4,7 @@ bind_control key:Q walk_leftward
 bind_control key:D walk_rightward
 bind_control key:space jump
 bind_control key:P toggle_physics
-bind_control key:M toggle_third_person_view
+bind_control key:M cycle_first_and_third_person_views
 bind_control key:L toggle_display_player_box
 bind_control key:J toggle_sun_view
 bind_control key:K toggle_cursor_captured
