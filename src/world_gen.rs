@@ -4,7 +4,10 @@ use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
 use enum_iterator::Sequence;
 use smallvec::SmallVec;
 
-use crate::coords::{iter_3d_rect_inf_sup_excluded, NonOrientedAxis};
+use crate::{
+	chunks::BlockTypeId,
+	coords::{iter_3d_rect_inf_sup_excluded, CubicCoordsSpan, NonOrientedAxis},
+};
 pub(crate) use crate::{
 	chunks::{BlockTypeTable, ChunkBlocks},
 	coords::{BlockCoords, ChunkCoordsSpan},
@@ -54,6 +57,7 @@ pub enum WhichWorldGenerator {
 	Lines02,
 	Lines03,
 	StructuresLinksSmooth,
+	StructuresEnginePoc,
 }
 
 impl WhichWorldGenerator {
@@ -92,6 +96,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Lines02 => "lines-02",
 			WhichWorldGenerator::Lines03 => "lines-03",
 			WhichWorldGenerator::StructuresLinksSmooth => "structures-links-smooth",
+			WhichWorldGenerator::StructuresEnginePoc => "structures-engine-poc",
 		}
 	}
 
@@ -138,6 +143,9 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::StructuresLinksSmooth => {
 				Arc::new(WorldGeneratorStructuresLinksSmooth { seed })
 			},
+			WhichWorldGenerator::StructuresEnginePoc => {
+				Arc::new(WorldGeneratorStructuresEnginePoc { seed })
+			},
 		}
 	}
 
@@ -167,14 +175,14 @@ impl WorldGenerator for DefaultWorldGenerator {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 100.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
-			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale, &[]);
 			(coordsf.z < b * 5.0 && a < 0.7) || b < 0.3
 		};
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let d = noise_grass_a.sample_3d_1d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -182,12 +190,12 @@ impl WorldGenerator for DefaultWorldGenerator {
 			} else {
 				0.01
 			};
-			noise_grass_b.sample_3d(coordsf, &[]) < density
+			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
 		let coords_to_no_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 75.0;
-			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -288,14 +296,14 @@ impl WorldGenerator for WorldGeneratorLines01 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 100.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
-			let b = noise_b.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale, &[]);
 			(a - 0.5).abs() < 0.03 && (b - 0.5).abs() < 0.03
 		};
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let d = noise_grass_a.sample_3d_1d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -303,12 +311,12 @@ impl WorldGenerator for WorldGeneratorLines01 {
 			} else {
 				0.01
 			};
-			noise_grass_b.sample_3d(coordsf, &[]) < density
+			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
 		let coords_to_no_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 75.0;
-			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -359,7 +367,7 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 100.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
 			a < 0.35
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
@@ -398,9 +406,9 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 			let radius = 11.0;
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_i_scaled = coords.map(|x| (x as f32 / scale).floor());
-			let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-			let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-			let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+			let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+			let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+			let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 			let coordsf_min = coords.map(|x| (x as f32 / scale).floor() * scale);
 			let _coordsf_max = coords.map(|x| (x as f32 / scale).ceil() * scale);
 			let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -445,14 +453,14 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 			let max_radius = 15.0;
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_i_scaled = coords.map(|x| (x as f32 / scale).floor());
-			let e = noise_e.sample_3d(coordsf_i_scaled, &[]);
+			let e = noise_e.sample_3d_1d(coordsf_i_scaled, &[]);
 			if e < 0.2 {
 				return false;
 			}
-			let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-			let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-			let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
-			let d = noise_d.sample_3d(coordsf_i_scaled, &[]);
+			let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+			let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+			let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
+			let d = noise_d.sample_3d_1d(coordsf_i_scaled, &[]);
 			let radius = d * (max_radius - min_radius) + min_radius;
 			let coordsf_min = coords.map(|x| (x as f32 / scale).floor() * scale);
 			let _coordsf_max = coords.map(|x| (x as f32 / scale).ceil() * scale);
@@ -511,9 +519,9 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -565,9 +573,9 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			let radius = 10.0;
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -584,9 +592,9 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
 			let deformation_max_length = 20.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
@@ -632,9 +640,9 @@ impl WorldGenerator for WorldGeneratorLinks {
 			let radius = 7.0;
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -661,9 +669,9 @@ impl WorldGenerator for WorldGeneratorLinks {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
 			let deformation_max_length = 13.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
@@ -715,9 +723,9 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			}
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -744,9 +752,9 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
 			let deformation_max_length = 13.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
@@ -795,9 +803,9 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			let radius = 5.0;
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -824,9 +832,9 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
 			let deformation_max_length = 13.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
@@ -873,9 +881,9 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			let radius = 7.0;
 			let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 				let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-				let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-				let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-				let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+				let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+				let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+				let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 				let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 				let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 				let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -885,7 +893,7 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 				|coordsf: cgmath::Point3<f32>, axis: NonOrientedAxis| -> bool {
 					let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
 					let axis_channel = axis.index() as i32;
-					let g = noise_g.sample_3d(coordsf_i_scaled, &[axis_channel]);
+					let g = noise_g.sample_3d_1d(coordsf_i_scaled, &[axis_channel]);
 					g < 0.5
 				};
 			let the = coordsf_to_the(coordsf);
@@ -927,9 +935,9 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
 			let deformation_max_length = 25.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let deformation = AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3()
 				* f * deformation_max_length;
@@ -977,9 +985,9 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 				let radius = 7.0;
 				let coordsf_to_the = |coordsf: cgmath::Point3<f32>| -> cgmath::Point3<f32> {
 					let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-					let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-					let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-					let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
+					let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+					let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+					let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
 					let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 					let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
 					let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
@@ -989,7 +997,7 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 					|coordsf: cgmath::Point3<f32>, axis: NonOrientedAxis| -> bool {
 						let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
 						let axis_channel = axis.index() as i32;
-						let g = noise_g.sample_3d(coordsf_i_scaled, &[axis_channel]);
+						let g = noise_g.sample_3d_1d(coordsf_i_scaled, &[axis_channel]);
 						g < 0.5
 					};
 				let in_link = |a: cgmath::Point3<f32>,
@@ -1043,9 +1051,9 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 			let scale = 30.0;
 			let horizontal_deformation_max_length = 14.0;
 			let vertical_deformation_max_length = 4.0;
-			let d = noise_d.sample_3d(coordsf / scale, &[]);
-			let e = noise_e.sample_3d(coordsf / scale, &[]);
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let mut deformation =
 				AngularDirection::from_angles(d * TAU, e * (TAU / 2.0)).to_vec3() * f;
@@ -1098,14 +1106,14 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			let min_radius = 4.0;
 			let max_radius = 50.0;
 			let coordsf_i_scaled = coordsf.map(|x| (x / scale).floor());
-			let e = noise_e.sample_3d(coordsf_i_scaled, &[]);
+			let e = noise_e.sample_3d_1d(coordsf_i_scaled, &[]);
 			if e < 0.2 {
 				return false;
 			}
-			let a = noise_a.sample_3d(coordsf_i_scaled, &[]);
-			let b = noise_b.sample_3d(coordsf_i_scaled, &[]);
-			let c = noise_c.sample_3d(coordsf_i_scaled, &[]);
-			let d = noise_d.sample_3d(coordsf_i_scaled, &[]);
+			let a = noise_a.sample_3d_1d(coordsf_i_scaled, &[]);
+			let b = noise_b.sample_3d_1d(coordsf_i_scaled, &[]);
+			let c = noise_c.sample_3d_1d(coordsf_i_scaled, &[]);
+			let d = noise_d.sample_3d_1d(coordsf_i_scaled, &[]);
 			let radius = d * (max_radius - min_radius) + min_radius;
 			let coordsf_min = coordsf.map(|x| (x / scale).floor() * scale);
 			let _coordsf_max = coordsf.map(|x| (x / scale).ceil() * scale);
@@ -1119,9 +1127,9 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			let scale = 30.0;
 			let horizontal_deformation_max_length = 14.0;
 			let vertical_deformation_max_length = 4.0;
-			let f = noise_f.sample_3d(coordsf / scale, &[]);
-			let g = noise_g.sample_3d(coordsf / scale, &[]);
-			let h = noise_h.sample_3d(coordsf / scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / scale, &[]);
+			let g = noise_g.sample_3d_1d(coordsf / scale, &[]);
+			let h = noise_h.sample_3d_1d(coordsf / scale, &[]);
 			use crate::coords::AngularDirection;
 			let mut deformation =
 				AngularDirection::from_angles(f * TAU, g * (TAU / 2.0)).to_vec3() * h;
@@ -1134,7 +1142,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let d = noise_grass_a.sample_3d_1d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -1142,7 +1150,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			} else {
 				0.01
 			};
-			noise_grass_b.sample_3d(coordsf, &[]) < density
+			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -1186,14 +1194,14 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 100.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
-			let b = noise_b.sample_3d(coordsf / scale, &[]);
-			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d_1d(coordsf / scale, &[]);
 			let abc = cgmath::vec3(a - 0.5, b - 0.5, c - 0.5).normalize();
 			let detail_scale = 85.0;
-			let d = noise_d.sample_3d(coordsf / detail_scale, &[]);
-			let e = noise_e.sample_3d(coordsf / detail_scale, &[]);
-			let f = noise_f.sample_3d(coordsf / detail_scale, &[]);
+			let d = noise_d.sample_3d_1d(coordsf / detail_scale, &[]);
+			let e = noise_e.sample_3d_1d(coordsf / detail_scale, &[]);
+			let f = noise_f.sample_3d_1d(coordsf / detail_scale, &[]);
 			let def = cgmath::vec3(d - 0.5, e - 0.5, f - 0.5).normalize();
 			let uwu = abc.dot(def);
 			uwu < -0.4 && def.z < 0.0
@@ -1232,9 +1240,9 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 		let coords_to_ground_uwu = |coords: BlockCoords| -> f32 {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 200.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
-			let b = noise_b.sample_3d(coordsf / scale, &[]);
-			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d_1d(coordsf / scale, &[]);
 			a.max(b).max(c) + a - c
 		};
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -1275,8 +1283,8 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
 			let scale_a = 100.0;
 			let scale_b = 80.0;
-			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
-			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let nosie_value_a = noise_a.sample_2d_1d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d_1d(coordsf_yx / scale_b, &[]);
 			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
@@ -1324,8 +1332,8 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
 			let scale_a = 100.0;
 			let scale_b = 80.0;
-			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
-			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let nosie_value_a = noise_a.sample_2d_1d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d_1d(coordsf_yx / scale_b, &[]);
 			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
@@ -1370,8 +1378,8 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 			let coordsf_yx = cgmath::point2(coordsf.x, coordsf.y);
 			let scale_a = 100.0;
 			let scale_b = 80.0;
-			let nosie_value_a = noise_a.sample_2d(coordsf_yx / scale_a, &[]);
-			let nosie_value_b = noise_b.sample_2d(coordsf_yx / scale_b, &[]);
+			let nosie_value_a = noise_a.sample_2d_1d(coordsf_yx / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_2d_1d(coordsf_yx / scale_b, &[]);
 			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
@@ -1415,8 +1423,8 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 			let coordsf = coords.map(|x| x as f32);
 			let scale_a = 100.0;
 			let scale_b = 80.0;
-			let nosie_value_a = noise_a.sample_3d(coordsf / scale_a, &[]);
-			let nosie_value_b = noise_b.sample_3d(coordsf / scale_b, &[]);
+			let nosie_value_a = noise_a.sample_3d_1d(coordsf / scale_a, &[]);
+			let nosie_value_b = noise_b.sample_3d_1d(coordsf / scale_b, &[]);
 			let angle = f32::atan2(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let distance = f32::hypot(nosie_value_a - 0.5, nosie_value_b - 0.5);
 			let value = (f32::cos(angle * 3.0) * 0.5 + 0.5) * distance.powi(4);
@@ -1460,11 +1468,11 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale_m = 60.0;
-			let scale_a = 240.0 * noise_m.sample_3d(coordsf / scale_m, &[]);
-			let nosie_value_a = noise_a.sample_3d(coordsf / scale_a, &[]);
+			let scale_a = 240.0 * noise_m.sample_3d_1d(coordsf / scale_m, &[]);
+			let nosie_value_a = noise_a.sample_3d_1d(coordsf / scale_a, &[]);
 			let angle = nosie_value_a * TAU;
 			let scale_d = 100.0;
-			let distance = 80.0 * noise_b.sample_3d(coordsf / scale_d, &[]);
+			let distance = 80.0 * noise_b.sample_3d_1d(coordsf / scale_d, &[]);
 			let v = coordsf.z + f32::cos(angle) * distance;
 			//let ry = ry + f32::sin(angle) * distance;
 			v < 0.5
@@ -1505,12 +1513,12 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 			let mut coordsf = coords.map(|x| x as f32);
 			let scale_a = 100.0;
 			for _i in 0..3 {
-				let noise_value_x = noise_a.sample_3d(coordsf / scale_a, &[]);
-				let noise_value_y = noise_b.sample_3d(coordsf / scale_a, &[]);
-				let noise_value_z = noise_c.sample_3d(coordsf / scale_a, &[]);
+				let noise_value_x = noise_a.sample_3d_1d(coordsf / scale_a, &[]);
+				let noise_value_y = noise_b.sample_3d_1d(coordsf / scale_a, &[]);
+				let noise_value_z = noise_c.sample_3d_1d(coordsf / scale_a, &[]);
 				let vv = cgmath::vec3(noise_value_x, noise_value_y, noise_value_z);
 				let vv = (vv - cgmath::vec3(0.5, 0.5, 0.5)).normalize();
-				let d = noise_d.sample_3d(coordsf / scale_a, &[]);
+				let d = noise_d.sample_3d_1d(coordsf / scale_a, &[]);
 				let vv = vv * d * 20.0;
 				coordsf += vv;
 				if coordsf.z < 0.0 {
@@ -1573,7 +1581,12 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 			let scale = 120.0;
 			let n = biome_heights.len() as i32;
 			let mut values: Vec<_> = (0..n)
-				.map(|i| (i as usize, noise_biomes.sample_2d(coordsf_xy / scale, &[i])))
+				.map(|i| {
+					(
+						i as usize,
+						noise_biomes.sample_2d_1d(coordsf_xy / scale, &[i]),
+					)
+				})
 				.collect();
 			values.sort_by(|value_a, value_b| value_a.1.partial_cmp(&value_b.1).unwrap());
 			values.reverse();
@@ -1663,7 +1676,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 			let scale = 120.0;
 			let n = biome_heights.len() as i32;
 			let mut values: Vec<_> = (0..n)
-				.map(|i| (i as usize, noise_biomes.sample_3d(coordsf / scale, &[i])))
+				.map(|i| (i as usize, noise_biomes.sample_3d_1d(coordsf / scale, &[i])))
 				.collect();
 			values.sort_by(|value_a, value_b| value_a.1.partial_cmp(&value_b.1).unwrap());
 			values.reverse();
@@ -1733,7 +1746,7 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_a.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_a.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
@@ -1770,10 +1783,9 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_terrain.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		use crate::BlockTypeId;
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -1795,7 +1807,12 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(&[], &[cell_coords.x, cell_coords.y, cell_coords.z, 1]);
+			let v = noise_cell_data.sample(
+				&[],
+				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
+				&[],
+				None,
+			);
 			(v * 6.0 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -1812,6 +1829,8 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 								1 + axis,
 								origin_index as i32,
 							],
+							&[],
+							None,
 						)
 					})
 					.collect();
@@ -1937,10 +1956,9 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_terrain.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		use crate::BlockTypeId;
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -1962,7 +1980,12 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(&[], &[cell_coords.x, cell_coords.y, cell_coords.z, 1]);
+			let v = noise_cell_data.sample(
+				&[],
+				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
+				&[],
+				None,
+			);
 			(v * 6.0 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -1979,6 +2002,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 								1 + axis,
 								origin_index as i32,
 							],
+							&[],
+							None,
 						)
 					})
 					.collect();
@@ -2079,6 +2104,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 								other_origin_coords.y,
 								other_origin_coords.z,
 							],
+							&[],
+							None,
 						);
 						let value_other_to_us = noise_a.sample(
 							&[],
@@ -2090,6 +2117,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 								origin_block_coords.y,
 								origin_block_coords.z,
 							],
+							&[],
+							None,
 						);
 						// We only link to a few other structures because if we linked
 						// to everyone we could then it fills the world with links
@@ -2208,10 +2237,9 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_terrain.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		use crate::BlockTypeId;
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -2233,7 +2261,12 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(&[], &[cell_coords.x, cell_coords.y, cell_coords.z, 1]);
+			let v = noise_cell_data.sample(
+				&[],
+				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
+				&[],
+				None,
+			);
 			((v * 6.0 - 2.0) * 3.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2250,6 +2283,8 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 								1 + axis,
 								origin_index as i32,
 							],
+							&[],
+							None,
 						)
 					})
 					.collect();
@@ -2302,13 +2337,21 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			if !found_ground {
 				return;
 			}
-			let noise_value_a =
-				noise_structure.sample(&[], &[placing_head.x, placing_head.y, placing_head.z, 1]);
+			let noise_value_a = noise_structure.sample(
+				&[],
+				&[placing_head.x, placing_head.y, placing_head.z, 1],
+				&[],
+				None,
+			);
 			let height =
 				((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(11) as f32) as i32;
 			placing_head.z += height;
-			let noise_value_b =
-				noise_structure.sample(&[], &[placing_head.x, placing_head.y, placing_head.z, 2]);
+			let noise_value_b = noise_structure.sample(
+				&[],
+				&[placing_head.x, placing_head.y, placing_head.z, 2],
+				&[],
+				None,
+			);
 			let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
 			for coords in
 				crate::coords::iter_3d_cube_center_radius(placing_head, ball_radius.ceil() as i32)
@@ -2401,10 +2444,9 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_terrain.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		use crate::BlockTypeId;
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -2426,7 +2468,12 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(&[], &[cell_coords.x, cell_coords.y, cell_coords.z, 1]);
+			let v = noise_cell_data.sample(
+				&[],
+				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
+				&[],
+				None,
+			);
 			(v * 3.5 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2443,6 +2490,8 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 								1 + axis,
 								origin_index as i32,
 							],
+							&[],
+							None,
 						)
 					})
 					.collect();
@@ -2500,10 +2549,18 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			if !found_ground {
 				return;
 			}
-			let noise_value_a =
-				noise_structure.sample(&[], &[placing_head.x, placing_head.y, placing_head.z, 1]);
-			let noise_value_b =
-				noise_structure.sample(&[], &[placing_head.x, placing_head.y, placing_head.z, 2]);
+			let noise_value_a = noise_structure.sample(
+				&[],
+				&[placing_head.x, placing_head.y, placing_head.z, 1],
+				&[],
+				None,
+			);
+			let noise_value_b = noise_structure.sample(
+				&[],
+				&[placing_head.x, placing_head.y, placing_head.z, 2],
+				&[],
+				None,
+			);
 			let us = placing_head.map(|x| x as f32);
 			let spike_end = us
 				+ cgmath::vec3(
@@ -2617,16 +2674,16 @@ impl WorldGenerator for WorldGeneratorLines02 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 100.0;
-			let a = noise_a.sample_3d(coordsf / scale, &[]);
-			let b = noise_b.sample_3d(coordsf / scale, &[]);
-			let c = noise_c.sample_3d(coordsf / scale, &[]);
+			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale, &[]);
+			let c = noise_c.sample_3d_1d(coordsf / scale, &[]);
 			let v = 0.03;
 			(a - c).abs() < v && (b - c).abs() < v && (a - b).abs() < v
 		};
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let d = noise_grass_a.sample_3d_1d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -2634,12 +2691,12 @@ impl WorldGenerator for WorldGeneratorLines02 {
 			} else {
 				0.01
 			};
-			noise_grass_b.sample_3d(coordsf, &[]) < density
+			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
 		let coords_to_no_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 75.0;
-			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -2694,9 +2751,9 @@ impl WorldGenerator for WorldGeneratorLines03 {
 		let noise_grass_b = noise::OctavedNoise::new(2, vec![self.seed, 1, 2]);
 		let sorted_noises = |coordsf: cgmath::Point3<f32>| -> [(usize, f32); 3] {
 			let mut array = [
-				(0, noise_a.sample_3d(coordsf, &[])),
-				(1, noise_b.sample_3d(coordsf, &[])),
-				(2, noise_c.sample_3d(coordsf, &[])),
+				(0, noise_a.sample_3d_1d(coordsf, &[])),
+				(1, noise_b.sample_3d_1d(coordsf, &[])),
+				(2, noise_c.sample_3d_1d(coordsf, &[])),
 			];
 			array.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().reverse());
 			array
@@ -2710,7 +2767,7 @@ impl WorldGenerator for WorldGeneratorLines03 {
 		let coords_to_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 30.0;
-			let d = noise_grass_a.sample_3d(coordsf / scale, &[]);
+			let d = noise_grass_a.sample_3d_1d(coordsf / scale, &[]);
 			let density = if d < 0.1 {
 				d * 0.9 + 0.1
 			} else if d < 0.3 {
@@ -2718,12 +2775,12 @@ impl WorldGenerator for WorldGeneratorLines03 {
 			} else {
 				0.01
 			};
-			noise_grass_b.sample_3d(coordsf, &[]) < density
+			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
 		let coords_to_no_grass = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
 			let scale = 75.0;
-			noise_no_grass.sample_3d(coordsf / scale, &[]) < 0.25
+			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -2776,10 +2833,9 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			let coordsf = coords.map(|x| x as f32);
 			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
 			let scale = 60.0;
-			let height = 20.0 * noise_terrain.sample_2d(coordsf_xy / scale, &[]);
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		use crate::BlockTypeId;
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -2801,7 +2857,12 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(&[], &[cell_coords.x, cell_coords.y, cell_coords.z, 1]);
+			let v = noise_cell_data.sample(
+				&[],
+				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
+				&[],
+				None,
+			);
 			(v * 20.0 - 17.5).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2818,6 +2879,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 								1 + axis,
 								origin_index as i32,
 							],
+							&[],
+							None,
 						)
 					})
 					.collect();
@@ -2942,6 +3005,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 								other_origin_coords.y,
 								other_origin_coords.z,
 							],
+							&[],
+							None,
 						);
 						let value_other_to_us = noise_a.sample(
 							&[],
@@ -2953,6 +3018,8 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 								origin_block_coords.y,
 								origin_block_coords.z,
 							],
+							&[],
+							None,
 						);
 						// We only link to a few other structures because if we linked
 						// to everyone we could then it fills the world with links
@@ -3041,6 +3108,316 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 					generate_structure(origin_coords, &mut chunk_blocks);
 				}
 			}
+		}
+
+		chunk_blocks
+	}
+}
+
+mod structure_gen {
+	use std::sync::Arc;
+
+	use cgmath::{EuclideanSpace, MetricSpace};
+
+	use crate::{
+		chunks::{BlockTypeId, BlockTypeTable, ChunkBlocks},
+		coords::{BlockCoords, CubicCoordsSpan},
+		noise::OctavedNoise,
+	};
+
+	struct StructureTypeId {
+		index: usize,
+	}
+
+	/// A structure origin is a first step in the generation of a structure.
+	/// Before even generating the blocks of an instance of some type of structure,
+	/// we have to decide (in a deterministic way, etc.) where (i.e. from which block)
+	/// should structures of which type can generate. A structure origin describes
+	/// where and which type a structure should generate.
+	///
+	/// Generating structure origins and having some size limits on structure generations
+	/// (constraining how far from its origin a structure can place/remove blocks)
+	/// allows for a chunk to know which origins could place/remove blocks in the chunk
+	/// and thus should actually have their structure generated.
+	pub struct StructureOrigin {
+		pub coords: BlockCoords,
+		type_id: StructureTypeId,
+	}
+
+	/// Handles generation of structure origins.
+	pub trait StructureOriginGenerator {
+		fn get_origins_in_span(&self, span: CubicCoordsSpan) -> Vec<StructureOrigin>;
+	}
+
+	/// The idea of this structure origin generator is that it considers a grid of big cubic cells
+	/// and uses noise to deterministically place, in each cell, a noise-obtained number of origins
+	/// at noise-obtained coords in the cell.
+	///
+	/// It doesn't handle structure types.
+	pub struct TestStructureOriginGenerator {
+		cell_size: i32,
+		/// How many structure origins to generate per cell (min, max_included).
+		/// The range can overlap with the negatives, getting a negative number of origins
+		/// to generate in a cell will mean zero.
+		how_many_min_max: (i32, i32),
+		noise: OctavedNoise,
+	}
+
+	impl StructureOriginGenerator for TestStructureOriginGenerator {
+		fn get_origins_in_span(&self, span: CubicCoordsSpan) -> Vec<StructureOrigin> {
+			let block_inf = span.inf;
+			let block_sup_included = span.sup_excluded - cgmath::vec3(1, 1, 1);
+			let cell_inf = self.block_coords_to_cell_coords(block_inf);
+			let cell_sup_included = self.block_coords_to_cell_coords(block_sup_included);
+			let cell_span =
+				CubicCoordsSpan::with_inf_sup_but_sup_is_included(cell_inf, cell_sup_included);
+			let mut origins = vec![];
+			for cell_coords in cell_span.iter() {
+				self.get_origins_in_cell_and_span(cell_coords, span, &mut origins);
+			}
+			origins
+		}
+	}
+
+	impl TestStructureOriginGenerator {
+		pub fn new(
+			seed: i32,
+			cell_size: i32,
+			how_many_min_max: (i32, i32),
+		) -> TestStructureOriginGenerator {
+			TestStructureOriginGenerator {
+				cell_size,
+				how_many_min_max,
+				noise: OctavedNoise::new(1, vec![seed]),
+			}
+		}
+
+		/// Given a cell, returns how many origins conatined in the cell.
+		fn get_cell_origin_number(&self, cell_coords: cgmath::Point3<i32>) -> usize {
+			let v = self.noise.sample_i3d_1d(cell_coords, &[1]);
+			let (min, max) = self.how_many_min_max;
+			let (min, max) = (min as f32, max as f32);
+			(v * (max - min + 1.0) + min).max(0.0).round() as usize
+		}
+
+		/// Given a cell and an index of an origin in that cell,
+		/// returns the coords (in the world) of that structure origin.
+		fn get_origin_coords(
+			&self,
+			cell_coords: cgmath::Point3<i32>,
+			origin_index: usize,
+		) -> BlockCoords {
+			let coords_in_unit_cube = self
+				.noise
+				.sample_i3d_3d(cell_coords, &[origin_index as i32]);
+			let coords_in_cell =
+				coords_in_unit_cube.map(|x| (x * (self.cell_size as f32 - 0.001)).floor() as i32);
+			let cell_coords_in_world = cell_coords * self.cell_size;
+			cell_coords_in_world + coords_in_cell.to_vec()
+		}
+
+		/// Given a cell and a block span,
+		/// pushes in the given vec the origins in the cell that are also in the span.
+		fn get_origins_in_cell_and_span(
+			&self,
+			cell_coords: cgmath::Point3<i32>,
+			span: CubicCoordsSpan,
+			add_origins_in_there: &mut Vec<StructureOrigin>,
+		) {
+			let origin_number = self.get_cell_origin_number(cell_coords);
+			for origin_index in 0..origin_number {
+				let origin_coords = self.get_origin_coords(cell_coords, origin_index);
+				if span.contains(origin_coords) {
+					add_origins_in_there.push(StructureOrigin {
+						coords: origin_coords,
+						type_id: StructureTypeId { index: 0 },
+					})
+				}
+			}
+		}
+
+		fn block_coords_to_cell_coords(&self, block_coords: BlockCoords) -> cgmath::Point3<i32> {
+			block_coords.map(|x| x.div_euclid(self.cell_size))
+		}
+	}
+
+	type TerrainGenerator<'a> = dyn Fn(BlockCoords) -> BlockTypeId + 'a;
+
+	/// All that is needed for the generation of a structure instance.
+	/// A structure instance is just one structure with an origin position
+	/// (and a type, though that is given in an other way).
+	pub struct StructureInstanceGenerationContext<'a> {
+		pub origin_coords: BlockCoords,
+		pub chunk_blocks: &'a mut ChunkBlocks,
+		pub origin_generator: &'a dyn StructureOriginGenerator,
+		pub block_type_table: &'a Arc<BlockTypeTable>,
+		pub terrain_generator: &'a TerrainGenerator<'a>,
+	}
+
+	/// When a structure generation wants to place a block, it may want to do so in some way
+	/// that is specified by this type. For example, the structure generation might want to
+	/// place some block somewhere but only if it replaces air, well this would be specified
+	/// by this type.
+	pub struct BlockPlacing {
+		pub block_type_to_place: BlockTypeId,
+		pub only_place_on_air: bool,
+	}
+
+	impl<'a> StructureInstanceGenerationContext<'a> {
+		pub fn place_block(&mut self, block_placing: &BlockPlacing, coords: BlockCoords) {
+			if let Some(block_type) = self.chunk_blocks.get_mut(coords) {
+				let shall_place_block = !block_placing.only_place_on_air
+					|| self.block_type_table.get(*block_type).unwrap().is_air();
+				if shall_place_block {
+					*block_type = block_placing.block_type_to_place;
+				}
+			}
+		}
+
+		pub fn place_ball(
+			&mut self,
+			block_placing: &BlockPlacing,
+			center: cgmath::Point3<f32>,
+			radius: f32,
+		) {
+			let ball_inf = (center - cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.floor() as i32);
+			let ball_sup = (center + cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.ceil() as i32);
+			let ball_span = CubicCoordsSpan::with_inf_sup_but_sup_is_included(ball_inf, ball_sup);
+			let chunk_span = CubicCoordsSpan::from_chunk_span(self.chunk_blocks.coords_span);
+			if let Some(span) = chunk_span.intersection(&ball_span) {
+				for coords in span.iter() {
+					if coords.map(|x| x as f32).distance(center) < radius {
+						self.place_block(block_placing, coords);
+					}
+				}
+			}
+		}
+	}
+
+	/// Generates a structure instance of one specific type.
+	type StructureTypeInstanceGenerator<'a> = dyn FnMut(StructureInstanceGenerationContext);
+}
+
+use structure_gen::*;
+
+struct WorldGeneratorStructuresEnginePoc {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		// Define the terrain generation as a deterministic coords->block function.
+		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
+			let scale = 60.0;
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
+			coordsf.z < height
+		};
+		let block_type_table_for_terrain = Arc::clone(&block_type_table);
+		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
+			let ground = coords_to_ground(coords);
+			if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table_for_terrain.ground_id()
+				} else {
+					block_type_table_for_terrain.kinda_grass_id()
+				}
+			} else {
+				block_type_table_for_terrain.air_id()
+			}
+		};
+
+		// Setup structure origins generation stuff.
+		let structure_origin_generator = TestStructureOriginGenerator::new(self.seed, 31, (-2, 21));
+
+		// Define structure generation.
+		let structure_max_blocky_radius = 42;
+		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3]);
+		let generate_structure = |mut context: StructureInstanceGenerationContext| {
+			// Let's (try to) generate a tree.
+			let mut placing_head = context.origin_coords;
+			// We try to find the ground (we don't want to generate a tree floating in the air).
+			// We go down and stop on ground, or abort (and fail to generate) if no ground is found.
+			let mut found_ground = false;
+			for _i in 0..structure_max_blocky_radius {
+				let no_ground_above = context
+					.block_type_table
+					.get((context.terrain_generator)(
+						placing_head + cgmath::vec3(0, 0, 1),
+					))
+					.unwrap()
+					.is_air();
+				let ground_here = !context
+					.block_type_table
+					.get((context.terrain_generator)(placing_head))
+					.unwrap()
+					.is_air();
+				if no_ground_above && ground_here {
+					found_ground = true;
+					break;
+				}
+				placing_head.z -= 1;
+			}
+			if !found_ground {
+				return;
+			}
+			// We are on the ground now, we can generate a tree.
+			// We pick a height of the trunk and generate it.
+			let noise_value_a = noise_structure.sample_i3d_1d(placing_head, &[1]);
+			let height =
+				((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(21) as f32) as i32;
+			for _i in 0..height {
+				context.place_block(
+					&BlockPlacing {
+						block_type_to_place: context.block_type_table.kinda_wood_id(),
+						only_place_on_air: false,
+					},
+					placing_head,
+				);
+				placing_head.z += 1;
+			}
+			// We pick a radius for the ball of leaves and generate it.
+			let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+			let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
+			context.place_ball(
+				&BlockPlacing {
+					block_type_to_place: context.block_type_table.kinda_leaf_id(),
+					only_place_on_air: true,
+				},
+				placing_head.map(|x| x as f32),
+				ball_radius,
+			);
+			// The tree is done now ^^.
+		};
+
+		// Now we generate the block data in the chunk.
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+
+		// Generate terrain in the chunk.
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			*chunk_blocks.get_mut(coords).unwrap() = coords_to_terrain(coords);
+		}
+
+		// Generate the structures that can overlap with the chunk.
+		let mut span_to_check = CubicCoordsSpan::from_chunk_span(coords_span);
+		span_to_check.add_margins(structure_max_blocky_radius);
+		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
+		for origin in origins.into_iter() {
+			let context = StructureInstanceGenerationContext {
+				origin_coords: origin.coords,
+				chunk_blocks: &mut chunk_blocks,
+				origin_generator: &structure_origin_generator,
+				block_type_table: &block_type_table,
+				terrain_generator: &coords_to_terrain,
+			};
+			generate_structure(context);
 		}
 
 		chunk_blocks

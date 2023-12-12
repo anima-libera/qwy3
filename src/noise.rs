@@ -155,12 +155,21 @@ impl OctavedNoise {
 		OctavedNoise { number_of_octaves, base_channels }
 	}
 
-	pub fn sample(&self, xs: &[f32], additional_channels: &[i32]) -> f32 {
+	pub fn sample(
+		&self,
+		xs: &[f32],
+		additional_channels: &[i32],
+		xs_that_are_channels: &[i32],
+		one_more_channel: Option<i32>, // This is ridiculous >w<
+	) -> f32 {
 		let mut working_xs = smallvec::SmallVec::<[CoordOrChannel; 8]>::with_capacity(
 			xs.len() + self.base_channels.len() + additional_channels.len(),
 		);
 		for x in xs {
 			working_xs.push(CoordOrChannel::Coord(*x));
+		}
+		for channel in xs_that_are_channels {
+			working_xs.push(CoordOrChannel::Channel(*channel));
 		}
 		for channel in &self.base_channels {
 			working_xs.push(CoordOrChannel::Channel(*channel));
@@ -168,15 +177,33 @@ impl OctavedNoise {
 		for channel in additional_channels {
 			working_xs.push(CoordOrChannel::Channel(*channel));
 		}
+		if let Some(channel) = one_more_channel {
+			working_xs.push(CoordOrChannel::Channel(channel));
+		}
 		octaves_noise(self.number_of_octaves, &mut working_xs)
 	}
 
-	pub fn sample_2d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
+	pub fn sample_2d_1d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
 		let xs: [f32; 2] = coords.into();
-		self.sample(&xs, additional_channels)
+		self.sample(&xs, additional_channels, &[], None)
 	}
-	pub fn sample_3d(&self, coords: cgmath::Point3<f32>, additional_channels: &[i32]) -> f32 {
+	pub fn sample_3d_1d(&self, coords: cgmath::Point3<f32>, additional_channels: &[i32]) -> f32 {
 		let xs: [f32; 3] = coords.into();
-		self.sample(&xs, additional_channels)
+		self.sample(&xs, additional_channels, &[], None)
+	}
+	pub fn sample_i3d_1d(&self, coords: cgmath::Point3<i32>, additional_channels: &[i32]) -> f32 {
+		let xs: [i32; 3] = coords.into();
+		self.sample(&[], additional_channels, &xs, None)
+	}
+	pub fn sample_i3d_3d(
+		&self,
+		coords: cgmath::Point3<i32>,
+		additional_channels: &[i32],
+	) -> cgmath::Point3<f32> {
+		let xs: [i32; 3] = coords.into();
+		let x = self.sample(&[], additional_channels, &xs, Some(1));
+		let y = self.sample(&[], additional_channels, &xs, Some(2));
+		let z = self.sample(&[], additional_channels, &xs, Some(3));
+		cgmath::point3(x, y, z)
 	}
 }

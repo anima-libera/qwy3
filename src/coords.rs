@@ -36,6 +36,8 @@ impl ChunkDimensions {
 	}
 }
 
+/// Represents the cubic area of the voxel grid that is
+/// in the chunk at the specified chunk coords.
 #[derive(Clone, Copy)]
 pub struct ChunkCoordsSpan {
 	pub cd: ChunkDimensions,
@@ -58,12 +60,9 @@ impl ChunkCoordsSpan {
 	pub fn contains(self, coords: BlockCoords) -> bool {
 		let inf = self.block_coords_inf();
 		let sup_excluded = self.block_coords_sup_excluded();
-		inf.x <= coords.x
-			&& coords.x < sup_excluded.x
-			&& inf.y <= coords.y
-			&& coords.y < sup_excluded.y
-			&& inf.z <= coords.z
-			&& coords.z < sup_excluded.z
+		(inf.x <= coords.x && coords.x < sup_excluded.x)
+			&& (inf.y <= coords.y && coords.y < sup_excluded.y)
+			&& (inf.z <= coords.z && coords.z < sup_excluded.z)
 	}
 
 	/// Iterate over all the blocks (contained in the chunk) that touch the chunk face
@@ -92,14 +91,118 @@ impl ChunkCoordsSpan {
 	}
 }
 
+/// Represents a cubic area of the voxel grid.
+#[derive(Clone, Copy)]
+pub struct CubicCoordsSpan {
+	pub inf: cgmath::Point3<i32>,
+	pub sup_excluded: cgmath::Point3<i32>,
+}
+
+impl CubicCoordsSpan {
+	pub fn with_inf_sup_but_sup_is_excluded(
+		inf: cgmath::Point3<i32>,
+		sup_excluded: cgmath::Point3<i32>,
+	) -> CubicCoordsSpan {
+		assert!(inf.x <= sup_excluded.x);
+		assert!(inf.y <= sup_excluded.y);
+		assert!(inf.z <= sup_excluded.z);
+		CubicCoordsSpan { inf, sup_excluded }
+	}
+
+	pub fn with_inf_sup_but_sup_is_included(
+		inf: cgmath::Point3<i32>,
+		sup_included: cgmath::Point3<i32>,
+	) -> CubicCoordsSpan {
+		let sup_excluded = sup_included + cgmath::vec3(1, 1, 1);
+		CubicCoordsSpan::with_inf_sup_but_sup_is_excluded(inf, sup_excluded)
+	}
+
+	pub fn _with_inf_and_dims(
+		inf: cgmath::Point3<i32>,
+		dims: cgmath::Vector3<i32>,
+	) -> CubicCoordsSpan {
+		let sup_excluded = inf + dims;
+		CubicCoordsSpan::with_inf_sup_but_sup_is_excluded(inf, sup_excluded)
+	}
+
+	pub fn _with_inf_and_edge(inf: cgmath::Point3<i32>, edge: i32) -> CubicCoordsSpan {
+		CubicCoordsSpan::_with_inf_and_dims(inf, cgmath::vec3(1, 1, 1) * edge)
+	}
+
+	/// A radius of 0 gives an empty area and a radius of 1 gives just the center.
+	pub fn _with_center_and_radius(center: cgmath::Point3<i32>, radius: i32) -> CubicCoordsSpan {
+		assert!(0 <= radius);
+		if radius == 0 {
+			// This is empty since `sup_excluded` is excluded (like a range i..i is empty).
+			CubicCoordsSpan { inf: center, sup_excluded: center }
+		} else {
+			CubicCoordsSpan::_with_inf_and_edge(
+				cgmath::point3(
+					center.x - (radius - 1),
+					center.y - (radius - 1),
+					center.z - (radius - 1),
+				),
+				radius * 2 - 1,
+			)
+		}
+	}
+
+	pub fn from_chunk_span(chunk_span: ChunkCoordsSpan) -> CubicCoordsSpan {
+		CubicCoordsSpan::with_inf_sup_but_sup_is_excluded(
+			chunk_span.block_coords_inf(),
+			chunk_span.block_coords_sup_excluded(),
+		)
+	}
+
+	pub fn add_margins(&mut self, margin_to_add: i32) {
+		self.inf -= cgmath::vec3(1, 1, 1) * margin_to_add;
+		self.sup_excluded += cgmath::vec3(1, 1, 1) * margin_to_add;
+	}
+
+	pub fn overlaps(&self, other: &CubicCoordsSpan) -> bool {
+		let no_overlap_x = other.sup_excluded.x <= self.inf.x || self.sup_excluded.x <= other.inf.x;
+		let no_overlap_y = other.sup_excluded.y <= self.inf.y || self.sup_excluded.y <= other.inf.y;
+		let no_overlap_z = other.sup_excluded.z <= self.inf.z || self.sup_excluded.z <= other.inf.z;
+		let no_overlap = no_overlap_x || no_overlap_y || no_overlap_z;
+		!no_overlap
+	}
+
+	pub fn contains(&self, coords: cgmath::Point3<i32>) -> bool {
+		(self.inf.x <= coords.x && coords.x < self.sup_excluded.x)
+			&& (self.inf.y <= coords.y && coords.y < self.sup_excluded.y)
+			&& (self.inf.z <= coords.z && coords.z < self.sup_excluded.z)
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = cgmath::Point3<i32>> {
+		iter_3d_rect_inf_sup_excluded(self.inf, self.sup_excluded)
+	}
+
+	pub fn intersection(&self, other: &CubicCoordsSpan) -> Option<CubicCoordsSpan> {
+		self.overlaps(other).then(|| {
+			CubicCoordsSpan::with_inf_sup_but_sup_is_excluded(
+				cgmath::point3(
+					self.inf.x.max(other.inf.x),
+					self.inf.y.max(other.inf.y),
+					self.inf.z.max(other.inf.z),
+				),
+				cgmath::point3(
+					self.sup_excluded.x.min(other.sup_excluded.x),
+					self.sup_excluded.y.min(other.sup_excluded.y),
+					self.sup_excluded.z.min(other.sup_excluded.z),
+				),
+			)
+		})
+	}
+}
+
 /// Iterates over the 3D rectangle area `inf..sup_excluded` (`sup_excluded` not included).
 pub fn iter_3d_rect_inf_sup_excluded(
 	inf: cgmath::Point3<i32>,
 	sup_excluded: cgmath::Point3<i32>,
 ) -> impl Iterator<Item = cgmath::Point3<i32>> {
-	debug_assert!(inf.x <= sup_excluded.x);
-	debug_assert!(inf.y <= sup_excluded.y);
-	debug_assert!(inf.z <= sup_excluded.z);
+	assert!(inf.x <= sup_excluded.x);
+	assert!(inf.y <= sup_excluded.y);
+	assert!(inf.z <= sup_excluded.z);
 	(inf.z..sup_excluded.z).flat_map(move |z| {
 		(inf.y..sup_excluded.y)
 			.flat_map(move |y| (inf.x..sup_excluded.x).map(move |x| (x, y, z).into()))
@@ -120,6 +223,7 @@ pub fn iter_3d_cube_inf_edge(
 	inf: cgmath::Point3<i32>,
 	edge: i32,
 ) -> impl Iterator<Item = cgmath::Point3<i32>> {
+	assert!(0 <= edge);
 	iter_3d_rect_inf_dims(inf, (edge, edge, edge).into())
 }
 
@@ -130,6 +234,7 @@ pub fn iter_3d_cube_center_radius(
 	center: cgmath::Point3<i32>,
 	radius: i32,
 ) -> impl Iterator<Item = cgmath::Point3<i32>> {
+	assert!(0 <= radius);
 	if radius == 0 {
 		iter_3d_cube_inf_edge(center, 0)
 	} else {
