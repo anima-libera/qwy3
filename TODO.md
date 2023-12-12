@@ -65,6 +65,12 @@
   - Divine blessings come at some cost that depends on the god too, like some bosses that are summoned later to challenge you. 
   - Can pray to multiple gods, the effects can stack.
 
+## Saves and multiplayer
+
+- Save chunk data to disk when unloading.
+- Multiplayer. Allow the game to become a client or a server.
+  - Use something like https://github.com/TimonPost/laminar to send chunk data from the server to clients (it allows for reliable but unordered channels that seem fast (but still reliable!)!).
+
 ## Other
 
 - Profile (maybe with https://github.com/killercup/cargo-flamegraph or something else).
