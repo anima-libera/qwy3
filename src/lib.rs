@@ -511,10 +511,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let selected_camera = WhichCameraToUse::FirstPerson;
 
 	let cursor_is_captured = true;
-	let cusror_was_actually_captured = window
+	let cursor_was_actually_captured = window
 		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
 		.is_ok();
-	if cusror_was_actually_captured {
+	if cursor_was_actually_captured {
 		window.set_cursor_visible(false);
 	}
 
