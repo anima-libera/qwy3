@@ -3125,8 +3125,9 @@ mod structure_gen {
 		noise::OctavedNoise,
 	};
 
-	struct StructureTypeId {
-		index: usize,
+	#[derive(Clone, Copy)]
+	pub struct StructureTypeId {
+		pub index: usize,
 	}
 
 	/// A structure origin is a first step in the generation of a structure.
@@ -3139,9 +3140,10 @@ mod structure_gen {
 	/// (constraining how far from its origin a structure can place/remove blocks)
 	/// allows for a chunk to know which origins could place/remove blocks in the chunk
 	/// and thus should actually have their structure generated.
+	#[derive(Clone, Copy)]
 	pub struct StructureOrigin {
 		pub coords: BlockCoords,
-		type_id: StructureTypeId,
+		pub type_id: StructureTypeId,
 	}
 
 	/// Handles generation of structure origins.
@@ -3152,14 +3154,13 @@ mod structure_gen {
 	/// The idea of this structure origin generator is that it considers a grid of big cubic cells
 	/// and uses noise to deterministically place, in each cell, a noise-obtained number of origins
 	/// at noise-obtained coords in the cell.
-	///
-	/// It doesn't handle structure types.
 	pub struct TestStructureOriginGenerator {
 		cell_size: i32,
 		/// How many structure origins to generate per cell (min, max_included).
 		/// The range can overlap with the negatives, getting a negative number of origins
 		/// to generate in a cell will mean zero.
 		how_many_min_max: (i32, i32),
+		how_many_types: i32,
 		noise: OctavedNoise,
 	}
 
@@ -3184,10 +3185,12 @@ mod structure_gen {
 			seed: i32,
 			cell_size: i32,
 			how_many_min_max: (i32, i32),
+			how_many_types: i32,
 		) -> TestStructureOriginGenerator {
 			TestStructureOriginGenerator {
 				cell_size,
 				how_many_min_max,
+				how_many_types,
 				noise: OctavedNoise::new(1, vec![seed]),
 			}
 		}
@@ -3216,6 +3219,18 @@ mod structure_gen {
 			cell_coords_in_world + coords_in_cell.to_vec()
 		}
 
+		fn get_origin_type_id(
+			&self,
+			cell_coords: cgmath::Point3<i32>,
+			origin_index: usize,
+		) -> StructureTypeId {
+			let value = self
+				.noise
+				.sample_i3d_1d(cell_coords, &[origin_index as i32]);
+			let type_id_index = ((self.how_many_types as f32 - 0.0001) * value).floor() as usize;
+			StructureTypeId { index: type_id_index }
+		}
+
 		/// Given a cell and a block span,
 		/// pushes in the given vec the origins in the cell that are also in the span.
 		fn get_origins_in_cell_and_span(
@@ -3227,11 +3242,10 @@ mod structure_gen {
 			let origin_number = self.get_cell_origin_number(cell_coords);
 			for origin_index in 0..origin_number {
 				let origin_coords = self.get_origin_coords(cell_coords, origin_index);
+				let origin_type_id = self.get_origin_type_id(cell_coords, origin_index);
 				if span.contains(origin_coords) {
-					add_origins_in_there.push(StructureOrigin {
-						coords: origin_coords,
-						type_id: StructureTypeId { index: 0 },
-					})
+					add_origins_in_there
+						.push(StructureOrigin { coords: origin_coords, type_id: origin_type_id })
 				}
 			}
 		}
@@ -3247,7 +3261,7 @@ mod structure_gen {
 	/// A structure instance is just one structure with an origin position
 	/// (and a type, though that is given in an other way).
 	pub struct StructureInstanceGenerationContext<'a> {
-		pub origin_coords: BlockCoords,
+		pub origin: StructureOrigin,
 		pub chunk_blocks: &'a mut ChunkBlocks,
 		pub origin_generator: &'a dyn StructureOriginGenerator,
 		pub block_type_table: &'a Arc<BlockTypeTable>,
@@ -3295,7 +3309,7 @@ mod structure_gen {
 	}
 
 	/// Generates a structure instance of one specific type.
-	type StructureTypeInstanceGenerator<'a> = dyn FnMut(StructureInstanceGenerationContext);
+	pub type StructureTypeInstanceGenerator<'a> = dyn Fn(StructureInstanceGenerationContext) + 'a;
 }
 
 use structure_gen::*;
@@ -3334,15 +3348,12 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			}
 		};
 
-		// Setup structure origins generation stuff.
-		let structure_origin_generator = TestStructureOriginGenerator::new(self.seed, 31, (-2, 21));
-
 		// Define structure generation.
 		let structure_max_blocky_radius = 42;
 		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3]);
-		let generate_structure = |mut context: StructureInstanceGenerationContext| {
+		let generate_structure_tree = |mut context: StructureInstanceGenerationContext| {
 			// Let's (try to) generate a tree.
-			let mut placing_head = context.origin_coords;
+			let mut placing_head = context.origin.coords;
 			// We try to find the ground (we don't want to generate a tree floating in the air).
 			// We go down and stop on ground, or abort (and fail to generate) if no ground is found.
 			let mut found_ground = false;
@@ -3396,6 +3407,50 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			);
 			// The tree is done now ^^.
 		};
+		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 4]);
+		let generate_structure_boulder = |mut context: StructureInstanceGenerationContext| {
+			let mut placing_head = context.origin.coords;
+			let mut found_ground = false;
+			for _i in 0..structure_max_blocky_radius {
+				let no_ground_above = context
+					.block_type_table
+					.get((context.terrain_generator)(
+						placing_head + cgmath::vec3(0, 0, 1),
+					))
+					.unwrap()
+					.is_air();
+				let ground_here = !context
+					.block_type_table
+					.get((context.terrain_generator)(placing_head))
+					.unwrap()
+					.is_air();
+				if no_ground_above && ground_here {
+					found_ground = true;
+					break;
+				}
+				placing_head.z -= 1;
+			}
+			if !found_ground {
+				return;
+			}
+			let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+			let ball_radius = (noise_value_b * 0.2 + 0.8) * 2.5;
+			context.place_ball(
+				&BlockPlacing {
+					block_type_to_place: context.block_type_table.ground_id(),
+					only_place_on_air: true,
+				},
+				placing_head.map(|x| x as f32),
+				ball_radius,
+			);
+		};
+
+		let structure_types: [&StructureTypeInstanceGenerator; 2] =
+			[&generate_structure_tree, &generate_structure_boulder];
+
+		// Setup structure origins generation stuff.
+		let structure_origin_generator =
+			TestStructureOriginGenerator::new(self.seed, 31, (-2, 21), structure_types.len() as i32);
 
 		// Now we generate the block data in the chunk.
 		let mut chunk_blocks = ChunkBlocks::new(coords_span);
@@ -3411,13 +3466,13 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
 		for origin in origins.into_iter() {
 			let context = StructureInstanceGenerationContext {
-				origin_coords: origin.coords,
+				origin,
 				chunk_blocks: &mut chunk_blocks,
 				origin_generator: &structure_origin_generator,
 				block_type_table: &block_type_table,
 				terrain_generator: &coords_to_terrain,
 			};
-			generate_structure(context);
+			structure_types[origin.type_id.index](context);
 		}
 
 		chunk_blocks
