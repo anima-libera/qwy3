@@ -12,6 +12,7 @@ mod noise;
 mod physics;
 mod rendering;
 mod shaders;
+mod texture_gen;
 mod threadpool;
 mod widgets;
 mod world_gen;
@@ -362,13 +363,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	// Rock block
 	{
-		let mut view = atlas_image.sub_image(0, 0, 16, 16);
-		for y in 0..16 {
-			for x in 0..16 {
-				let grey = rand::thread_rng().gen_range(240..=255);
-				view.put_pixel(x, y, image::Rgba::from([grey, grey, grey, 255]));
-			}
-		}
+		let view = atlas_image.sub_image(0, 0, 16, 16);
+		texture_gen::default_ground(view, world_gen_seed, 1);
 	}
 
 	// Grass block

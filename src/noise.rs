@@ -191,6 +191,10 @@ impl OctavedNoise {
 		let xs: [f32; 3] = coords.into();
 		self.sample(&xs, additional_channels, &[], None)
 	}
+	pub fn sample_i2d_1d(&self, coords: cgmath::Point2<i32>, additional_channels: &[i32]) -> f32 {
+		let xs: [i32; 2] = coords.into();
+		self.sample(&[], additional_channels, &xs, None)
+	}
 	pub fn sample_i3d_1d(&self, coords: cgmath::Point3<i32>, additional_channels: &[i32]) -> f32 {
 		let xs: [i32; 3] = coords.into();
 		self.sample(&[], additional_channels, &xs, None)
