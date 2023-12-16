@@ -427,14 +427,29 @@ fn generate_block_face_mesh(
 		texture_rect_in_atlas_xy,
 		texture_rect_in_atlas_xy,
 	];
-	coords_in_atlas_array[0].x += texture_rect_in_atlas_wh.x * 0.0;
-	coords_in_atlas_array[0].y += texture_rect_in_atlas_wh.y * 0.0;
-	coords_in_atlas_array[1].x += texture_rect_in_atlas_wh.x * 0.0;
-	coords_in_atlas_array[1].y += texture_rect_in_atlas_wh.y * 1.0;
-	coords_in_atlas_array[2].x += texture_rect_in_atlas_wh.x * 1.0;
-	coords_in_atlas_array[2].y += texture_rect_in_atlas_wh.y * 0.0;
-	coords_in_atlas_array[3].x += texture_rect_in_atlas_wh.x * 1.0;
-	coords_in_atlas_array[3].y += texture_rect_in_atlas_wh.y * 1.0;
+	// We flip horizontally the texture for some face orientations so that
+	// we don't observe a "mirror" effect on some vertical block edges.
+	let order = if face_orientation
+		== (OrientedAxis {
+			axis: NonOrientedAxis::X,
+			orientation: AxisOrientation::Positivewards,
+		}) || face_orientation
+		== (OrientedAxis {
+			axis: NonOrientedAxis::Y,
+			orientation: AxisOrientation::Negativewards,
+		}) {
+		[2, 3, 0, 1]
+	} else {
+		[0, 1, 2, 3]
+	};
+	coords_in_atlas_array[order[0]].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[order[0]].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[order[1]].x += texture_rect_in_atlas_wh.x * 0.0;
+	coords_in_atlas_array[order[1]].y += texture_rect_in_atlas_wh.y * 1.0;
+	coords_in_atlas_array[order[2]].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[order[2]].y += texture_rect_in_atlas_wh.y * 0.0;
+	coords_in_atlas_array[order[3]].x += texture_rect_in_atlas_wh.x * 1.0;
+	coords_in_atlas_array[order[3]].y += texture_rect_in_atlas_wh.y * 1.0;
 
 	// The ambiant occlusion trick used here was taken from
 	// https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/
