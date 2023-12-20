@@ -58,6 +58,7 @@ pub enum WhichWorldGenerator {
 	Lines03,
 	StructuresLinksSmooth,
 	StructuresEnginePoc,
+	StructuresGeneratedBlocks,
 }
 
 impl WhichWorldGenerator {
@@ -97,6 +98,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Lines03 => "lines-03",
 			WhichWorldGenerator::StructuresLinksSmooth => "structures-links-smooth",
 			WhichWorldGenerator::StructuresEnginePoc => "structures-engine-poc",
+			WhichWorldGenerator::StructuresGeneratedBlocks => "structures-generated-blocks",
 		}
 	}
 
@@ -145,6 +147,9 @@ impl WhichWorldGenerator {
 			},
 			WhichWorldGenerator::StructuresEnginePoc => {
 				Arc::new(WorldGeneratorStructuresEnginePoc { seed })
+			},
+			WhichWorldGenerator::StructuresGeneratedBlocks => {
+				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed })
 			},
 		}
 	}
@@ -3447,6 +3452,115 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 
 		let structure_types: [&StructureTypeInstanceGenerator; 2] =
 			[&generate_structure_tree, &generate_structure_boulder];
+
+		// Setup structure origins generation stuff.
+		let structure_origin_generator =
+			TestStructureOriginGenerator::new(self.seed, 31, (-2, 21), structure_types.len() as i32);
+
+		// Now we generate the block data in the chunk.
+		let mut chunk_blocks = ChunkBlocks::new(coords_span);
+
+		// Generate terrain in the chunk.
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			*chunk_blocks.get_mut(coords).unwrap() = coords_to_terrain(coords);
+		}
+
+		// Generate the structures that can overlap with the chunk.
+		let mut span_to_check = CubicCoordsSpan::from_chunk_span(coords_span);
+		span_to_check.add_margins(structure_max_blocky_radius);
+		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
+		for origin in origins.into_iter() {
+			let context = StructureInstanceGenerationContext {
+				origin,
+				chunk_blocks: &mut chunk_blocks,
+				origin_generator: &structure_origin_generator,
+				block_type_table: &block_type_table,
+				terrain_generator: &coords_to_terrain,
+			};
+			structure_types[origin.type_id.index](context);
+		}
+
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorStructuresGeneratedBlocks {
+	pub seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		// Define the terrain generation as a deterministic coords->block function.
+		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
+			let scale = 60.0;
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
+			coordsf.z < height
+		};
+		let block_type_table_for_terrain = Arc::clone(&block_type_table);
+		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
+			let ground = coords_to_ground(coords);
+			if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table_for_terrain.ground_id()
+				} else {
+					block_type_table_for_terrain.kinda_grass_id()
+				}
+			} else {
+				block_type_table_for_terrain.air_id()
+			}
+		};
+
+		// Define structure generation.
+		let structure_max_blocky_radius = 42;
+		let mut structure_types = vec![];
+		for i in 0..6 {
+			let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3 + i]);
+			let generate_structure = move |mut context: StructureInstanceGenerationContext| {
+				let mut placing_head = context.origin.coords;
+				let mut found_ground = false;
+				for _i in 0..structure_max_blocky_radius {
+					let no_ground_above = context
+						.block_type_table
+						.get((context.terrain_generator)(
+							placing_head + cgmath::vec3(0, 0, 1),
+						))
+						.unwrap()
+						.is_air();
+					let ground_here = !context
+						.block_type_table
+						.get((context.terrain_generator)(placing_head))
+						.unwrap()
+						.is_air();
+					if no_ground_above && ground_here {
+						found_ground = true;
+						break;
+					}
+					placing_head.z -= 1;
+				}
+				if !found_ground {
+					return;
+				}
+				let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+				let ball_radius = (noise_value_b * 0.2 + 0.8) * 2.5;
+				context.place_ball(
+					&BlockPlacing {
+						block_type_to_place: context.block_type_table.generated_test_id(i as usize),
+						only_place_on_air: true,
+					},
+					placing_head.map(|x| x as f32),
+					ball_radius,
+				);
+			};
+			structure_types.push(generate_structure);
+		}
 
 		// Setup structure origins generation stuff.
 		let structure_origin_generator =

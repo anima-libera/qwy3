@@ -361,11 +361,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut atlas_image: image::RgbaImage =
 		image::ImageBuffer::new(ATLAS_DIMS.0 as u32, ATLAS_DIMS.1 as u32);
 
-	// Test
+	// Test blocks
 	for y in 4..(ATLAS_DIMS.1 / 16) {
 		for x in 0..(ATLAS_DIMS.0 / 16) {
 			let view = atlas_image.sub_image(x as u32 * 16, y as u32 * 16, 16, 16);
-			texture_gen::test(
+			texture_gen::generate_texture(
 				view,
 				world_gen_seed,
 				y as i32 * ATLAS_DIMS.0 as i32 + x as i32,

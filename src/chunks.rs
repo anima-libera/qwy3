@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use cgmath::{EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 
+use crate::rendering::ATLAS_DIMS;
 pub(crate) use crate::{
 	coords::{
 		iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords,
@@ -33,16 +34,23 @@ pub struct BlockTypeTable {
 
 impl BlockTypeTable {
 	pub fn new() -> BlockTypeTable {
-		BlockTypeTable {
-			block_types: vec![
-				BlockType::Air,
-				BlockType::Solid { texture_coords_on_atlas: (0, 0).into() },
-				BlockType::Solid { texture_coords_on_atlas: (16, 0).into() },
-				BlockType::XShaped { texture_coords_on_atlas: (32, 0).into() },
-				BlockType::Solid { texture_coords_on_atlas: (48, 0).into() },
-				BlockType::Solid { texture_coords_on_atlas: (64, 0).into() },
-			],
+		let mut block_types = vec![
+			BlockType::Air,
+			BlockType::Solid { texture_coords_on_atlas: (0, 0).into() },
+			BlockType::Solid { texture_coords_on_atlas: (16, 0).into() },
+			BlockType::XShaped { texture_coords_on_atlas: (32, 0).into() },
+			BlockType::Solid { texture_coords_on_atlas: (48, 0).into() },
+			BlockType::Solid { texture_coords_on_atlas: (64, 0).into() },
+		];
+
+		for y in 4..(ATLAS_DIMS.1 / 16) {
+			for x in 0..(ATLAS_DIMS.0 / 16) {
+				let coords = (x as i32 * 16, y as i32 * 16);
+				block_types.push(BlockType::Solid { texture_coords_on_atlas: coords.into() });
+			}
 		}
+
+		BlockTypeTable { block_types }
 	}
 
 	pub fn get(&self, id: BlockTypeId) -> Option<&BlockType> {
@@ -75,6 +83,11 @@ impl BlockTypeTable {
 
 	pub fn kinda_leaf_id(&self) -> BlockTypeId {
 		BlockTypeId::new(5)
+	}
+
+	pub fn generated_test_id(&self, index: usize) -> BlockTypeId {
+		let id: i16 = (index + 6).try_into().unwrap();
+		BlockTypeId::new(id)
 	}
 }
 
