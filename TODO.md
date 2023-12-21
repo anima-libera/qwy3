@@ -1,6 +1,12 @@
 
 # TODO list for Qwy3
 
+## Performance
+
+- Generate textures in an other thread (share the atlas) because it takes too long at the beginning and it is noticeable and annoying.
+- Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up). 
+- Ray casting by player to target a block is neither correct nor performant, do it right. 
+
 ## Graphics
 
 - Cascading shadow mapping. Currently there is a single shadow map, but there should be multiple shadow maps corresponding to bigger and bigger areas so that shadows can be rendered even for far away stuff but without using as much resolution as for shadows close to the player.
