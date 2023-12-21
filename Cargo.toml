@@ -19,7 +19,7 @@ debug = true
 bitvec = "1.0.1"
 bytemuck = { version = "1.13.1", features = [ "derive" ] }
 cgmath = "0.18.0"
-clap = { version = "4.4.11", features = ["derive"] }
+clap = { version = "4.4.11", features = ["derive", "color"] }
 enum-iterator = "1.4.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
