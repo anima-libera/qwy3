@@ -3474,7 +3474,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 		// Define structure generation.
 		let structure_max_blocky_radius = 42;
 		let mut structure_types = vec![];
-		for i in 0..20 {
+		for i in 0..40 {
 			let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3 + i]);
 			let generate_structure = move |mut context: StructureInstanceGenerationContext| {
 				let mut placing_head = context.origin.coords;
