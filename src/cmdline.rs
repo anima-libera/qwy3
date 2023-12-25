@@ -36,6 +36,10 @@ pub struct CommandLineSettings {
 	)]
 	pub which_world_generator: WhichWorldGenerator,
 
+	/// Prints the list of available world generators.
+	#[arg(long = "gen-names")]
+	pub display_world_generator_possible_names: bool,
+
 	/// Loading distance in blocks.
 	#[arg(
 		long = "gen-dist",
@@ -56,4 +60,13 @@ pub struct CommandLineSettings {
 
 pub fn parse_command_line_arguments() -> CommandLineSettings {
 	CommandLineSettings::parse()
+}
+
+pub fn display_world_generator_names() {
+	use clap::ValueEnum;
+	for variant in WhichWorldGenerator::value_variants() {
+		if let Some(possible_value) = variant.to_possible_value() {
+			println!("{}", possible_value.get_name());
+		}
+	}
 }
