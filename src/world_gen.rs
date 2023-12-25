@@ -1,7 +1,7 @@
 use std::{f32::consts::TAU, sync::Arc};
 
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
-use enum_iterator::Sequence;
+use clap::ValueEnum;
 use smallvec::SmallVec;
 
 use crate::{
@@ -22,7 +22,7 @@ pub trait WorldGenerator {
 	) -> ChunkBlocks;
 }
 
-#[derive(Clone, Copy, Sequence)]
+#[derive(Clone, Copy, ValueEnum)]
 pub enum WhichWorldGenerator {
 	Default,
 	Flat,
@@ -62,46 +62,6 @@ pub enum WhichWorldGenerator {
 }
 
 impl WhichWorldGenerator {
-	pub fn name(self) -> &'static str {
-		match self {
-			WhichWorldGenerator::Default => "default",
-			WhichWorldGenerator::Flat => "flat",
-			WhichWorldGenerator::Empty => "empty",
-			WhichWorldGenerator::Lines01 => "lines-01",
-			WhichWorldGenerator::Volumes01 => "volumes-01",
-			WhichWorldGenerator::BallsSameSize => "balls-same-size",
-			WhichWorldGenerator::BallsDifferentSizes => "balls-different-sizes",
-			WhichWorldGenerator::LinksXRaw => "links-x-raw",
-			WhichWorldGenerator::LinksX => "links-x",
-			WhichWorldGenerator::Links01 => "links-01",
-			WhichWorldGenerator::LinksGround => "links-ground",
-			WhichWorldGenerator::LinksCaves => "links-caves",
-			WhichWorldGenerator::Links02 => "links-02",
-			WhichWorldGenerator::LinksFlat => "links-flat",
-			WhichWorldGenerator::SkyIslands => "sky-islands",
-			WhichWorldGenerator::Volumes02 => "volumes-02",
-			WhichWorldGenerator::Volumes03 => "volumes-03",
-			WhichWorldGenerator::Height01 => "height-01",
-			WhichWorldGenerator::Plane01 => "plane-01",
-			WhichWorldGenerator::WierdTerrain01 => "wierd-terrain-01",
-			WhichWorldGenerator::Plane02 => "plane-02",
-			WhichWorldGenerator::WierdTerrain02 => "wierd-terrain-02",
-			WhichWorldGenerator::Height02 => "height-02",
-			WhichWorldGenerator::HeightBiomes => "height-biomes",
-			WhichWorldGenerator::HeightBiomesVolume => "height-biomes-volume",
-			WhichWorldGenerator::Height03 => "height-03",
-			WhichWorldGenerator::StructuresPoc => "structures-poc",
-			WhichWorldGenerator::StructuresLinksPoc => "structures-links-poc",
-			WhichWorldGenerator::StructuresTrees => "structures-trees",
-			WhichWorldGenerator::StructuresSpikes => "structures-spikes",
-			WhichWorldGenerator::Lines02 => "lines-02",
-			WhichWorldGenerator::Lines03 => "lines-03",
-			WhichWorldGenerator::StructuresLinksSmooth => "structures-links-smooth",
-			WhichWorldGenerator::StructuresEnginePoc => "structures-engine-poc",
-			WhichWorldGenerator::StructuresGeneratedBlocks => "structures-generated-blocks",
-		}
-	}
-
 	pub fn get_the_actual_generator(self, seed: i32) -> Arc<dyn WorldGenerator + Sync + Send> {
 		match self {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
@@ -152,13 +112,6 @@ impl WhichWorldGenerator {
 				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed })
 			},
 		}
-	}
-
-	pub fn from_name(name: &str) -> Option<WhichWorldGenerator> {
-		// This is actually not that worse from a match from names to variants,
-		// and it allows for the "compile time table" to be in the other direction,
-		// which makes errors less probable.
-		enum_iterator::all::<WhichWorldGenerator>().find(|&variant| variant.name() == name)
 	}
 }
 

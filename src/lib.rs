@@ -259,10 +259,16 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		output_atlas,
 		world_gen_seed,
 		which_world_generator,
+		display_world_generator_possible_names,
 		loading_distance,
 		chunk_edge,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
+
+	if display_world_generator_possible_names {
+		crate::cmdline::display_world_generator_names();
+		std::process::exit(0);
+	}
 
 	if let Some(test_id) = test_lang {
 		println!("Test lang: test id {test_id}");
