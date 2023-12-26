@@ -300,15 +300,15 @@ fn generate_color(world_seed: i32, generator_seed: i32, color_seed: i32) -> Colo
 
 fn generate_initializer(world_seed: i32, generator_seed: i32) -> Initializer {
 	let noise = OctavedNoise::new(1, vec![world_seed, generator_seed]);
-	let mut noise_i = 0;
+	let mut noise_i_unit = 0;
 	let mut random_unit = || {
-		noise_i += 1;
-		noise.sample_i1d_1d(noise_i, &[])
+		noise_i_unit += 1;
+		noise.sample_i1d_1d(noise_i_unit, &[])
 	};
-	let mut seed_i = 0;
+	let mut noise_i_seed = 0;
 	let mut new_seed = || {
-		seed_i += 1;
-		seed_i
+		noise_i_seed += 1;
+		noise.sample_i1d_i1d(noise_i_seed, &[])
 	};
 
 	if random_unit() < 0.1 {
@@ -336,16 +336,16 @@ fn generate_unary_step(
 	can_be_messy: bool,
 	must_be_color_smoothing: bool,
 ) -> UnaryStep {
-	let noise = OctavedNoise::new(1, vec![world_seed, generator_seed]);
-	let mut noise_i = 20 * step_index;
+	let noise = OctavedNoise::new(1, vec![world_seed, generator_seed, step_index]);
+	let mut noise_i_unit = 0;
 	let mut random_unit = || {
-		noise_i += 1;
-		noise.sample_i1d_1d(noise_i, &[])
+		noise_i_unit += 1;
+		noise.sample_i1d_1d(noise_i_unit, &[])
 	};
-	let mut seed_i = 20 * step_index;
+	let mut noise_i_seed = 0;
 	let mut new_seed = || {
-		seed_i += 1;
-		seed_i
+		noise_i_seed += 1;
+		noise.sample_i1d_i1d(noise_i_seed, &[])
 	};
 
 	if can_be_messy && !must_be_color_smoothing && random_unit() < 0.05 {

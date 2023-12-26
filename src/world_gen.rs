@@ -3474,7 +3474,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 		// Define structure generation.
 		let structure_max_blocky_radius = 42;
 		let mut structure_types = vec![];
-		for i in 0..40 {
+		for i in 0..100 {
 			let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3 + i]);
 			let generate_structure = move |mut context: StructureInstanceGenerationContext| {
 				let mut placing_head = context.origin.coords;
@@ -3502,7 +3502,8 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 					return;
 				}
 				let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
-				let mut ball_radius = (noise_value_b * 0.2 + 0.8) * 2.5;
+				let noise_value_c = noise_structure.sample_i3d_1d(placing_head, &[3]);
+				let mut ball_radius = (noise_value_b * 2.3 + 1.2) * 1.5;
 				while ball_radius > 0.5 {
 					context.place_ball(
 						&BlockPlacing {
@@ -3512,7 +3513,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 						placing_head.map(|x| x as f32),
 						ball_radius,
 					);
-					ball_radius -= 0.3;
+					ball_radius -= 0.3 + 0.3 * noise_value_c;
 					placing_head.z += 1;
 				}
 			};

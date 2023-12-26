@@ -14,6 +14,10 @@ fn positive_fract(x: f32) -> f32 {
 	x - f32::floor(x)
 }
 
+fn unit_to_i32(x: f32) -> i32 {
+	(x * (i32::MAX as f32 - i32::MIN as f32) - i32::MIN as f32).round() as i32
+}
+
 fn _smoothstep(x: f32) -> f32 {
 	if x < 0.0 {
 		0.0
@@ -193,6 +197,9 @@ impl OctavedNoise {
 	}
 	pub fn sample_i1d_1d(&self, coord: i32, additional_channels: &[i32]) -> f32 {
 		self.sample(&[], additional_channels, &[coord], None)
+	}
+	pub fn sample_i1d_i1d(&self, coord: i32, additional_channels: &[i32]) -> i32 {
+		unit_to_i32(self.sample_i1d_1d(coord, additional_channels))
 	}
 	pub fn sample_i2d_1d(&self, coords: cgmath::Point2<i32>, additional_channels: &[i32]) -> f32 {
 		let xs: [i32; 2] = coords.into();

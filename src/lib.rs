@@ -374,7 +374,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			texture_gen::generate_texture(
 				view,
 				world_gen_seed,
-				y as i32 * ATLAS_DIMS.0 as i32 + x as i32,
+				y as i32 * (ATLAS_DIMS.0 / 16) as i32 + x as i32,
 			);
 		}
 	}
