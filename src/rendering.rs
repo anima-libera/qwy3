@@ -307,7 +307,7 @@ pub fn init_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgp
 	}
 }
 
-pub const ATLAS_DIMS: (usize, usize) = (512, 512);
+use crate::atlas::ATLAS_DIMS;
 
 pub struct AtlasStuff {
 	pub atlas_texture_view_thingy: BindingThingy<wgpu::TextureView>,
