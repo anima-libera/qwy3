@@ -36,7 +36,7 @@ use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
 use world_gen::WorldGenerator;
 
-use crate::atlas::Atlas;
+use crate::{atlas::Atlas, lang::LogItem};
 
 enum WhichCameraToUse {
 	FirstPerson,
@@ -911,6 +911,22 @@ pub fn run() {
 			// Command line handling.
 			if game.command_confirmed {
 				let text = game.command_line_content.clone();
+
+				let mut log = lang::Log::new();
+				let res = lang::run(&text, &mut lang::Context::with_builtins(), &mut log);
+
+				let text = if let Err(error) = res {
+					format!("{error:?}")
+				} else {
+					let lines: Vec<_> = log
+						.log_items
+						.into_iter()
+						.map(|item| match item {
+							LogItem::Text(text) => text,
+						})
+						.collect();
+					lines.join("\n")
+				};
 
 				let widget = if text.is_empty() {
 					let scale = rand::thread_rng().gen_range(1..=3) as f32;

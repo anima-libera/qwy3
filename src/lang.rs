@@ -83,7 +83,7 @@ enum BuiltInFunctionBody {
 }
 
 impl BuiltInFunctionBody {
-	fn evaluate(self, arg_values: Vec<Value>, context: &mut Context) -> Value {
+	fn evaluate(self, arg_values: Vec<Value>, context: &mut Context, log: &mut Log) -> Value {
 		match self {
 			BuiltInFunctionBody::PrintInteger => {
 				let integer_value = match arg_values[0] {
@@ -91,6 +91,8 @@ impl BuiltInFunctionBody {
 					_ => todo!(),
 				};
 				println!("printing integer {integer_value}");
+				log.log_items
+					.push(LogItem::Text(format!("{integer_value}")));
 				Value::Nothing
 			},
 			BuiltInFunctionBody::PrintThreeIntegers => {
@@ -102,6 +104,8 @@ impl BuiltInFunctionBody {
 					})
 					.collect();
 				println!("printing three integers {integer_values:?}");
+				log.log_items
+					.push(LogItem::Text(format!("{integer_values:?}")));
 				Value::Nothing
 			},
 			BuiltInFunctionBody::ToType => {
@@ -114,6 +118,7 @@ impl BuiltInFunctionBody {
 					_ => todo!(),
 				};
 				println!("printing type {type_value:?}");
+				log.log_items.push(LogItem::Text(format!("{type_value:?}")));
 				Value::Nothing
 			},
 			BuiltInFunctionBody::DeclareAndSetGlobalVariable => {
@@ -427,7 +432,7 @@ fn parse_leaf_expression(
 }
 
 /// Parsing of some amount of tokens into an expression.
-/// /// This focuses on leaf expressions or call expressions.
+/// This focuses on leaf expressions or call expressions.
 fn parse_leaf_or_call_expression(
 	tokens: &mut VecDeque<(Token, Span)>,
 	type_context: &TypeContext,
@@ -669,26 +674,40 @@ fn check_function_call_argument_types(
 	Ok(())
 }
 
-fn evaluate_expression(expression: &Expression, context: &mut Context) -> Value {
+pub enum LogItem {
+	Text(String),
+}
+
+pub struct Log {
+	pub log_items: Vec<LogItem>,
+}
+
+impl Log {
+	pub fn new() -> Log {
+		Log { log_items: vec![] }
+	}
+}
+
+fn evaluate_expression(expression: &Expression, context: &mut Context, log: &mut Log) -> Value {
 	match expression {
 		Expression::Const(value) => value.clone(),
 		Expression::Variable(name) => context.variables.get(name).unwrap().clone(),
 		Expression::FunctionCall { func, args } => {
-			let func_value = evaluate_expression(&func.0, context);
+			let func_value = evaluate_expression(&func.0, context, log);
 			let func_body = match func_value {
 				Value::Function(Function { body, .. }) => body,
 				_ => todo!(),
 			};
 			let arg_values: Vec<_> = args
 				.iter()
-				.map(|arg| evaluate_expression(&arg.0, context))
+				.map(|arg| evaluate_expression(&arg.0, context, log))
 				.collect();
 			match func_body {
 				FunctionBody::Expression(body_expression) => {
-					evaluate_expression(&body_expression, context)
+					evaluate_expression(&body_expression, context, log)
 				},
 				FunctionBody::BuiltIn(built_in_function_body) => {
-					built_in_function_body.evaluate(arg_values, context)
+					built_in_function_body.evaluate(arg_values, context, log)
 				},
 			}
 		},
@@ -696,9 +715,9 @@ fn evaluate_expression(expression: &Expression, context: &mut Context) -> Value 
 			let ((last_expr, _last_span), expr_sequence_before_last) =
 				expr_sequence.split_last().unwrap();
 			for (expr, _span) in expr_sequence_before_last {
-				evaluate_expression(expr, context);
+				evaluate_expression(expr, context, log);
 			}
-			evaluate_expression(last_expr, context)
+			evaluate_expression(last_expr, context, log)
 		},
 	}
 }
@@ -711,21 +730,31 @@ fn parse(
 	parse_expression(&mut tokens, type_context)
 }
 
-pub fn run(qwy_script_code: &str, context: &mut Context) -> Result<(), ExpressionParsingError> {
+pub fn run(
+	qwy_script_code: &str,
+	context: &mut Context,
+	log: &mut Log,
+) -> Result<(), ExpressionParsingError> {
 	let (expression, _span) = parse(qwy_script_code, &context.get_type_context())?;
-	evaluate_expression(&expression, context);
+	evaluate_expression(&expression, context, log);
 	Ok(())
 }
 
 pub fn test_lang(test_id: u32) {
 	match test_id {
 		1 => {
-			run("print_integer(69)", &mut Context::with_builtins()).unwrap();
+			run(
+				"print_integer(69)",
+				&mut Context::with_builtins(),
+				&mut Log::new(),
+			)
+			.unwrap();
 		},
 		2 => {
 			run(
 				"print_three_integers(42, 2, 8)",
 				&mut Context::with_builtins(),
+				&mut Log::new(),
 			)
 			.unwrap();
 		},
@@ -733,6 +762,7 @@ pub fn test_lang(test_id: u32) {
 			run(
 				"print_type(type_of(print_integer))",
 				&mut Context::with_builtins(),
+				&mut Log::new(),
 			)
 			.unwrap();
 		},
@@ -748,7 +778,7 @@ pub fn test_lang(test_id: u32) {
 					body: FunctionBody::Expression(Box::new(Expression::Const(Value::Integer(420)))),
 				}),
 			);
-			run("print_integer(jaaj())", &mut context).unwrap();
+			run("print_integer(jaaj())", &mut context, &mut Log::new()).unwrap();
 		},
 		5 => {
 			let context = Context::with_builtins();
@@ -757,13 +787,19 @@ pub fn test_lang(test_id: u32) {
 		},
 		6 => {
 			let mut context = Context::with_builtins();
-			run("declare_and_set_global_variable($test, 8)", &mut context).unwrap();
-			run("print_integer(test)", &mut context).unwrap();
+			run(
+				"declare_and_set_global_variable($test, 8)",
+				&mut context,
+				&mut Log::new(),
+			)
+			.unwrap();
+			run("print_integer(test)", &mut context, &mut Log::new()).unwrap();
 		},
 		7 => {
 			run(
 				"{print_integer(1); print_integer(2); print_integer(3)}",
 				&mut Context::with_builtins(),
+				&mut Log::new(),
 			)
 			.unwrap();
 		},
@@ -772,9 +808,10 @@ pub fn test_lang(test_id: u32) {
 			run(
 				"declare_and_set_global_variable($test, {print_integer(42); 8})",
 				&mut context,
+				&mut Log::new(),
 			)
 			.unwrap();
-			run("print_integer(test)", &mut context).unwrap();
+			run("print_integer(test)", &mut context, &mut Log::new()).unwrap();
 		},
 		unknown_id => panic!("test lang id {unknown_id} doesn't identify a known test"),
 	}
