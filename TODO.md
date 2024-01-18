@@ -20,9 +20,12 @@
 
 - Maybe introduce type aliases to better label weather we are after or before the correction by `2.0/window_with`.
 
+## Controls
+
+- Add controler support.
+
 ## Binary command line interface
 
-- Use the clap crate.
 - Allow to provide qwy script commands at binary invocation time that are to be executed during loading or after the first frame or something.
 
 ## Command Language
