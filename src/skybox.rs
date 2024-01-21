@@ -4,11 +4,11 @@
 //! that whould be placed around the camera and rendered infinitely far.
 //! Nothing conceptually complicated here, just lots of small details to be handled just right.
 
-use cgmath::{point3, EuclideanSpace, InnerSpace, Point3};
+use cgmath::{point3, vec3, EuclideanSpace, InnerSpace, Point3, Vector3};
 use image::Rgba;
 use wgpu::util::DeviceExt;
 
-use crate::{shaders::skybox::SkyboxVertexPod, OrientedAxis};
+use crate::{noise::OctavedNoise, shaders::skybox::SkyboxVertexPod, OrientedAxis};
 
 pub const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);
 
@@ -104,12 +104,36 @@ impl SkyboxMesh {
 	}
 }
 
-/// Returns `inf` when `value` is 0.0 and `sup` when `value` is 1.0.
-fn point3_lerp(value: f32, inf: Point3<f32>, sup: Point3<f32>) -> Point3<f32> {
-	inf + (sup - inf.to_vec()).to_vec() * value
+pub fn _default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
+	Rgba([
+		((direction.x + 1.0) / 2.0 * 255.0) as u8,
+		((direction.y + 1.0) / 2.0 * 255.0) as u8,
+		((direction.z + 1.0) / 2.0 * 255.0) as u8,
+		255,
+	])
 }
 
-fn generate_a_skybox_cubemap_face_image(face_direction: OrientedAxis) -> image::RgbaImage {
+pub fn default_skybox_painter_2(seed: i32) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
+	let noise = OctavedNoise::new(3, vec![seed]);
+	move |mut direction: Vector3<f32>| -> Rgba<u8> {
+		direction += (noise
+			.sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
+			.to_vec() - vec3(0.5, 0.5, 0.5))
+		.normalize()
+			* 0.3;
+		Rgba([
+			((direction.x + 1.0) / 2.0 * 255.0) as u8,
+			((direction.y + 1.0) / 2.0 * 255.0) as u8,
+			((direction.z + 1.0) / 2.0 * 255.0) as u8,
+			255,
+		])
+	}
+}
+
+fn generate_a_skybox_cubemap_face_image(
+	face_direction: OrientedAxis,
+	skybox_painter: &dyn Fn(Vector3<f32>) -> Rgba<u8>,
+) -> image::RgbaImage {
 	let mut image: image::RgbaImage =
 		image::ImageBuffer::new(SKYBOX_SIDE_DIMS.0 as u32, SKYBOX_SIDE_DIMS.1 as u32);
 
@@ -145,6 +169,11 @@ fn generate_a_skybox_cubemap_face_image(face_direction: OrientedAxis) -> image::
 	let pm = ab_to_coords(1.0, -1.0);
 	let pp = ab_to_coords(1.0, 1.0);
 
+	/// Returns `inf` when `value` is 0.0 and `sup` when `value` is 1.0.
+	fn point3_lerp(value: f32, inf: Point3<f32>, sup: Point3<f32>) -> Point3<f32> {
+		inf + (sup - inf.to_vec()).to_vec() * value
+	}
+
 	for y in 0..SKYBOX_SIDE_DIMS.1 {
 		for x in 0..SKYBOX_SIDE_DIMS.0 {
 			// Here we are going to paint a pixel, but we want to rely on the direction
@@ -156,12 +185,7 @@ fn generate_a_skybox_cubemap_face_image(face_direction: OrientedAxis) -> image::
 			let direction = ii;
 			let direction = direction.to_vec().normalize();
 
-			let color = Rgba([
-				((direction.x + 1.0) / 2.0 * 255.0) as u8,
-				((direction.y + 1.0) / 2.0 * 255.0) as u8,
-				((direction.z + 1.0) / 2.0 * 255.0) as u8,
-				255,
-			]);
+			let color = skybox_painter(direction);
 
 			image.put_pixel(x as u32, y as u32, color);
 		}
@@ -169,11 +193,16 @@ fn generate_a_skybox_cubemap_face_image(face_direction: OrientedAxis) -> image::
 	image
 }
 
-pub fn generate_skybox_cubemap_faces_images() -> SkyboxFaces {
+pub fn generate_skybox_cubemap_faces_images(
+	skybox_painter: &dyn Fn(Vector3<f32>) -> Rgba<u8>,
+) -> SkyboxFaces {
 	let mut faces = vec![];
 	let mut face_directions = vec![];
 	for face_direction in OrientedAxis::all_the_six_possible_directions() {
-		faces.push(generate_a_skybox_cubemap_face_image(face_direction));
+		faces.push(generate_a_skybox_cubemap_face_image(
+			face_direction,
+			skybox_painter,
+		));
 		face_directions.push(face_direction);
 	}
 	SkyboxFaces {

@@ -40,7 +40,7 @@ use world_gen::WorldGenerator;
 use crate::{
 	atlas::Atlas,
 	lang::LogItem,
-	skybox::{generate_skybox_cubemap_faces_images, SkyboxMesh},
+	skybox::{default_skybox_painter_2, generate_skybox_cubemap_faces_images, SkyboxMesh},
 };
 
 enum WhichCameraToUse {
@@ -386,7 +386,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = font::Font::font_01();
 
-	let skybox_faces = generate_skybox_cubemap_faces_images();
+	let skybox_faces =
+		generate_skybox_cubemap_faces_images(&default_skybox_painter_2(world_gen_seed));
 	let SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
