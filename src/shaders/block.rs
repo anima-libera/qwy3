@@ -21,6 +21,8 @@ pub struct BindingThingies<'a> {
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) fog_center_position_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub fn render_pipeline_and_bind_group(
@@ -87,6 +89,14 @@ pub fn render_pipeline_and_bind_group(
 				.atlas_texture_sampler_thingy
 				.binding_type
 				.layout_entry(6, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.fog_center_position_thingy
+				.binding_type
+				.layout_entry(7, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies
+				.fog_inf_sup_radiuses_thingy
+				.binding_type
+				.layout_entry(8, wgpu::ShaderStages::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -142,6 +152,20 @@ pub fn render_pipeline_and_bind_group(
 					.resource
 					.as_binding_resource(),
 			},
+			wgpu::BindGroupEntry {
+				binding: 7,
+				resource: binding_thingies
+					.fog_center_position_thingy
+					.resource
+					.as_binding_resource(),
+			},
+			wgpu::BindGroupEntry {
+				binding: 8,
+				resource: binding_thingies
+					.fog_inf_sup_radiuses_thingy
+					.resource
+					.as_binding_resource(),
+			},
 		],
 	});
 
@@ -169,7 +193,7 @@ pub fn render_pipeline_and_bind_group(
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
-				blend: Some(wgpu::BlendState::REPLACE),
+				blend: Some(wgpu::BlendState::ALPHA_BLENDING),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
 		}),

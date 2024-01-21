@@ -13,3 +13,12 @@ pub mod skybox;
 pub struct Vector3Pod {
 	pub values: [f32; 3],
 }
+
+/// Vector in 2D.
+#[derive(Copy, Clone, Debug)]
+/// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vector2Pod {
+	pub values: [f32; 2],
+}

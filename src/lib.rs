@@ -26,7 +26,7 @@ use std::{
 	sync::{atomic::AtomicI32, Arc},
 };
 
-use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
+use cgmath::{point3, ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
 use rand::Rng;
 use skybox::SkyboxFaces;
 use wgpu::util::DeviceExt;
@@ -45,6 +45,7 @@ use world_gen::WorldGenerator;
 use crate::{
 	atlas::Atlas,
 	lang::LogItem,
+	shaders::Vector2Pod,
 	skybox::{
 		default_skybox_painter, default_skybox_painter_3, generate_skybox_cubemap_faces_images,
 		SkyboxMesh,
@@ -237,6 +238,9 @@ struct Game {
 	widget_tree_root: Widget,
 	enable_interface_draw_debug_boxes: bool,
 	skybox_cubemap_texture: wgpu::Texture,
+	fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
+	fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
+	fog_inf_sup_radiuses: (f32, f32),
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -406,6 +410,23 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	// The better painter that takes significantly more time will be run on a worker thread.
 	let longer_skybox_painter = default_skybox_painter_3(4, world_gen_seed);
 
+	let FogStuff { fog_center_position_thingy, fog_inf_sup_radiuses_thingy } =
+		init_fog_stuff(Arc::clone(&device));
+
+	queue.write_buffer(
+		&fog_center_position_thingy.resource,
+		0,
+		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
+	);
+	let fog_inf_sup_radiuses = (0.0, 20.0);
+	queue.write_buffer(
+		&fog_inf_sup_radiuses_thingy.resource,
+		0,
+		bytemuck::cast_slice(&[Vector2Pod {
+			values: [fog_inf_sup_radiuses.0, fog_inf_sup_radiuses.1],
+		}]),
+	);
+
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: window_surface_config.width as f32 / window_surface_config.height as f32,
@@ -512,6 +533,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
 			skybox_cubemap_texture_view_thingy: &skybox_cubemap_texture_view_thingy,
 			skybox_cubemap_texture_sampler_thingy: &skybox_cubemap_texture_sampler_thingy,
+			fog_center_position_thingy: &fog_center_position_thingy,
+			fog_inf_sup_radiuses_thingy: &fog_inf_sup_radiuses_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,
@@ -637,6 +660,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		widget_tree_root,
 		enable_interface_draw_debug_boxes,
 		skybox_cubemap_texture,
+		fog_center_position_thingy,
+		fog_inf_sup_radiuses_thingy,
+		fog_inf_sup_radiuses,
 
 		worker_tasks,
 		pool,
@@ -1163,6 +1189,7 @@ pub fn run() {
 			});
 
 			// Request meshing for chunks that can be meshed or should be re-meshed.
+			let mut closest_unmeshed_chunk_distance: Option<f32> = None;
 			let chunk_coords_list: Vec<_> = game.chunk_grid.map.keys().copied().collect();
 			for chunk_coords in chunk_coords_list.iter().copied() {
 				let tmp_meshing_allowed = game.enable_temporary_meshing_of_not_surrounded_chunks;
@@ -1177,6 +1204,25 @@ pub fn run() {
 						)
 					})
 					.unwrap();
+				if !already_has_mesh {
+					let chunk_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+					let center = (chunk_span.block_coords_inf().map(|x| x as f32)
+						+ chunk_span
+							.block_coords_sup_excluded()
+							.map(|x| x as f32 - 1.0)
+							.to_vec()) / 2.0;
+					let distance = center.distance(game.player_phys.aligned_box.pos);
+					// Remove the longest radius of the chunk to get the worst case distance.
+					let sqrt_3 = 3.0_f32.sqrt();
+					let distance = distance - game.cd.edge as f32 * sqrt_3 / 2.0;
+					if let Some(previous_distance) = closest_unmeshed_chunk_distance {
+						if previous_distance > distance {
+							closest_unmeshed_chunk_distance = Some(distance);
+						}
+					} else {
+						closest_unmeshed_chunk_distance = Some(distance);
+					}
+				}
 				let is_being_meshed = game
 					.worker_tasks
 					.iter()
@@ -1256,6 +1302,31 @@ pub fn run() {
 						mesh.update_gpu_data(&device);
 						let _ = sender.send(mesh);
 					}));
+				}
+			}
+
+			if let Some(distance) = closest_unmeshed_chunk_distance {
+				let delta = distance - game.fog_inf_sup_radiuses.1;
+				let delta_normalized = if delta < 0.0 {
+					-1.0
+				} else if delta > 0.0 {
+					1.0
+				} else {
+					0.0
+				};
+				let evolution = delta_normalized * dt.as_secs_f32() * 10.0;
+				let evolution = evolution.clamp(-delta.abs(), delta.abs());
+				if evolution != 0.0 {
+					game.fog_inf_sup_radiuses.1 += evolution;
+					game.fog_inf_sup_radiuses.1 = game.fog_inf_sup_radiuses.1.max(20.0);
+					game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - 20.0;
+					game.queue.write_buffer(
+						&game.fog_inf_sup_radiuses_thingy.resource,
+						0,
+						bytemuck::cast_slice(&[Vector2Pod {
+							values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
+						}]),
+					);
 				}
 			}
 
@@ -1389,6 +1460,12 @@ pub fn run() {
 					dt,
 				);
 			}
+
+			game.queue.write_buffer(
+				&game.fog_center_position_thingy.resource,
+				0,
+				bytemuck::cast_slice(&[Vector3Pod { values: game.player_phys.aligned_box.pos.into() }]),
+			);
 
 			let player_box_mesh =
 				SimpleLineMesh::from_aligned_box(&game.device, &game.player_phys.aligned_box);

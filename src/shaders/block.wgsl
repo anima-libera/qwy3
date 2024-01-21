@@ -20,6 +20,8 @@ struct VertexOutput {
 @group(0) @binding(4) var uniform_shadow_map_sampler: sampler_comparison;
 @group(0) @binding(5) var uniform_atlas_texture: texture_2d<f32>;
 @group(0) @binding(6) var uniform_atlas_sampler: sampler;
+@group(0) @binding(7) var<uniform> uniform_fog_center_position: vec3<f32>;
+@group(0) @binding(8) var<uniform> uniform_fog_inf_sup_radiuses: vec2<f32>;
 
 @vertex
 fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
@@ -54,8 +56,17 @@ fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 
 	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
 
+	// Fog effect, matter gradually becomes transparent to the skybox when too far away.
+	var distance_to_fog_center = distance(uniform_fog_center_position, the.world_position);
+	var fog_inf_radius = uniform_fog_inf_sup_radiuses.x;
+	var fog_sup_radius = uniform_fog_inf_sup_radiuses.y;
+	var fog_transparency = (distance_to_fog_center - fog_inf_radius) / (fog_sup_radius - fog_inf_radius);
+	fog_transparency = clamp(fog_transparency, 0.0, 1.0);
+	var fog_opacity = 1.0 - fog_transparency;
+	out_color.a *= fog_opacity;
+
 	// Full transparency.
-	if out_color.a < 0.5 {
+	if out_color.a == 0.0 {
 		discard;
 	}
 

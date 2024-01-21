@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 
+use crate::shaders::Vector2Pod;
 use crate::{camera::Matrix4x4Pod, shaders, Vector3Pod};
 
 /// Type representation for the `ty` and `count` fields of a `wgpu::BindGroupLayoutEntry`.
@@ -93,6 +94,8 @@ pub struct AllBindingThingies<'a> {
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) skybox_cubemap_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) skybox_cubemap_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) fog_center_position_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub fn init_rendering_stuff(
@@ -123,6 +126,8 @@ pub fn init_rendering_stuff(
 			shadow_map_sampler_thingy: all_binding_thingies.shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
 			atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
+			fog_center_position_thingy: all_binding_thingies.fog_center_position_thingy,
+			fog_inf_sup_radiuses_thingy: all_binding_thingies.fog_inf_sup_radiuses_thingy,
 		},
 		window_surface_format,
 		z_buffer_format,
@@ -506,4 +511,48 @@ pub fn update_skybox_texture(
 			},
 		);
 	}
+}
+
+pub struct FogStuff {
+	pub fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
+	pub fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
+}
+pub fn init_fog_stuff(device: Arc<wgpu::Device>) -> FogStuff {
+	let fog_center_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Fog Center Position Buffer"),
+		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let fog_center_position_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	let fog_center_position_thingy = BindingThingy {
+		binding_type: fog_center_position_binding_type,
+		resource: fog_center_position_buffer,
+	};
+
+	let fog_inf_sup_radiuses_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some("Fog Inf & Sup Radiuses Buffer"),
+		contents: bytemuck::cast_slice(&[Vector2Pod::zeroed()]),
+		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+	});
+	let fog_inf_sup_radiuses_binding_type = BindingType {
+		ty: wgpu::BindingType::Buffer {
+			ty: wgpu::BufferBindingType::Uniform,
+			has_dynamic_offset: false,
+			min_binding_size: None,
+		},
+		count: None,
+	};
+	let fog_inf_sup_radiuses_thingy = BindingThingy {
+		binding_type: fog_inf_sup_radiuses_binding_type,
+		resource: fog_inf_sup_radiuses_buffer,
+	};
+
+	FogStuff { fog_center_position_thingy, fog_inf_sup_radiuses_thingy }
 }

@@ -151,7 +151,8 @@ pub fn default_skybox_painter_3(
 		let nosie_value_a = noise.sample_3d_1d(Point3::from_vec(direction * scale_a), &[2]);
 		let angle = nosie_value_a * TAU;
 		let scale_d = 10.0;
-		let distance = 0.4 * noise.sample_3d_1d(Point3::from_vec(direction * scale_d), &[4]);
+		let distance = 0.65 * noise.sample_3d_1d(Point3::from_vec(direction * scale_d), &[4]);
+		let distance = (distance - (0.65 - 0.4)).max(0.0);
 		direction.x += f32::cos(angle) * distance;
 		direction.y += f32::sin(angle) * distance;
 		Rgba([
