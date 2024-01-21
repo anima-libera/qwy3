@@ -9,6 +9,9 @@
 
 ## Graphics
 
+- Fix the fog radius adjustment that flickers strangely when it should change smoothly. It goes back and forth even when the player is not moving and no chunk is unloading and thus when there is no reason for the worst case distance to unmeshed chunks to decrease.
+- Slowly rotating skybox.
+- Smooth transition between skyboxes, like when the better skybox finishes to generate it should fade in instead of replacing the old one in an instant.
 - Cascading shadow mapping. Currently there is a single shadow map, but there should be multiple shadow maps corresponding to bigger and bigger areas so that shadows can be rendered even for far away stuff but without using as much resolution as for shadows close to the player.
 - Sun. It could look like a 4-branch star in the style of star effects in Kill la Kill.
 - God rays effect when looking at sun. I recall it can be done by rendering just the sun in white and all the world in black and doing some motion blur on the result, maybe?
