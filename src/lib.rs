@@ -89,6 +89,7 @@ enum Action {
 	OpenCommandLine,
 	ToggleDisplayNotSurroundedChunksAsBoxes,
 	ToggleDisplayInterfaceDebugBoxes,
+	ToggleFog,
 }
 
 enum WorkerTask {
@@ -260,6 +261,7 @@ struct Game {
 	enable_display_interface: bool,
 	enable_display_not_surrounded_chunks_as_boxes: bool,
 	enable_temporary_meshing_of_not_surrounded_chunks: bool,
+	enable_fog: bool,
 }
 
 fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
@@ -426,6 +428,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			values: [fog_inf_sup_radiuses.0, fog_inf_sup_radiuses.1],
 		}]),
 	);
+
+	let enable_fog = true;
 
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
@@ -682,6 +686,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_display_interface,
 		enable_display_not_surrounded_chunks_as_boxes,
 		enable_temporary_meshing_of_not_surrounded_chunks,
+		enable_fog,
 	};
 	(game, event_loop)
 }
@@ -931,6 +936,19 @@ pub fn run() {
 						(Action::ToggleDisplayInterfaceDebugBoxes, true) => {
 							game.enable_interface_draw_debug_boxes =
 								!game.enable_interface_draw_debug_boxes;
+						},
+						(Action::ToggleFog, true) => {
+							game.enable_fog = !game.enable_fog;
+							let (inf, sup) = if game.enable_fog {
+								game.fog_inf_sup_radiuses
+							} else {
+								(10000.0, 10000.0)
+							};
+							game.queue.write_buffer(
+								&game.fog_inf_sup_radiuses_thingy.resource,
+								0,
+								bytemuck::cast_slice(&[Vector2Pod { values: [inf, sup] }]),
+							);
 						},
 						(_, false) => {},
 					}
@@ -1314,19 +1332,21 @@ pub fn run() {
 				} else {
 					0.0
 				};
-				let evolution = delta_normalized * dt.as_secs_f32() * 10.0;
+				let evolution = delta_normalized * dt.as_secs_f32() * 15.0;
 				let evolution = evolution.clamp(-delta.abs(), delta.abs());
 				if evolution != 0.0 {
 					game.fog_inf_sup_radiuses.1 += evolution;
 					game.fog_inf_sup_radiuses.1 = game.fog_inf_sup_radiuses.1.max(20.0);
 					game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - 20.0;
-					game.queue.write_buffer(
-						&game.fog_inf_sup_radiuses_thingy.resource,
-						0,
-						bytemuck::cast_slice(&[Vector2Pod {
-							values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
-						}]),
-					);
+					if game.enable_fog {
+						game.queue.write_buffer(
+							&game.fog_inf_sup_radiuses_thingy.resource,
+							0,
+							bytemuck::cast_slice(&[Vector2Pod {
+								values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
+							}]),
+						);
+					}
 				}
 			}
 
