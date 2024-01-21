@@ -14,6 +14,7 @@ mod noise;
 mod physics;
 mod rendering;
 mod shaders;
+mod skybox;
 mod texture_gen;
 mod threadpool;
 mod widgets;
@@ -21,7 +22,7 @@ mod world_gen;
 
 use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
-use cgmath::{ElementWise, InnerSpace, MetricSpace};
+use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
 use rand::Rng;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
@@ -36,7 +37,7 @@ use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
 use world_gen::WorldGenerator;
 
-use crate::{atlas::Atlas, lang::LogItem};
+use crate::{atlas::Atlas, lang::LogItem, skybox::SkyboxMesh};
 
 enum WhichCameraToUse {
 	FirstPerson,
@@ -381,6 +382,23 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = font::Font::font_01();
 
+	let SkyboxStuff {
+		skybox_cubemap_texture_view_thingy,
+		skybox_cubemap_texture_sampler_thingy,
+	} = init_skybox_stuff(
+		Arc::clone(&device),
+		&queue,
+		&[
+			// Test with the atlas as the cube faces.
+			atlas.image.as_ref(),
+			atlas.image.as_ref(),
+			atlas.image.as_ref(),
+			atlas.image.as_ref(),
+			atlas.image.as_ref(),
+			atlas.image.as_ref(),
+		],
+	);
+
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
 		aspect_ratio: window_surface_config.width as f32 / window_surface_config.height as f32,
@@ -469,6 +487,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
 			atlas_texture_sampler_thingy: &atlas_texture_sampler_thingy,
+			skybox_cubemap_texture_view_thingy: &skybox_cubemap_texture_view_thingy,
+			skybox_cubemap_texture_sampler_thingy: &skybox_cubemap_texture_sampler_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,
@@ -1391,9 +1411,9 @@ pub fn run() {
 				bytemuck::cast_slice(&[sun_camera_view_projection_matrix]),
 			);
 
-			let camera_view_projection_matrix = {
+			let (camera_view_projection_matrix, camera_position_ifany) = {
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					sun_camera_view_projection_matrix
+					(sun_camera_view_projection_matrix, None)
 				} else {
 					let mut camera_position = first_person_camera_position;
 					let camera_direction_vector = game.camera_direction.to_vec3();
@@ -1408,17 +1428,23 @@ pub fn run() {
 						.camera_direction
 						.add_to_vertical_angle(-TAU / 4.0)
 						.to_vec3();
-					game.camera_settings.view_projection_matrix(
+					let camera_view_projection_matrix = game.camera_settings.view_projection_matrix(
 						camera_position,
 						camera_direction_vector,
 						camera_up_vector,
-					)
+					);
+					(camera_view_projection_matrix, Some(camera_position))
 				}
 			};
 			game.queue.write_buffer(
 				&game.camera_matrix_thingy.resource,
 				0,
 				bytemuck::cast_slice(&[camera_view_projection_matrix]),
+			);
+
+			let skybox_mesh = SkyboxMesh::new(
+				&game.device,
+				camera_position_ifany.unwrap_or(point3(0.0, 0.0, 0.0)),
 			);
 
 			let sun_light_direction =
@@ -1467,8 +1493,41 @@ pub fn run() {
 				}
 			}
 
-			// Render pass to render the world to the screen.
+			// Render pass to render the skybox to the screen.
 			let window_texture = game.window_surface.get_current_texture().unwrap();
+			{
+				let window_texture_view = window_texture
+					.texture
+					.create_view(&wgpu::TextureViewDescriptor::default());
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass to render the skybox"),
+					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+						view: &window_texture_view,
+						resolve_target: None,
+						ops: wgpu::Operations {
+							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
+							store: true,
+						},
+					})],
+					depth_stencil_attachment: None,
+				});
+
+				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
+					let scale = game.window_surface_config.height as f32 / game.sun_camera.height;
+					let w = game.sun_camera.width * scale;
+					let h = game.sun_camera.height * scale;
+					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
+					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
+					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
+				}
+
+				render_pass.set_pipeline(&game.rendering.skybox_render_pipeline);
+				render_pass.set_bind_group(0, &game.rendering.skybox_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, skybox_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(skybox_mesh.vertices.len() as u32), 0..1);
+			}
+
+			// Render pass to render the world to the screen.
 			{
 				let window_texture_view = window_texture
 					.texture
@@ -1478,10 +1537,7 @@ pub fn run() {
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
-							store: true,
-						},
+						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &game.z_buffer_view,

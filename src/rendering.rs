@@ -78,6 +78,8 @@ pub struct RenderPipelinesAndBindGroups {
 	pub simple_line_2d_bind_group: wgpu::BindGroup,
 	pub simple_texture_2d_render_pipeline: wgpu::RenderPipeline,
 	pub simple_texture_2d_bind_group: wgpu::BindGroup,
+	pub skybox_render_pipeline: wgpu::RenderPipeline,
+	pub skybox_bind_group: wgpu::BindGroup,
 }
 
 pub struct AllBindingThingies<'a> {
@@ -89,6 +91,8 @@ pub struct AllBindingThingies<'a> {
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) skybox_cubemap_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
+	pub(crate) skybox_cubemap_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
 pub fn init_rendering_stuff(
@@ -156,6 +160,19 @@ pub fn init_rendering_stuff(
 			z_buffer_format,
 		);
 
+	let (skybox_render_pipeline, skybox_bind_group) =
+		shaders::skybox::render_pipeline_and_bind_group(
+			&device,
+			shaders::skybox::BindingThingies {
+				camera_matrix_thingy: all_binding_thingies.camera_matrix_thingy,
+				skybox_cubemap_texture_view_thingy: all_binding_thingies
+					.skybox_cubemap_texture_view_thingy,
+				skybox_cubemap_texture_sampler_thingy: all_binding_thingies
+					.skybox_cubemap_texture_sampler_thingy,
+			},
+			window_surface_format,
+		);
+
 	RenderPipelinesAndBindGroups {
 		block_shadow_render_pipeline,
 		block_shadow_bind_group,
@@ -167,6 +184,8 @@ pub fn init_rendering_stuff(
 		simple_line_2d_bind_group,
 		simple_texture_2d_render_pipeline,
 		simple_texture_2d_bind_group,
+		skybox_render_pipeline,
+		skybox_bind_group,
 	}
 }
 
@@ -382,4 +401,94 @@ pub fn init_atlas_stuff(
 	};
 
 	AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy }
+}
+
+use crate::skybox::SKYBOX_SIDE_DIMS;
+
+pub struct SkyboxStuff {
+	pub skybox_cubemap_texture_view_thingy: BindingThingy<wgpu::TextureView>,
+	pub skybox_cubemap_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
+}
+pub fn init_skybox_stuff(
+	device: Arc<wgpu::Device>,
+	queue: &wgpu::Queue,
+	skybox_data: &[&[u8]; 6],
+) -> SkyboxStuff {
+	for face_data in skybox_data {
+		assert_eq!(face_data.len(), 4 * SKYBOX_SIDE_DIMS.0 * SKYBOX_SIDE_DIMS.1);
+	}
+
+	let skybox_cubemap_texture_size = wgpu::Extent3d {
+		width: SKYBOX_SIDE_DIMS.0 as u32,
+		height: SKYBOX_SIDE_DIMS.1 as u32,
+		depth_or_array_layers: 6,
+	};
+	let skybox_cubemap_texture = device.create_texture(&wgpu::TextureDescriptor {
+		label: Some("Skybox Cubemap Texture"),
+		size: skybox_cubemap_texture_size,
+		mip_level_count: 1,
+		sample_count: 1,
+		dimension: wgpu::TextureDimension::D2,
+		format: wgpu::TextureFormat::Rgba8UnormSrgb,
+		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+		view_formats: &[],
+	});
+	for (face_index, face_data) in skybox_data.iter().enumerate() {
+		queue.write_texture(
+			wgpu::ImageCopyTexture {
+				texture: &skybox_cubemap_texture,
+				mip_level: 0,
+				origin: wgpu::Origin3d { x: 0, y: 0, z: face_index as u32 },
+				aspect: wgpu::TextureAspect::All,
+			},
+			face_data,
+			wgpu::ImageDataLayout {
+				offset: 0,
+				bytes_per_row: Some(4 * SKYBOX_SIDE_DIMS.0 as u32),
+				rows_per_image: Some(SKYBOX_SIDE_DIMS.1 as u32),
+			},
+			wgpu::Extent3d { depth_or_array_layers: 1, ..skybox_cubemap_texture_size },
+		);
+	}
+	let skybox_cubemap_texture_view =
+		skybox_cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
+			label: Some("Skybox Cubemap Texture View"),
+			dimension: Some(wgpu::TextureViewDimension::Cube),
+			..Default::default()
+		});
+	let skybox_cubemap_texture_view_binding_type = BindingType {
+		ty: wgpu::BindingType::Texture {
+			multisampled: false,
+			view_dimension: wgpu::TextureViewDimension::Cube,
+			sample_type: wgpu::TextureSampleType::Float { filterable: true },
+		},
+		count: None, // I mean there is only one cube and we already said it is a cube in `ty`..
+	};
+	let skybox_cubemap_texture_view_thingy = BindingThingy {
+		binding_type: skybox_cubemap_texture_view_binding_type,
+		resource: skybox_cubemap_texture_view,
+	};
+	let skybox_cubemap_texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+		label: Some("Skybox Cubemap Texture Sampler"),
+		address_mode_u: wgpu::AddressMode::ClampToEdge,
+		address_mode_v: wgpu::AddressMode::ClampToEdge,
+		address_mode_w: wgpu::AddressMode::ClampToEdge,
+		mag_filter: wgpu::FilterMode::Nearest,
+		min_filter: wgpu::FilterMode::Nearest,
+		mipmap_filter: wgpu::FilterMode::Nearest,
+		..Default::default()
+	});
+	let skybox_cubemap_texture_sampler_binding_type = BindingType {
+		ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+		count: None,
+	};
+	let skybox_cubemap_texture_sampler_thingy = BindingThingy {
+		binding_type: skybox_cubemap_texture_sampler_binding_type,
+		resource: skybox_cubemap_texture_sampler,
+	};
+
+	SkyboxStuff {
+		skybox_cubemap_texture_view_thingy,
+		skybox_cubemap_texture_sampler_thingy,
+	}
 }

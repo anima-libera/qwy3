@@ -3,6 +3,7 @@ pub mod block_shadow;
 pub mod simple_line;
 pub mod simple_line_2d;
 pub mod simple_texture_2d;
+pub mod skybox;
 
 /// Vector in 3D.
 #[derive(Copy, Clone, Debug)]
