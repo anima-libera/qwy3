@@ -4,7 +4,13 @@
 //! that whould be placed around the camera and rendered infinitely far.
 //! Nothing conceptually complicated here, just lots of small details to be handled just right.
 
-use std::f32::consts::TAU;
+use std::{
+	f32::consts::TAU,
+	sync::{
+		atomic::{self, AtomicI32},
+		Arc,
+	},
+};
 
 use cgmath::{point3, vec3, EuclideanSpace, InnerSpace, Point3, Vector3};
 use image::Rgba;
@@ -115,14 +121,14 @@ pub fn default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
 	])
 }
 
-pub fn default_skybox_painter_2(
+pub fn _default_skybox_painter_2(
 	number_of_octaves: u32,
 	seed: i32,
 ) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
 	let noise = OctavedNoise::new(number_of_octaves, vec![seed]);
 	move |mut direction: Vector3<f32>| -> Rgba<u8> {
 		direction += (noise
-			.sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
+			._sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
 			.to_vec() - vec3(0.5, 0.5, 0.5))
 			* 0.5;
 		Rgba([
@@ -222,6 +228,7 @@ fn generate_a_skybox_cubemap_face_image(
 
 pub fn generate_skybox_cubemap_faces_images(
 	skybox_painter: &dyn Fn(Vector3<f32>) -> Rgba<u8>,
+	face_counter: Option<Arc<AtomicI32>>,
 ) -> SkyboxFaces {
 	let mut faces = vec![];
 	let mut face_directions = vec![];
@@ -231,6 +238,9 @@ pub fn generate_skybox_cubemap_faces_images(
 			skybox_painter,
 		));
 		face_directions.push(face_direction);
+		if let Some(ref face_counter) = face_counter {
+			face_counter.fetch_add(1, atomic::Ordering::Relaxed);
+		}
 	}
 	SkyboxFaces {
 		faces: faces.try_into().unwrap(),

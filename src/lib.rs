@@ -20,7 +20,11 @@ mod threadpool;
 mod widgets;
 mod world_gen;
 
-use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
+use std::{
+	collections::HashMap,
+	f32::consts::TAU,
+	sync::{atomic::AtomicI32, Arc},
+};
 
 use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
 use rand::Rng;
@@ -42,8 +46,8 @@ use crate::{
 	atlas::Atlas,
 	lang::LogItem,
 	skybox::{
-		default_skybox_painter, default_skybox_painter_2, default_skybox_painter_3,
-		generate_skybox_cubemap_faces_images, SkyboxMesh,
+		default_skybox_painter, default_skybox_painter_3, generate_skybox_cubemap_faces_images,
+		SkyboxMesh,
 	},
 };
 
@@ -90,7 +94,8 @@ enum WorkerTask {
 	GenerateChunkBlocks(ChunkCoords, std::sync::mpsc::Receiver<ChunkBlocks>),
 	/// The bool at the end is `meshed_with_all_the_surrounding_chunks`.
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>, bool),
-	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>),
+	/// The counter at the end is the number of faces already finished.
+	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
 }
 
 pub struct SimpleTextureMesh {
@@ -392,7 +397,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = font::Font::font_01();
 
-	let skybox_faces = generate_skybox_cubemap_faces_images(&default_skybox_painter);
+	let skybox_faces = generate_skybox_cubemap_faces_images(&default_skybox_painter, None);
 	let SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
@@ -478,14 +483,21 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut worker_tasks = vec![];
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
-	{
+	let face_counter = {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		worker_tasks.push(WorkerTask::PaintNewSkybox(receiver));
+		let face_counter = Arc::new(AtomicI32::new(0));
+		worker_tasks.push(WorkerTask::PaintNewSkybox(
+			receiver,
+			Arc::clone(&face_counter),
+		));
+		let cloned_face_counter = Arc::clone(&face_counter);
 		pool.enqueue_task(Box::new(move || {
-			let skybox_faces = generate_skybox_cubemap_faces_images(&longer_skybox_painter);
+			let skybox_faces =
+				generate_skybox_cubemap_faces_images(&longer_skybox_painter, Some(cloned_face_counter));
 			let _ = sender.send(skybox_faces);
 		}));
-	}
+		face_counter
+	};
 
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
@@ -560,7 +572,16 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				),
 				Widget::new_label(
 					WidgetLabel::LogLineList,
-					Box::new(Widget::new_list(vec![], 5.0)),
+					Box::new(Widget::new_list(
+						vec![Widget::new_disappear_when_complete(
+							std::time::Duration::from_secs_f32(2.0),
+							Box::new(Widget::new_face_counter(
+								font::TextRenderingSettings::with_scale(3.0),
+								face_counter,
+							)),
+						)],
+						5.0,
+					)),
 				),
 				Widget::new_simple_text(
 					"test (stays below log)".to_string(),
@@ -990,7 +1011,7 @@ pub fn run() {
 						sub_widgets
 							.iter_mut()
 							.find(|widget| !widget.is_diappearing())
-							.expect("we just checked that there are at meast some amout of them")
+							.expect("we just checked that there are at least some amout of them")
 							.pop_while_smoothly_closing_space(
 								std::time::Instant::now(),
 								std::time::Duration::from_secs_f32(1.0),
@@ -1044,6 +1065,29 @@ pub fn run() {
 			{
 				let window_width = game.window_surface_config.width as f32;
 				let window_height = game.window_surface_config.height as f32;
+
+				game.widget_tree_root.for_each_rec(&mut |widget| {
+					if let Widget::DisappearWhenComplete {
+						sub_widget,
+						completed_time,
+						delay_before_disappearing,
+					} = widget
+					{
+						if sub_widget.is_completed() && completed_time.is_none() {
+							*completed_time = Some(std::time::Instant::now());
+						} else if completed_time.is_some_and(|completed_time| {
+							completed_time.elapsed() > *delay_before_disappearing
+						}) {
+							widget.pop_while_smoothly_closing_space(
+								std::time::Instant::now(),
+								std::time::Duration::from_secs_f32(0.5),
+								&game.font,
+								window_width,
+							);
+						}
+					}
+				});
+
 				game.widget_tree_root.generate_mesh_vertices(
 					cgmath::point3(-1.0, window_height / window_width, 0.5),
 					&mut interface_meshes_vertices,
@@ -1102,7 +1146,7 @@ pub fn run() {
 						}
 						is_not_done_yet
 					},
-					WorkerTask::PaintNewSkybox(receiver) => {
+					WorkerTask::PaintNewSkybox(receiver, _face_counter) => {
 						let result_opt = receiver.try_recv().ok();
 						let is_not_done_yet = result_opt.is_none();
 						if let Some(skybox_faces) = result_opt {

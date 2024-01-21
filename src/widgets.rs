@@ -1,3 +1,6 @@
+use std::sync::atomic::{self, AtomicI32};
+use std::sync::Arc;
+
 use cgmath::EuclideanSpace;
 
 use crate::font;
@@ -78,6 +81,11 @@ pub enum Widget {
 		text: String,
 		settings: font::TextRenderingSettings,
 	},
+	/// Loading bar for the face counter of some skybox generation.
+	FaceCounter {
+		settings: font::TextRenderingSettings,
+		counter: Arc<AtomicI32>,
+	},
 	/// A wrapper around a widget that tags it with a label.
 	/// It allows for some code to find the contained widget via the label easily.
 	Label {
@@ -106,6 +114,13 @@ pub enum Widget {
 		animation_start_time: std::time::Instant,
 		animation_duration: std::time::Duration,
 	},
+	/// A wrapper around a widget that can be "completed" (like a loading bar)
+	/// and that disappears after a delay after the completion of the sub widget.
+	DisappearWhenComplete {
+		sub_widget: Box<Widget>,
+		completed_time: Option<std::time::Instant>,
+		delay_before_disappearing: std::time::Duration,
+	},
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
@@ -119,6 +134,13 @@ impl Widget {
 
 	pub fn new_simple_text(text: String, settings: font::TextRenderingSettings) -> Widget {
 		Widget::SimpleText { text, settings }
+	}
+
+	pub fn new_face_counter(
+		settings: font::TextRenderingSettings,
+		counter: Arc<AtomicI32>,
+	) -> Widget {
+		Widget::FaceCounter { settings, counter }
 	}
 
 	pub fn new_labeled_nothing(label: WidgetLabel) -> Widget {
@@ -150,6 +172,13 @@ impl Widget {
 		}
 	}
 
+	pub fn new_disappear_when_complete(
+		delay_before_disappearing: std::time::Duration,
+		sub_widget: Box<Widget>,
+	) -> Widget {
+		Widget::DisappearWhenComplete { sub_widget, completed_time: None, delay_before_disappearing }
+	}
+
 	pub fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
 		Widget::List { sub_widgets, interspace }
 	}
@@ -174,16 +203,43 @@ impl Widget {
 		matches!(self, Widget::SmoothlyDisappearingEmptySpace { .. })
 	}
 
+	pub fn is_completed(&self) -> bool {
+		if let Widget::FaceCounter { counter, .. } = self {
+			counter.load(atomic::Ordering::Relaxed) >= 6
+		} else {
+			false
+		}
+	}
+
+	pub fn for_each_rec(&mut self, f: &mut dyn FnMut(&mut Widget)) {
+		f(self);
+		match self {
+			Widget::Nothing => {},
+			Widget::SimpleText { .. } => {},
+			Widget::FaceCounter { .. } => {},
+			Widget::Label { sub_widget, .. } => sub_widget.for_each_rec(f),
+			Widget::Margins { sub_widget, .. } => sub_widget.for_each_rec(f),
+			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.for_each_rec(f),
+			Widget::SmoothlyDisappearingEmptySpace { .. } => {},
+			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.for_each_rec(f),
+			Widget::List { sub_widgets, .. } => sub_widgets
+				.iter_mut()
+				.for_each(|sub_widget| sub_widget.for_each_rec(f)),
+		};
+	}
+
 	/// Returns the first found label widget that matches with the given label.
 	fn find_label(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
 		match self {
 			Widget::Nothing => None,
 			Widget::SimpleText { .. } => None,
+			Widget::FaceCounter { .. } => None,
 			Widget::Label { label, .. } if *label == label_to_find => Some(self),
 			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::Margins { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::SmoothlyDisappearingEmptySpace { .. } => None,
+			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::List { sub_widgets, .. } => sub_widgets
 				.iter_mut()
 				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
@@ -237,6 +293,11 @@ impl Widget {
 			Widget::SimpleText { text, settings } => {
 				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
 			},
+			Widget::FaceCounter { settings, .. } => font.dimensions_of_text(
+				window_width,
+				settings.clone(),
+				"skybox generation: [██████] 6/6",
+			),
 			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_width),
 			Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom } => {
 				let sub_dimensions = sub_widget.dimensions(font, window_width);
@@ -252,6 +313,9 @@ impl Widget {
 			Widget::SmoothlyDisappearingEmptySpace { start_dimensions, .. } => {
 				let ratio = self.existence_ratio();
 				start_dimensions * ratio
+			},
+			Widget::DisappearWhenComplete { sub_widget, .. } => {
+				sub_widget.dimensions(font, window_width)
 			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
@@ -296,6 +360,28 @@ impl Widget {
 				);
 				meshes.add_simple_texture_vertices(simple_texture_vertices);
 			},
+			Widget::FaceCounter { settings, counter } => {
+				let counter_value = counter.load(atomic::Ordering::Relaxed);
+				let mut text = String::new();
+				text += &"skybox generation: ";
+				text.push('[');
+				for _ in 0..counter_value {
+					text.push('█');
+				}
+				for _ in 0..(6 - counter_value) {
+					text.push('_');
+				}
+				text.push(']');
+				text.push(' ');
+				text += &format!("{counter_value}/6");
+				let simple_texture_vertices = font.simple_texture_vertices_from_text(
+					window_width,
+					top_left,
+					settings.clone(),
+					&text,
+				);
+				meshes.add_simple_texture_vertices(simple_texture_vertices);
+			},
 			Widget::Label { sub_widget, .. } => {
 				sub_widget.generate_mesh_vertices(
 					top_left,
@@ -329,6 +415,15 @@ impl Widget {
 				);
 			},
 			Widget::SmoothlyDisappearingEmptySpace { .. } => {},
+			Widget::DisappearWhenComplete { sub_widget, .. } => {
+				sub_widget.generate_mesh_vertices(
+					top_left,
+					meshes,
+					font,
+					window_width,
+					draw_debug_boxes,
+				);
+			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut top_left = top_left;
 				for i in 0..sub_widgets.len() {
