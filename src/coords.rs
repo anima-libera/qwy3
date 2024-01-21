@@ -263,7 +263,7 @@ impl ChunkDimensions {
 /// Axis (without considering its orientation).
 ///
 /// Note that the vertical axis is Z.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NonOrientedAxis {
 	X,
 	Y,
@@ -292,7 +292,7 @@ impl NonOrientedAxis {
 /// to represent the orientation of increasing coordinate values along the given axis.
 /// Thus, `NonOrientedAxis::Z` and `AxisOrientation::Positivewards` represent the upwards
 /// direction (Z+), as increasing the Z coordinate of a point makes it go upwards.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AxisOrientation {
 	Positivewards,
 	Negativewards,
@@ -319,7 +319,7 @@ impl AxisOrientation {
 /// Axis but oriented.
 ///
 /// Note that upwards is Z+ and downwards is Z-.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OrientedAxis {
 	pub axis: NonOrientedAxis,
 	pub orientation: AxisOrientation,

@@ -37,7 +37,11 @@ use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
 use world_gen::WorldGenerator;
 
-use crate::{atlas::Atlas, lang::LogItem, skybox::SkyboxMesh};
+use crate::{
+	atlas::Atlas,
+	lang::LogItem,
+	skybox::{generate_skybox_cubemap_faces_images, SkyboxMesh},
+};
 
 enum WhichCameraToUse {
 	FirstPerson,
@@ -382,6 +386,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = font::Font::font_01();
 
+	let skybox_faces = generate_skybox_cubemap_faces_images();
 	let SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
@@ -389,13 +394,12 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		Arc::clone(&device),
 		&queue,
 		&[
-			// Test with the atlas as the cube faces.
-			atlas.image.as_ref(),
-			atlas.image.as_ref(),
-			atlas.image.as_ref(),
-			atlas.image.as_ref(),
-			atlas.image.as_ref(),
-			atlas.image.as_ref(),
+			skybox_faces.faces[0].as_ref(),
+			skybox_faces.faces[1].as_ref(),
+			skybox_faces.faces[2].as_ref(),
+			skybox_faces.faces[3].as_ref(),
+			skybox_faces.faces[4].as_ref(),
+			skybox_faces.faces[5].as_ref(),
 		],
 	);
 
