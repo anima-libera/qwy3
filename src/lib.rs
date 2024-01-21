@@ -42,8 +42,8 @@ use crate::{
 	atlas::Atlas,
 	lang::LogItem,
 	skybox::{
-		default_skybox_painter, default_skybox_painter_2, generate_skybox_cubemap_faces_images,
-		SkyboxMesh,
+		default_skybox_painter, default_skybox_painter_2, default_skybox_painter_3,
+		generate_skybox_cubemap_faces_images, SkyboxMesh,
 	},
 };
 
@@ -399,7 +399,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		skybox_cubemap_texture,
 	} = init_skybox_stuff(Arc::clone(&device), &queue, &skybox_faces.data());
 	// The better painter that takes significantly more time will be run on a worker thread.
-	let longer_skybox_painter = default_skybox_painter_2(3, world_gen_seed);
+	let longer_skybox_painter = default_skybox_painter_3(4, world_gen_seed);
 
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),

@@ -4,6 +4,8 @@
 //! that whould be placed around the camera and rendered infinitely far.
 //! Nothing conceptually complicated here, just lots of small details to be handled just right.
 
+use std::f32::consts::TAU;
+
 use cgmath::{point3, vec3, EuclideanSpace, InnerSpace, Point3, Vector3};
 use image::Rgba;
 use wgpu::util::DeviceExt;
@@ -123,6 +125,29 @@ pub fn default_skybox_painter_2(
 			.sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
 			.to_vec() - vec3(0.5, 0.5, 0.5))
 			* 0.5;
+		Rgba([
+			((direction.x + 1.0) / 2.0 * 255.0) as u8,
+			((direction.y + 1.0) / 2.0 * 255.0) as u8,
+			((direction.z + 1.0) / 2.0 * 255.0) as u8,
+			255,
+		])
+	}
+}
+
+pub fn default_skybox_painter_3(
+	number_of_octaves: u32,
+	seed: i32,
+) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
+	let noise = OctavedNoise::new(number_of_octaves, vec![seed]);
+	move |mut direction: Vector3<f32>| -> Rgba<u8> {
+		let scale_m = 4.0;
+		let scale_a = 10.0 * noise.sample_3d_1d(Point3::from_vec(direction * scale_m), &[1]);
+		let nosie_value_a = noise.sample_3d_1d(Point3::from_vec(direction * scale_a), &[2]);
+		let angle = nosie_value_a * TAU;
+		let scale_d = 10.0;
+		let distance = 0.4 * noise.sample_3d_1d(Point3::from_vec(direction * scale_d), &[4]);
+		direction.x += f32::cos(angle) * distance;
+		direction.y += f32::sin(angle) * distance;
 		Rgba([
 			((direction.x + 1.0) / 2.0 * 255.0) as u8,
 			((direction.y + 1.0) / 2.0 * 255.0) as u8,
