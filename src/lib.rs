@@ -24,6 +24,7 @@ use std::{collections::HashMap, f32::consts::TAU, sync::Arc};
 
 use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
 use rand::Rng;
+use skybox::SkyboxFaces;
 use wgpu::util::DeviceExt;
 use winit::event_loop::ControlFlow;
 
@@ -40,7 +41,10 @@ use world_gen::WorldGenerator;
 use crate::{
 	atlas::Atlas,
 	lang::LogItem,
-	skybox::{default_skybox_painter_2, generate_skybox_cubemap_faces_images, SkyboxMesh},
+	skybox::{
+		default_skybox_painter, default_skybox_painter_2, generate_skybox_cubemap_faces_images,
+		SkyboxMesh,
+	},
 };
 
 enum WhichCameraToUse {
@@ -86,6 +90,7 @@ enum WorkerTask {
 	GenerateChunkBlocks(ChunkCoords, std::sync::mpsc::Receiver<ChunkBlocks>),
 	/// The bool at the end is `meshed_with_all_the_surrounding_chunks`.
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>, bool),
+	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>),
 }
 
 pub struct SimpleTextureMesh {
@@ -226,6 +231,7 @@ struct Game {
 	margin_before_unloading: f32,
 	widget_tree_root: Widget,
 	enable_interface_draw_debug_boxes: bool,
+	skybox_cubemap_texture: wgpu::Texture,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -386,23 +392,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = font::Font::font_01();
 
-	let skybox_faces =
-		generate_skybox_cubemap_faces_images(&default_skybox_painter_2(world_gen_seed));
+	let skybox_faces = generate_skybox_cubemap_faces_images(&default_skybox_painter);
 	let SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
-	} = init_skybox_stuff(
-		Arc::clone(&device),
-		&queue,
-		&[
-			skybox_faces.faces[0].as_ref(),
-			skybox_faces.faces[1].as_ref(),
-			skybox_faces.faces[2].as_ref(),
-			skybox_faces.faces[3].as_ref(),
-			skybox_faces.faces[4].as_ref(),
-			skybox_faces.faces[5].as_ref(),
-		],
-	);
+		skybox_cubemap_texture,
+	} = init_skybox_stuff(Arc::clone(&device), &queue, &skybox_faces.data());
+	// The better painter that takes significantly more time will be run on a worker thread.
+	let longer_skybox_painter = default_skybox_painter_2(3, world_gen_seed);
 
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
@@ -478,8 +475,17 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_world_generation = true;
 
-	let worker_tasks = vec![];
+	let mut worker_tasks = vec![];
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
+
+	{
+		let (sender, receiver) = std::sync::mpsc::channel();
+		worker_tasks.push(WorkerTask::PaintNewSkybox(receiver));
+		pool.enqueue_task(Box::new(move || {
+			let skybox_faces = generate_skybox_cubemap_faces_images(&longer_skybox_painter);
+			let _ = sender.send(skybox_faces);
+		}));
+	}
 
 	let rendering = rendering::init_rendering_stuff(
 		Arc::clone(&device),
@@ -609,6 +615,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		margin_before_unloading,
 		widget_tree_root,
 		enable_interface_draw_debug_boxes,
+		skybox_cubemap_texture,
 
 		worker_tasks,
 		pool,
@@ -1092,6 +1099,18 @@ pub fn run() {
 								// The chunk have been unloaded since the meshing was ordered.
 								// It really can happen, for example when the player travels very fast.
 							}
+						}
+						is_not_done_yet
+					},
+					WorkerTask::PaintNewSkybox(receiver) => {
+						let result_opt = receiver.try_recv().ok();
+						let is_not_done_yet = result_opt.is_none();
+						if let Some(skybox_faces) = result_opt {
+							update_skybox_texture(
+								&game.queue,
+								&game.skybox_cubemap_texture,
+								&skybox_faces.data(),
+							);
 						}
 						is_not_done_yet
 					},

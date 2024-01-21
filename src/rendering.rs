@@ -408,11 +408,12 @@ use crate::skybox::SKYBOX_SIDE_DIMS;
 pub struct SkyboxStuff {
 	pub skybox_cubemap_texture_view_thingy: BindingThingy<wgpu::TextureView>,
 	pub skybox_cubemap_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
+	pub skybox_cubemap_texture: wgpu::Texture,
 }
 pub fn init_skybox_stuff(
 	device: Arc<wgpu::Device>,
 	queue: &wgpu::Queue,
-	skybox_data: &[&[u8]; 6],
+	skybox_data: &SkyboxData,
 ) -> SkyboxStuff {
 	for face_data in skybox_data {
 		assert_eq!(face_data.len(), 4 * SKYBOX_SIDE_DIMS.0 * SKYBOX_SIDE_DIMS.1);
@@ -433,23 +434,7 @@ pub fn init_skybox_stuff(
 		usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
 		view_formats: &[],
 	});
-	for (face_index, face_data) in skybox_data.iter().enumerate() {
-		queue.write_texture(
-			wgpu::ImageCopyTexture {
-				texture: &skybox_cubemap_texture,
-				mip_level: 0,
-				origin: wgpu::Origin3d { x: 0, y: 0, z: face_index as u32 },
-				aspect: wgpu::TextureAspect::All,
-			},
-			face_data,
-			wgpu::ImageDataLayout {
-				offset: 0,
-				bytes_per_row: Some(4 * SKYBOX_SIDE_DIMS.0 as u32),
-				rows_per_image: Some(SKYBOX_SIDE_DIMS.1 as u32),
-			},
-			wgpu::Extent3d { depth_or_array_layers: 1, ..skybox_cubemap_texture_size },
-		);
-	}
+	update_skybox_texture(queue, &skybox_cubemap_texture, skybox_data);
 	let skybox_cubemap_texture_view =
 		skybox_cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
 			label: Some("Skybox Cubemap Texture View"),
@@ -490,5 +475,35 @@ pub fn init_skybox_stuff(
 	SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
+		skybox_cubemap_texture,
+	}
+}
+
+pub type SkyboxData<'a> = [&'a [u8]; 6];
+pub fn update_skybox_texture(
+	queue: &wgpu::Queue,
+	skybox_cubemap_texture: &wgpu::Texture,
+	skybox_data: &SkyboxData,
+) {
+	for (face_index, face_data) in skybox_data.iter().enumerate() {
+		queue.write_texture(
+			wgpu::ImageCopyTexture {
+				texture: skybox_cubemap_texture,
+				mip_level: 0,
+				origin: wgpu::Origin3d { x: 0, y: 0, z: face_index as u32 },
+				aspect: wgpu::TextureAspect::All,
+			},
+			face_data,
+			wgpu::ImageDataLayout {
+				offset: 0,
+				bytes_per_row: Some(4 * SKYBOX_SIDE_DIMS.0 as u32),
+				rows_per_image: Some(SKYBOX_SIDE_DIMS.1 as u32),
+			},
+			wgpu::Extent3d {
+				width: SKYBOX_SIDE_DIMS.0 as u32,
+				height: SKYBOX_SIDE_DIMS.1 as u32,
+				depth_or_array_layers: 1,
+			},
+		);
 	}
 }

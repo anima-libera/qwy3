@@ -8,7 +8,7 @@ use cgmath::{point3, vec3, EuclideanSpace, InnerSpace, Point3, Vector3};
 use image::Rgba;
 use wgpu::util::DeviceExt;
 
-use crate::{noise::OctavedNoise, shaders::skybox::SkyboxVertexPod, OrientedAxis};
+use crate::{noise::OctavedNoise, shaders::skybox::SkyboxVertexPod, OrientedAxis, SkyboxData};
 
 pub const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);
 
@@ -104,7 +104,7 @@ impl SkyboxMesh {
 	}
 }
 
-pub fn _default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
+pub fn default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
 	Rgba([
 		((direction.x + 1.0) / 2.0 * 255.0) as u8,
 		((direction.y + 1.0) / 2.0 * 255.0) as u8,
@@ -113,14 +113,16 @@ pub fn _default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
 	])
 }
 
-pub fn default_skybox_painter_2(seed: i32) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
-	let noise = OctavedNoise::new(3, vec![seed]);
+pub fn default_skybox_painter_2(
+	number_of_octaves: u32,
+	seed: i32,
+) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
+	let noise = OctavedNoise::new(number_of_octaves, vec![seed]);
 	move |mut direction: Vector3<f32>| -> Rgba<u8> {
 		direction += (noise
 			.sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
 			.to_vec() - vec3(0.5, 0.5, 0.5))
-		.normalize()
-			* 0.3;
+			* 0.5;
 		Rgba([
 			((direction.x + 1.0) / 2.0 * 255.0) as u8,
 			((direction.y + 1.0) / 2.0 * 255.0) as u8,
@@ -214,4 +216,17 @@ pub fn generate_skybox_cubemap_faces_images(
 pub struct SkyboxFaces {
 	pub faces: [image::RgbaImage; 6],
 	pub face_directions: [OrientedAxis; 6],
+}
+
+impl SkyboxFaces {
+	pub fn data(&self) -> SkyboxData {
+		[
+			self.faces[0].as_ref(),
+			self.faces[1].as_ref(),
+			self.faces[2].as_ref(),
+			self.faces[3].as_ref(),
+			self.faces[4].as_ref(),
+			self.faces[5].as_ref(),
+		]
+	}
 }
