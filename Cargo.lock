@@ -1510,6 +1510,7 @@ dependencies = [
  "image",
  "log",
  "rand",
+ "rustc-hash",
  "smallvec",
  "wgpu",
  "winit",

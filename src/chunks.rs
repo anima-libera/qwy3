@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use cgmath::{EuclideanSpace, InnerSpace};
+use rustc_hash::FxHashMap;
 use wgpu::util::DeviceExt;
 
 pub(crate) use crate::{
@@ -76,9 +77,7 @@ impl OpaquenessLayerAroundChunk {
 		// in the middle that was already taken care of), `sup` is included.
 		let inf: BlockCoords =
 			self.surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
-		let sup: BlockCoords = self
-			.surrounded_chunk_coords_span
-			.block_coords_sup_excluded();
+		let sup: BlockCoords = self.surrounded_chunk_coords_span.block_coords_sup_excluded();
 		let contained_in_the_layer = inf.x <= coords.x
 			&& coords.x <= sup.x
 			&& inf.y <= coords.y
@@ -483,10 +482,7 @@ fn generate_xshaped_block_face_mesh(
 	coords_array[2] += offset_a.extend(0.5);
 	coords_array[3] += offset_b.extend(0.5);
 
-	let normal = (offset_b - offset_a)
-		.extend(0.0)
-		.cross(cgmath::vec3(0.0, 0.0, -1.0))
-		.normalize();
+	let normal = (offset_b - offset_a).extend(0.0).cross(cgmath::vec3(0.0, 0.0, -1.0)).normalize();
 
 	// Texture moment ^^.
 	let texture_rect_in_atlas_xy: cgmath::Point2<f32> =
@@ -602,12 +598,12 @@ impl Chunk {
 
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
-	pub map: HashMap<ChunkCoords, Chunk>,
+	pub map: FxHashMap<ChunkCoords, Chunk>,
 }
 
 impl ChunkGrid {
 	pub fn new(cd: ChunkDimensions) -> ChunkGrid {
-		ChunkGrid { cd, map: HashMap::new() }
+		ChunkGrid { cd, map: HashMap::default() }
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
@@ -635,9 +631,7 @@ impl ChunkGrid {
 		let mut chunk_coords_to_update = vec![];
 		for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 			let neighbor_coords = coords + delta.to_vec();
-			let chunk_coords = self
-				.cd
-				.world_coords_to_containing_chunk_coords(neighbor_coords);
+			let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(neighbor_coords);
 			chunk_coords_to_update.push(chunk_coords);
 		}
 
