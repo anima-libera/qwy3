@@ -53,6 +53,10 @@ pub struct CommandLineSettings {
 	#[arg(long, default_value_t = 20, value_name = "LENGTH")]
 	pub chunk_edge: u32,
 
+	/// Disables the fog that is on by default.
+	#[arg(long)]
+	pub no_fog: bool,
+
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]
 	pub test_lang: Option<u32>,

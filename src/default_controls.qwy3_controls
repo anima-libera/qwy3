@@ -1,6 +1,6 @@
-bind_control key:Z walk_forward
+bind_control key:W walk_forward
 bind_control key:S walk_backward
-bind_control key:Q walk_leftward
+bind_control key:A walk_leftward
 bind_control key:D walk_rightward
 bind_control key:space jump
 bind_control key:P toggle_physics

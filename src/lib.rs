@@ -287,6 +287,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		display_world_generator_possible_names,
 		loading_distance,
 		chunk_edge,
+		no_fog,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -315,13 +316,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let window_surface = unsafe { instance.create_surface(&window) }.unwrap();
 
 	// Try to get a cool adapter first.
-	let adapter = instance
-		.enumerate_adapters(wgpu::Backends::all())
-		.find(|adapter| {
-			let info = adapter.get_info();
-			info.device_type == wgpu::DeviceType::DiscreteGpu
-				&& adapter.is_surface_supported(&window_surface)
-		});
+	let adapter = instance.enumerate_adapters(wgpu::Backends::all()).find(|adapter| {
+		let info = adapter.get_info();
+		info.device_type == wgpu::DeviceType::DiscreteGpu
+			&& adapter.is_surface_supported(&window_surface)
+	});
 	// In case we didn't find any cool adapter, at least we can try to get a bad adapter.
 	let adapter = adapter.or_else(|| {
 		futures::executor::block_on(async {
@@ -370,9 +369,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		.copied()
 		.find(|f| f.is_srgb())
 		.unwrap_or(surface_capabilities.formats[0]);
-	assert!(surface_capabilities
-		.present_modes
-		.contains(&wgpu::PresentMode::Fifo));
+	assert!(surface_capabilities.present_modes.contains(&wgpu::PresentMode::Fifo));
 	let size = window.inner_size();
 	let window_surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -393,10 +390,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	if output_atlas {
 		let path = "atlas.png";
 		println!("Outputting atlas to \"{path}\"");
-		atlas
-			.image
-			.save_with_format(path, image::ImageFormat::Png)
-			.unwrap();
+		atlas.image.save_with_format(path, image::ImageFormat::Png).unwrap();
 	}
 	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
 		init_atlas_stuff(Arc::clone(&device), &queue, atlas.image.as_ref());
@@ -415,6 +409,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let FogStuff { fog_center_position_thingy, fog_inf_sup_radiuses_thingy } =
 		init_fog_stuff(Arc::clone(&device));
 
+	let enable_fog = !no_fog;
+
 	queue.write_buffer(
 		&fog_center_position_thingy.resource,
 		0,
@@ -425,11 +421,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		&fog_inf_sup_radiuses_thingy.resource,
 		0,
 		bytemuck::cast_slice(&[Vector2Pod {
-			values: [fog_inf_sup_radiuses.0, fog_inf_sup_radiuses.1],
+			values: if enable_fog {
+				[fog_inf_sup_radiuses.0, fog_inf_sup_radiuses.1]
+			} else {
+				[10000.0, 10000.0]
+			},
 		}]),
 	);
-
-	let enable_fog = true;
 
 	let camera_settings = CameraPerspectiveSettings {
 		up_direction: (0.0, 0.0, 1.0).into(),
@@ -445,9 +443,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let selected_camera = WhichCameraToUse::FirstPerson;
 
 	let cursor_is_captured = true;
-	let cursor_was_actually_captured = window
-		.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-		.is_ok();
+	let cursor_was_actually_captured =
+		window.set_cursor_grab(winit::window::CursorGrabMode::Confined).is_ok();
 	if cursor_was_actually_captured {
 		window.set_cursor_visible(false);
 	}
@@ -712,9 +709,7 @@ pub fn run() {
 				let winit::dpi::PhysicalSize { width, height } = *new_size;
 				game.window_surface_config.width = width;
 				game.window_surface_config.height = height;
-				game
-					.window_surface
-					.configure(&game.device, &game.window_surface_config);
+				game.window_surface.configure(&game.device, &game.window_surface_config);
 				game.z_buffer_view =
 					make_z_buffer_texture_view(&game.device, game.z_buffer_format, width, height);
 				game.camera_settings.aspect_ratio = aspect_ratio(width, height);
@@ -732,10 +727,7 @@ pub fn run() {
 				..
 			} if !game.cursor_is_captured => {
 				game.cursor_is_captured = true;
-				game
-					.window
-					.set_cursor_grab(winit::window::CursorGrabMode::Confined)
-					.unwrap();
+				game.window.set_cursor_grab(winit::window::CursorGrabMode::Confined).unwrap();
 				game.window.set_cursor_visible(false);
 			},
 
@@ -803,10 +795,8 @@ pub fn run() {
 				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
 			};
 			let sensitivity = 0.01;
-			let direction_left_or_right = game
-				.camera_direction
-				.to_horizontal()
-				.add_to_horizontal_angle(TAU / 4.0 * dx.signum());
+			let direction_left_or_right =
+				game.camera_direction.to_horizontal().add_to_horizontal_angle(TAU / 4.0 * dx.signum());
 			game.player_phys.aligned_box.pos.z -= dy * sensitivity;
 			game.player_phys.aligned_box.pos +=
 				direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
@@ -871,10 +861,7 @@ pub fn run() {
 									.unwrap();
 								game.window.set_cursor_visible(false);
 							} else {
-								game
-									.window
-									.set_cursor_grab(winit::window::CursorGrabMode::None)
-									.unwrap();
+								game.window.set_cursor_grab(winit::window::CursorGrabMode::None).unwrap();
 								game.window.set_cursor_visible(true);
 							}
 						},
@@ -959,9 +946,8 @@ pub fn run() {
 			let mut interface_meshes_vertices = InterfaceMeshesVertices::new();
 
 			// Top left info.
-			if let Some(general_debug_info_widget) = game
-				.widget_tree_root
-				.find_label_content(WidgetLabel::GeneralDebugInfo)
+			if let Some(general_debug_info_widget) =
+				game.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
 			{
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.map.len();
@@ -1035,9 +1021,8 @@ pub fn run() {
 					Widget::new_simple_text(text, settings)
 				};
 
-				if let Some(Widget::List { sub_widgets, .. }) = game
-					.widget_tree_root
-					.find_label_content(WidgetLabel::LogLineList)
+				if let Some(Widget::List { sub_widgets, .. }) =
+					game.widget_tree_root.find_label_content(WidgetLabel::LogLineList)
 				{
 					sub_widgets.push(Widget::new_smoothly_incoming(
 						cgmath::point2(0.0, 0.0),
@@ -1046,11 +1031,7 @@ pub fn run() {
 						Box::new(widget),
 					));
 
-					if sub_widgets
-						.iter()
-						.filter(|widget| !widget.is_diappearing())
-						.count() > 25
-					{
+					if sub_widgets.iter().filter(|widget| !widget.is_diappearing()).count() > 25 {
 						let window_width = game.window_surface_config.width as f32;
 						sub_widgets
 							.iter_mut()
@@ -1145,10 +1126,8 @@ pub fn run() {
 			game.worker_tasks.retain_mut(|worker_task| {
 				let is_not_done_yet = match worker_task {
 					WorkerTask::GenerateChunkBlocks(chunk_coords, receiver) => {
-						let chunk_coords_and_result_opt = receiver
-							.try_recv()
-							.ok()
-							.map(|chunk_blocks| (*chunk_coords, chunk_blocks));
+						let chunk_coords_and_result_opt =
+							receiver.try_recv().ok().map(|chunk_blocks| (*chunk_coords, chunk_blocks));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_blocks)) = chunk_coords_and_result_opt {
 							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
@@ -1171,10 +1150,8 @@ pub fn run() {
 						receiver,
 						meshed_with_all_the_surrounding_chunks,
 					) => {
-						let chunk_coords_and_result_opt = receiver
-							.try_recv()
-							.ok()
-							.map(|chunk_mesh| (*chunk_coords, chunk_mesh));
+						let chunk_coords_and_result_opt =
+							receiver.try_recv().ok().map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
 							if let Some(chunk) = game.chunk_grid.map.get_mut(&chunk_coords) {
@@ -1225,10 +1202,8 @@ pub fn run() {
 				if !already_has_mesh {
 					let chunk_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 					let center = (chunk_span.block_coords_inf().map(|x| x as f32)
-						+ chunk_span
-							.block_coords_sup_excluded()
-							.map(|x| x as f32 - 1.0)
-							.to_vec()) / 2.0;
+						+ chunk_span.block_coords_sup_excluded().map(|x| x as f32 - 1.0).to_vec())
+						/ 2.0;
 					let distance = center.distance(game.player_phys.aligned_box.pos);
 					// Remove the longest radius of the chunk to get the worst case distance.
 					let sqrt_3 = 3.0_f32.sqrt();
@@ -1241,13 +1216,10 @@ pub fn run() {
 						closest_unmeshed_chunk_distance = Some(distance);
 					}
 				}
-				let is_being_meshed = game
-					.worker_tasks
-					.iter()
-					.any(|worker_task| match worker_task {
-						WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
-						_ => false,
-					});
+				let is_being_meshed = game.worker_tasks.iter().any(|worker_task| match worker_task {
+					WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
+					_ => false,
+				});
 				let can_be_def_meshed = 'can_be_def_meshed: {
 					for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 						let blocks_was_generated = game
@@ -1261,11 +1233,8 @@ pub fn run() {
 					}
 					true
 				};
-				let should_be_remeshed = game
-					.chunk_grid
-					.map
-					.get(&chunk_coords)
-					.is_some_and(|chunk| chunk.remeshing_required);
+				let should_be_remeshed =
+					game.chunk_grid.map.get(&chunk_coords).is_some_and(|chunk| chunk.remeshing_required);
 				let shall_be_def_meshed = (((!already_has_mesh) && (!is_being_meshed))
 					|| should_be_remeshed)
 					&& can_be_def_meshed
@@ -1278,12 +1247,7 @@ pub fn run() {
 					&& game.worker_tasks.len() < game.pool.number_of_workers();
 				if shall_be_def_meshed || shall_be_tmp_meshed {
 					// Asking a worker for the meshing or remeshing of the chunk
-					game
-						.chunk_grid
-						.map
-						.get_mut(&chunk_coords)
-						.unwrap()
-						.remeshing_required = false;
+					game.chunk_grid.map.get_mut(&chunk_coords).unwrap().remeshing_required = false;
 					let (sender, receiver) = std::sync::mpsc::channel();
 					game.worker_tasks.push(WorkerTask::MeshChunk(
 						chunk_coords,
@@ -1356,9 +1320,8 @@ pub fn run() {
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
 					.map(|x| x.round() as i32);
-				let player_chunk_coords = game
-					.cd
-					.world_coords_to_containing_chunk_coords(player_block_coords);
+				let player_chunk_coords =
+					game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
 
 				let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
 				let generation_distance_in_chunks_up = generation_distance_in_chunks.ceil() as i32;
@@ -1366,17 +1329,13 @@ pub fn run() {
 				let mut neighbor_chunk_coords_array: Vec<_> =
 					iter_3d_cube_center_radius(player_chunk_coords, generation_distance_in_chunks_up)
 						.filter(|chunk_coords| {
-							chunk_coords
-								.map(|x| x as f32)
-								.distance(player_chunk_coords.map(|x| x as f32))
+							chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32))
 								<= generation_distance_in_chunks
 						})
 						.collect();
 				// No early optimizations! This is an (in)valid excuse to not optimize this!
 				neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
-					(chunk_coords
-						.map(|x| x as f32)
-						.distance2(player_chunk_coords.map(|x| x as f32))
+					(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
 						* 10.0) as u64
 				});
 
@@ -1387,15 +1346,12 @@ pub fn run() {
 						.get(&neighbor_chunk_coords)
 						.is_some_and(|chunk| chunk.blocks.is_some());
 					let blocks_is_being_generated =
-						game
-							.worker_tasks
-							.iter()
-							.any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									*chunk_coords == neighbor_chunk_coords
-								},
-								_ => false,
-							});
+						game.worker_tasks.iter().any(|worker_task| match worker_task {
+							WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+								*chunk_coords == neighbor_chunk_coords
+							},
+							_ => false,
+						});
 					let workers_dedicated_to_meshing = 1;
 					if (!blocks_was_generated)
 						&& (!blocks_is_being_generated)
@@ -1405,9 +1361,7 @@ pub fn run() {
 						// Asking a worker for the generation of chunk blocks
 						let chunk_coords = neighbor_chunk_coords;
 						let (sender, receiver) = std::sync::mpsc::channel();
-						game
-							.worker_tasks
-							.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
+						game.worker_tasks.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
 						let chunk_generator = Arc::clone(&game.world_generator);
 						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 						let block_type_table = Arc::clone(&game.block_type_table);
@@ -1433,16 +1387,14 @@ pub fn run() {
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
 					.map(|x| x.round() as i32);
-				let player_chunk_coords = game
-					.cd
-					.world_coords_to_containing_chunk_coords(player_block_coords);
+				let player_chunk_coords =
+					game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
 
 				let unloading_distance = game.loading_distance + game.margin_before_unloading;
 				let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
 				for chunk_coords in chunk_coords_list.into_iter() {
-					let dist_in_chunks = chunk_coords
-						.map(|x| x as f32)
-						.distance(player_chunk_coords.map(|x| x as f32));
+					let dist_in_chunks =
+						chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
 					if dist_in_chunks > unloading_distance_in_chunks {
 						// TODO: Save blocks to database on disk or something.
 						game.chunk_grid.map.remove(&chunk_coords);
@@ -1458,11 +1410,9 @@ pub fn run() {
 					+ if game.walking_leftward { -1 } else { 0 };
 				let walking_forward_direction =
 					game.camera_direction.to_horizontal().to_vec3() * walking_forward_factor as f32;
-				let walking_rightward_direction = game
-					.camera_direction
-					.to_horizontal()
-					.add_to_horizontal_angle(-TAU / 4.0)
-					.to_vec3() * walking_rightward_factor as f32;
+				let walking_rightward_direction =
+					game.camera_direction.to_horizontal().add_to_horizontal_angle(-TAU / 4.0).to_vec3()
+						* walking_rightward_factor as f32;
 				let walking_vector_direction = walking_forward_direction + walking_rightward_direction;
 				(if walking_vector_direction.magnitude() == 0.0 {
 					walking_vector_direction
@@ -1589,10 +1539,8 @@ pub fn run() {
 					} else if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonVeryFar) {
 						camera_position -= camera_direction_vector * 200.0;
 					}
-					let camera_up_vector = game
-						.camera_direction
-						.add_to_vertical_angle(-TAU / 4.0)
-						.to_vec3();
+					let camera_up_vector =
+						game.camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
 					let camera_view_projection_matrix = game.camera_settings.view_projection_matrix(
 						camera_position,
 						camera_direction_vector,
@@ -1629,11 +1577,9 @@ pub fn run() {
 				interface_meshes_vertices.simple_line_vertices,
 			);
 
-			let mut encoder = game
-				.device
-				.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-					label: Some("Render Encoder"),
-				});
+			let mut encoder = game.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+				label: Some("Render Encoder"),
+			});
 
 			// Render pass to generate the shadow map.
 			{
@@ -1661,9 +1607,8 @@ pub fn run() {
 			// Render pass to render the skybox to the screen.
 			let window_texture = game.window_surface.get_current_texture().unwrap();
 			{
-				let window_texture_view = window_texture
-					.texture
-					.create_view(&wgpu::TextureViewDescriptor::default());
+				let window_texture_view =
+					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("Render Pass to render the skybox"),
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1694,9 +1639,8 @@ pub fn run() {
 
 			// Render pass to render the world to the screen.
 			{
-				let window_texture_view = window_texture
-					.texture
-					.create_view(&wgpu::TextureViewDescriptor::default());
+				let window_texture_view =
+					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("Render Pass to render the world"),
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1756,9 +1700,8 @@ pub fn run() {
 
 			// Render pass to draw the interface.
 			{
-				let window_texture_view = window_texture
-					.texture
-					.create_view(&wgpu::TextureViewDescriptor::default());
+				let window_texture_view =
+					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("Render Pass to render the interface"),
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
