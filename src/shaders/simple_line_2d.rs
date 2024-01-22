@@ -1,5 +1,4 @@
 use super::simple_line::SimpleLineVertexPod;
-use crate::rendering::BindingResourceable;
 pub(crate) use crate::BindingThingy;
 
 pub struct BindingThingies<'a> {
@@ -15,37 +14,18 @@ pub fn render_pipeline(
 	let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-		],
+		attributes: &SimpleLineVertexPod::vertex_attributes(),
 	};
 
+	use wgpu::ShaderStages as S;
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Simple Line 2D Shader Bind Group Layout"),
-		entries: &[binding_thingies
-			.aspect_ratio_thingy
-			.binding_type
-			.layout_entry(0, wgpu::ShaderStages::VERTEX)],
+		entries: &[binding_thingies.aspect_ratio_thingy.layout_entry(0, S::VERTEX)],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Simple Line 2D Shader Bind Group"),
 		layout: &bind_group_layout,
-		entries: &[wgpu::BindGroupEntry {
-			binding: 0,
-			resource: binding_thingies
-				.aspect_ratio_thingy
-				.resource
-				.as_binding_resource(),
-		}],
+		entries: &[binding_thingies.aspect_ratio_thingy.bind_group_entry(0)],
 	});
 
 	let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

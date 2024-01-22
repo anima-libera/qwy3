@@ -1,4 +1,5 @@
-use crate::rendering::BindingResourceable;
+use wgpu::vertex_attr_array;
+
 pub(crate) use crate::BindingThingy;
 
 /// Vertex type used in meshes for display of interface 2D textures.
@@ -10,6 +11,15 @@ pub struct SimpleTextureVertexPod {
 	pub position: [f32; 3],
 	pub coords_in_atlas: [f32; 2],
 	pub color_factor: [f32; 3],
+}
+impl SimpleTextureVertexPod {
+	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 3] {
+		vertex_attr_array![
+			0 => Float32x3,
+			1 => Float32x2,
+			2 => Float32x3,
+		]
+	}
 }
 
 pub struct BindingThingies<'a> {
@@ -27,67 +37,25 @@ pub fn render_pipeline(
 	let simple_texture_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SimpleTextureVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x2,
-			},
-			wgpu::VertexAttribute {
-				offset: std::mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
-				shader_location: 2,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-		],
+		attributes: &SimpleTextureVertexPod::vertex_attributes(),
 	};
 
+	use wgpu::ShaderStages as S;
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Simple Texture 2D Shader Bind Group Layout"),
 		entries: &[
-			binding_thingies
-				.aspect_ratio_thingy
-				.binding_type
-				.layout_entry(0, wgpu::ShaderStages::VERTEX),
-			binding_thingies
-				.atlas_texture_view_thingy
-				.binding_type
-				.layout_entry(1, wgpu::ShaderStages::FRAGMENT),
-			binding_thingies
-				.atlas_texture_sampler_thingy
-				.binding_type
-				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies.aspect_ratio_thingy.layout_entry(0, S::VERTEX),
+			binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
+			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Simple Texture 2D Shader Bind Group"),
 		layout: &bind_group_layout,
 		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: binding_thingies
-					.aspect_ratio_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: binding_thingies
-					.atlas_texture_view_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 2,
-				resource: binding_thingies
-					.atlas_texture_sampler_thingy
-					.resource
-					.as_binding_resource(),
-			},
+			binding_thingies.aspect_ratio_thingy.bind_group_entry(0),
+			binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
+			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
 		],
 	});
 

@@ -1,5 +1,4 @@
 use super::block::BlockVertexPod;
-use crate::BindingResourceable;
 pub(crate) use crate::BindingThingy;
 
 pub struct BindingThingies<'a> {
@@ -16,72 +15,25 @@ pub fn render_pipeline_and_bind_group(
 	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<f32>() * 3) as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x2,
-			},
-			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<f32>() * 5) as wgpu::BufferAddress,
-				shader_location: 2,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<f32>() * 8) as wgpu::BufferAddress,
-				shader_location: 3,
-				format: wgpu::VertexFormat::Float32,
-			},
-		],
+		attributes: &BlockVertexPod::vertex_attributes(),
 	};
 
+	use wgpu::ShaderStages as S;
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Block Shadow Shader Bind Group Layout"),
 		entries: &[
-			binding_thingies
-				.sun_camera_matrix_thingy
-				.binding_type
-				.layout_entry(0, wgpu::ShaderStages::VERTEX),
-			binding_thingies
-				.atlas_texture_view_thingy
-				.binding_type
-				.layout_entry(1, wgpu::ShaderStages::FRAGMENT),
-			binding_thingies
-				.atlas_texture_sampler_thingy
-				.binding_type
-				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies.sun_camera_matrix_thingy.layout_entry(0, S::VERTEX),
+			binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
+			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Block Shadow Shader Bind Group"),
 		layout: &bind_group_layout,
 		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: binding_thingies
-					.sun_camera_matrix_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: binding_thingies
-					.atlas_texture_view_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 2,
-				resource: binding_thingies
-					.atlas_texture_sampler_thingy
-					.resource
-					.as_binding_resource(),
-			},
+			binding_thingies.sun_camera_matrix_thingy.bind_group_entry(0),
+			binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
+			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
 		],
 	});
 

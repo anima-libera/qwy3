@@ -22,20 +22,21 @@ impl BindingType {
 	}
 }
 
-pub trait BindingResourceable {
+/// Can be a `wgpu::BindingResource`.
+pub trait AsBindingResource {
 	fn as_binding_resource(&self) -> wgpu::BindingResource;
 }
-impl BindingResourceable for wgpu::Buffer {
+impl AsBindingResource for wgpu::Buffer {
 	fn as_binding_resource(&self) -> wgpu::BindingResource {
 		self.as_entire_binding()
 	}
 }
-impl BindingResourceable for wgpu::TextureView {
+impl AsBindingResource for wgpu::TextureView {
 	fn as_binding_resource(&self) -> wgpu::BindingResource {
 		wgpu::BindingResource::TextureView(self)
 	}
 }
-impl BindingResourceable for wgpu::Sampler {
+impl AsBindingResource for wgpu::Sampler {
 	fn as_binding_resource(&self) -> wgpu::BindingResource {
 		wgpu::BindingResource::Sampler(self)
 	}
@@ -43,9 +44,23 @@ impl BindingResourceable for wgpu::Sampler {
 
 /// Resource and associated information required for creations of both
 /// a `wgpu::BindGroupLayoutEntry` and a `wgpu::BindGroupEntry`.
-pub struct BindingThingy<T: BindingResourceable> {
+pub struct BindingThingy<T: AsBindingResource> {
 	pub binding_type: BindingType,
 	pub resource: T,
+}
+
+impl<T: AsBindingResource> BindingThingy<T> {
+	pub fn layout_entry(
+		&self,
+		binding: u32,
+		visibility: wgpu::ShaderStages,
+	) -> wgpu::BindGroupLayoutEntry {
+		self.binding_type.layout_entry(binding, visibility)
+	}
+
+	pub fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
+		wgpu::BindGroupEntry { binding, resource: self.resource.as_binding_resource() }
+	}
 }
 
 pub fn make_z_buffer_texture_view(

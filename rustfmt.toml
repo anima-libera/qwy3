@@ -13,3 +13,5 @@ struct_lit_width = 65
 struct_lit_single_line = true
 struct_variant_width = 50
 wrap_comments = true
+chain_width = 100
+error_on_unformatted = true

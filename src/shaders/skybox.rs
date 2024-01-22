@@ -1,4 +1,5 @@
-use crate::BindingResourceable;
+use wgpu::vertex_attr_array;
+
 pub(crate) use crate::BindingThingy;
 
 /// Vertex type used in chunk block meshes.
@@ -12,6 +13,14 @@ pub struct SkyboxVertexPod {
 	/// This is how `Cube`-dimensional cubemap textures are sampled.
 	/// See https://www.w3.org/TR/WGSL/#texture-dimensionality and related notions for more.
 	pub coords_in_skybox_cubemap: [f32; 3],
+}
+impl SkyboxVertexPod {
+	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 2] {
+		vertex_attr_array![
+			0 => Float32x3,
+			1 => Float32x3,
+		]
+	}
 }
 
 pub struct BindingThingies<'a> {
@@ -28,62 +37,25 @@ pub fn render_pipeline_and_bind_group(
 	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SkyboxVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
-		attributes: &[
-			wgpu::VertexAttribute {
-				offset: 0,
-				shader_location: 0,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-			wgpu::VertexAttribute {
-				offset: (std::mem::size_of::<f32>() * 3) as wgpu::BufferAddress,
-				shader_location: 1,
-				format: wgpu::VertexFormat::Float32x3,
-			},
-		],
+		attributes: &SkyboxVertexPod::vertex_attributes(),
 	};
 
+	use wgpu::ShaderStages as S;
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Skybox Shader Bind Group Layout"),
 		entries: &[
-			binding_thingies
-				.camera_matrix_thingy
-				.binding_type
-				.layout_entry(0, wgpu::ShaderStages::VERTEX),
-			binding_thingies
-				.skybox_cubemap_texture_view_thingy
-				.binding_type
-				.layout_entry(1, wgpu::ShaderStages::FRAGMENT),
-			binding_thingies
-				.skybox_cubemap_texture_sampler_thingy
-				.binding_type
-				.layout_entry(2, wgpu::ShaderStages::FRAGMENT),
+			binding_thingies.camera_matrix_thingy.layout_entry(0, S::VERTEX),
+			binding_thingies.skybox_cubemap_texture_view_thingy.layout_entry(1, S::FRAGMENT),
+			binding_thingies.skybox_cubemap_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
 		label: Some("Skybox Shader Bind Group"),
 		layout: &bind_group_layout,
 		entries: &[
-			wgpu::BindGroupEntry {
-				binding: 0,
-				resource: binding_thingies
-					.camera_matrix_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 1,
-				resource: binding_thingies
-					.skybox_cubemap_texture_view_thingy
-					.resource
-					.as_binding_resource(),
-			},
-			wgpu::BindGroupEntry {
-				binding: 2,
-				resource: binding_thingies
-					.skybox_cubemap_texture_sampler_thingy
-					.resource
-					.as_binding_resource(),
-			},
+			binding_thingies.camera_matrix_thingy.bind_group_entry(0),
+			binding_thingies.skybox_cubemap_texture_view_thingy.bind_group_entry(1),
+			binding_thingies.skybox_cubemap_texture_sampler_thingy.bind_group_entry(2),
 		],
 	});
 
