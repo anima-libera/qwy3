@@ -15,6 +15,13 @@ debug = true
 # Release build but with debug symbols for profiling.
 # perf script -F +pid > jaaj.perf
 
+[profile.super-release]
+inherits = "release"
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+# Maybe faster? Probably a tiny bit faster!
+
 [dependencies]
 bitvec = "1.0.1"
 bytemuck = { version = "1.13.1", features = [ "derive" ] }
