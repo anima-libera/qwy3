@@ -228,6 +228,8 @@ struct Game {
 	chunk_generation_front: Vec<ChunkCoords>,
 	/// Would be in `chunk_generation_front` if it was not outside the loading radius.
 	chunk_generation_front_too_far: Vec<ChunkCoords>,
+	/// Like `chunk_generation_front` but these are not the priority and can take their time.
+	chunk_generation_front_not_priority: Vec<ChunkCoords>,
 	controls_to_trigger: Vec<ControlEvent>,
 	control_bindings: HashMap<Control, Action>,
 	block_type_table: Arc<BlockTypeTable>,
@@ -517,6 +519,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_generation_front.push(player_chunk_coords);
 	}
 	let chunk_generation_front_too_far = vec![];
+	let chunk_generation_front_not_priority = vec![];
 
 	let enable_world_generation = true;
 
@@ -663,6 +666,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_grid,
 		chunk_generation_front,
 		chunk_generation_front_too_far,
+		chunk_generation_front_not_priority,
 		controls_to_trigger,
 		control_bindings,
 		block_type_table,
@@ -1172,11 +1176,17 @@ pub fn run() {
 							if !chunk_culling_info.all_opaque {
 								// The chunk is not blocking, we want it to propagate the generation front
 								// instead of blocking it.
+								let is_priority = !chunk_culling_info.all_air;
 								for straight_direction in OrientedAxis::all_the_six_possible_directions() {
 									if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
 										let delta = straight_direction.delta();
 										let adjacent_chunk_coords = chunk_coords + delta;
-										game.chunk_generation_front.push(adjacent_chunk_coords);
+										(if is_priority {
+											&mut game.chunk_generation_front
+										} else {
+											&mut game.chunk_generation_front_not_priority
+										})
+										.push(adjacent_chunk_coords);
 									}
 								}
 							}
@@ -1369,6 +1379,16 @@ pub fn run() {
 						game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
 
 					let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
+					let unloading_distance_in_chunks =
+						(game.loading_distance + game.margin_before_unloading) / game.cd.edge as f32;
+
+					if game.chunk_generation_front.is_empty() {
+						game.chunk_generation_front.append(&mut game.chunk_generation_front_not_priority);
+					} else if let Some(front_chunk_coords) =
+						game.chunk_generation_front_not_priority.pop()
+					{
+						game.chunk_generation_front.push(front_chunk_coords);
+					}
 
 					game.chunk_generation_front.retain(|front_chunk_coords| {
 						let too_far = front_chunk_coords
@@ -1381,18 +1401,28 @@ pub fn run() {
 						!too_far
 					});
 
-					if !game.chunk_generation_front_too_far.is_empty() {
-						// Just checking one per frame at random should be enough.
-						let index =
-							rand::thread_rng().gen_range(0..game.chunk_generation_front_too_far.len());
-						let front_chunk_coords = game.chunk_generation_front_too_far[index];
-						let still_too_far = front_chunk_coords
+					game.chunk_generation_front_too_far.retain(|front_chunk_coords| {
+						let way_too_far = front_chunk_coords
 							.map(|x| x as f32)
 							.distance(player_chunk_coords.map(|x| x as f32))
-							> generation_distance_in_chunks;
-						if !still_too_far {
-							game.chunk_generation_front_too_far.remove(index);
-							game.chunk_generation_front.push(front_chunk_coords);
+							> unloading_distance_in_chunks;
+						!way_too_far
+					});
+
+					if !game.chunk_generation_front_too_far.is_empty() {
+						for _ in 0..3 {
+							// Just checking a few per frame at random should be enough.
+							let index =
+								rand::thread_rng().gen_range(0..game.chunk_generation_front_too_far.len());
+							let front_chunk_coords = game.chunk_generation_front_too_far[index];
+							let still_too_far = front_chunk_coords
+								.map(|x| x as f32)
+								.distance(player_chunk_coords.map(|x| x as f32))
+								> generation_distance_in_chunks;
+							if !still_too_far {
+								game.chunk_generation_front_too_far.remove(index);
+								game.chunk_generation_front.push(front_chunk_coords);
+							}
 						}
 					}
 
