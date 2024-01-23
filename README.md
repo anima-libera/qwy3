@@ -1,6 +1,8 @@
 
 # Qwy3
 
+<p align="center"><img src="./pics/name.png" width="25%"/></>
+
 Wanna-be Minecraft-like in Rust using [Wgpu](https://wgpu.rs/), very early stage.
 
 <p align="center"><img src="./pics/pic-02.png" width="95%"/></>
