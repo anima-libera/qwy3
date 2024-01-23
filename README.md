@@ -1,13 +1,15 @@
 
 # Qwy3
 
-<p align="center"><img src="./pics/name.png" width="25%"/></>
+<p align="center"><img src="./pics/name.png" width="25%" alt="Qwy3 name logo kinda"/></>
 
+<p align="center">
 Wanna-be Minecraft-like in Rust using [Wgpu](https://wgpu.rs/), very early stage.
+</p>
 
-<p align="center"><img src="./pics/pic-02.png" width="95%"/></>
+<p align="center"><img src="./pics/pic-02.png" width="95%" alt="Cool screenshot of the game"/></>
 
-<p align="center"><img src="./pics/pic-01.png" width="95%"/></>
+<p align="center"><img src="./pics/pic-01.png" width="95%" alt="Less cool screenshot (older)"/></>
 
 ### Usage
 
