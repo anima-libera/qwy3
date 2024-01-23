@@ -1426,6 +1426,8 @@ pub fn run() {
 						}
 					}
 
+					game.chunk_generation_front.push(player_chunk_coords);
+
 					game.chunk_generation_front.retain(|front_chunk_coords| {
 						let blocks_was_generated = game
 							.chunk_grid
