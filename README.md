@@ -4,7 +4,7 @@
 <p align="center"><img src="./pics/name.png" width="25%" alt="Qwy3 name logo kinda"/></>
 
 <p align="center">
-Wanna-be Minecraft-like in Rust using [Wgpu](https://wgpu.rs/), very early stage.
+Wanna-be Minecraft-like in Rust using <a href="url">Wgpu</a>, very early stage.
 </p>
 
 <p align="center"><img src="./pics/pic-02.png" width="95%" alt="Cool screenshot of the game"/></>
