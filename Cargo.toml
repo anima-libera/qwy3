@@ -1,7 +1,15 @@
 [package]
 name = "qwy3"
-version = "0.1.0"
+description = "Wanna-be Minecraft-like"
+authors = ["Anima <anim.libera@gmail.com>"]
+repository = "https://github.com/anima-libera/qwy3"
+license = "Apache-2.0"
+categories = ["games", "voxel"]
 edition = "2021"
+
+# Not ready for publishing yet.
+version = "0.1.0"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

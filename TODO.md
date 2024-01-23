@@ -109,3 +109,4 @@
 - Profile but with https://github.com/plasma-umass/coz maybe?
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
+- Find a better name? Idk..
