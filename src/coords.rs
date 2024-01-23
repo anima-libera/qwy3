@@ -67,7 +67,7 @@ impl ChunkCoordsSpan {
 
 	/// Iterate over all the blocks (contained in the chunk) that touch the chunk face
 	/// that faces to the given direction.
-	pub fn _iter_block_coords_on_chunk_face(
+	pub fn iter_block_coords_on_chunk_face(
 		self,
 		face_orientation: OrientedAxis,
 	) -> impl Iterator<Item = BlockCoords> {

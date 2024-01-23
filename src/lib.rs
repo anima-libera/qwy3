@@ -93,7 +93,10 @@ enum Action {
 }
 
 enum WorkerTask {
-	GenerateChunkBlocks(ChunkCoords, std::sync::mpsc::Receiver<ChunkBlocks>),
+	GenerateChunkBlocks(
+		ChunkCoords,
+		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo)>,
+	),
 	/// The bool at the end is `meshed_with_all_the_surrounding_chunks`.
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>, bool),
 	/// The counter at the end is the number of faces already finished.
@@ -221,6 +224,8 @@ struct Game {
 	player_phys: AlignedPhysBox,
 	cd: ChunkDimensions,
 	chunk_grid: ChunkGrid,
+	/// Chunk to consider regarding generation.
+	chunk_generation_front: Vec<ChunkCoords>,
 	controls_to_trigger: Vec<ControlEvent>,
 	control_bindings: HashMap<Control, Action>,
 	block_type_table: Arc<BlockTypeTable>,
@@ -500,6 +505,16 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let cd = ChunkDimensions::from(chunk_edge as i32);
 	let chunk_grid = ChunkGrid::new(cd);
 
+	let mut chunk_generation_front = vec![];
+	{
+		let player_block_coords = (player_phys.aligned_box.pos
+			- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
+			.map(|x| x.round() as i32);
+		let player_chunk_coords = cd.world_coords_to_containing_chunk_coords(player_block_coords);
+
+		chunk_generation_front.push(player_chunk_coords);
+	}
+
 	let enable_world_generation = true;
 
 	let mut worker_tasks = vec![];
@@ -643,6 +658,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		player_phys,
 		cd,
 		chunk_grid,
+		chunk_generation_front,
 		controls_to_trigger,
 		control_bindings,
 		block_type_table,
@@ -1127,12 +1143,18 @@ pub fn run() {
 				let is_not_done_yet = match worker_task {
 					WorkerTask::GenerateChunkBlocks(chunk_coords, receiver) => {
 						let chunk_coords_and_result_opt =
-							receiver.try_recv().ok().map(|chunk_blocks| (*chunk_coords, chunk_blocks));
+							receiver.try_recv().ok().map(|(chunk_blocks, chunk_culling_info)| {
+								(*chunk_coords, chunk_blocks, chunk_culling_info)
+							});
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
-						if let Some((chunk_coords, chunk_blocks)) = chunk_coords_and_result_opt {
+						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
+							chunk_coords_and_result_opt
+						{
 							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 							let mut chunk = Chunk::new_empty(coords_span);
+
 							chunk.blocks = Some(chunk_blocks);
+							chunk.culling_info = Some(chunk_culling_info.clone());
 							game.chunk_grid.map.insert(chunk_coords, chunk);
 
 							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
@@ -1140,6 +1162,18 @@ pub fn run() {
 									game.chunk_grid.map.get_mut(&neighbor_chunk_coords)
 								{
 									neighbor_chunk.remeshing_required = true;
+								}
+							}
+
+							if !chunk_culling_info.all_opaque {
+								// The chunk is not blocking, we want it to propagate the generation front
+								// instead of blocking it.
+								for straight_direction in OrientedAxis::all_the_six_possible_directions() {
+									if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
+										let delta = straight_direction.delta();
+										let adjacent_chunk_coords = chunk_coords + delta;
+										game.chunk_generation_front.push(adjacent_chunk_coords);
+									}
 								}
 							}
 						}
@@ -1287,6 +1321,7 @@ pub fn run() {
 				}
 			}
 
+			// Handle fog adjustment.
 			if let Some(distance) = closest_unmeshed_chunk_distance {
 				let delta = distance - game.fog_inf_sup_radiuses.1;
 				let delta_normalized = if delta < 0.0 {
@@ -1316,68 +1351,162 @@ pub fn run() {
 
 			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
 			if game.enable_world_generation {
-				let player_block_coords = (game.player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::unit_z()
-						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
-					.map(|x| x.round() as i32);
-				let player_chunk_coords =
-					game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
+				let workers_dedicated_to_meshing = 1;
+				let available_workers_to_generate = (game.pool.number_of_workers()
+					- workers_dedicated_to_meshing)
+					.saturating_sub(game.worker_tasks.len());
 
-				let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
-				let generation_distance_in_chunks_up = generation_distance_in_chunks.ceil() as i32;
+				if available_workers_to_generate >= 1 {
+					let player_block_coords = (game.player_phys.aligned_box.pos
+						- cgmath::Vector3::<f32>::unit_z()
+							* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+						.map(|x| x.round() as i32);
+					let player_chunk_coords =
+						game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
 
-				let mut neighbor_chunk_coords_array: Vec<_> =
-					iter_3d_cube_center_radius(player_chunk_coords, generation_distance_in_chunks_up)
-						.filter(|chunk_coords| {
-							chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32))
-								<= generation_distance_in_chunks
-						})
-						.collect();
-				// No early optimizations! This is an (in)valid excuse to not optimize this!
-				neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
-					(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
-						* 10.0) as u64
-				});
+					let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
+					//let generation_distance_in_chunks_up = generation_distance_in_chunks.ceil() as i32;
 
-				for neighbor_chunk_coords in neighbor_chunk_coords_array.into_iter() {
-					let blocks_was_generated = game
-						.chunk_grid
-						.map
-						.get(&neighbor_chunk_coords)
-						.is_some_and(|chunk| chunk.blocks.is_some());
-					let blocks_is_being_generated =
-						game.worker_tasks.iter().any(|worker_task| match worker_task {
-							WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-								*chunk_coords == neighbor_chunk_coords
-							},
-							_ => false,
-						});
-					let workers_dedicated_to_meshing = 1;
-					if (!blocks_was_generated)
-						&& (!blocks_is_being_generated)
-						&& game.worker_tasks.len()
-							< (game.pool.number_of_workers() - workers_dedicated_to_meshing)
-					{
-						// Asking a worker for the generation of chunk blocks
-						let chunk_coords = neighbor_chunk_coords;
-						let (sender, receiver) = std::sync::mpsc::channel();
-						game.worker_tasks.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
-						let chunk_generator = Arc::clone(&game.world_generator);
-						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-						let block_type_table = Arc::clone(&game.block_type_table);
-						game.pool.enqueue_task(Box::new(move || {
-							// TODO: Remove the sleeping!
-							// Test delay to make sure that the main thread keeps working even
-							// when the workers tasks take very long.
-							//std::thread::sleep(std::time::Duration::from_secs_f32(
-							//	rand::thread_rng().gen_range(0.1..0.3),
-							//));
+					game.chunk_generation_front.retain(|front_chunk_coords| {
+						front_chunk_coords
+							.map(|x| x as f32)
+							.distance(player_chunk_coords.map(|x| x as f32))
+							<= generation_distance_in_chunks
+					});
 
-							let chunk_blocks =
-								chunk_generator.generate_chunk_blocks(coords_span, block_type_table);
-							let _ = sender.send(chunk_blocks);
-						}));
+					game.chunk_generation_front.retain(|front_chunk_coords| {
+						let blocks_was_generated = game
+							.chunk_grid
+							.map
+							.get(front_chunk_coords)
+							.is_some_and(|chunk| chunk.blocks.is_some());
+						let blocks_is_being_generated =
+							game.worker_tasks.iter().any(|worker_task| match worker_task {
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+									chunk_coords == front_chunk_coords
+								},
+								_ => false,
+							});
+						(!blocks_was_generated) && (!blocks_is_being_generated)
+					});
+
+					// Sort to put closer chunks at the end.
+					game.chunk_generation_front.sort_unstable_by_key(|chunk_coords| {
+						-(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
+							* 10.0) as i64
+					});
+
+					let mut slot_count = available_workers_to_generate;
+					while slot_count >= 1 {
+						let considered_chunk_coords = game.chunk_generation_front.pop();
+						let considered_chunk_coords = match considered_chunk_coords {
+							Some(chunk_coords) => chunk_coords,
+							None => break,
+						};
+
+						let blocks_was_generated = game
+							.chunk_grid
+							.map
+							.get(&considered_chunk_coords)
+							.is_some_and(|chunk| chunk.blocks.is_some());
+						let blocks_is_being_generated =
+							game.worker_tasks.iter().any(|worker_task| match worker_task {
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+									*chunk_coords == considered_chunk_coords
+								},
+								_ => false,
+							});
+
+						if (!blocks_was_generated) && (!blocks_is_being_generated) {
+							slot_count -= 1;
+
+							// Asking a worker for the generation of chunk blocks.
+							let chunk_coords = considered_chunk_coords;
+							let (sender, receiver) = std::sync::mpsc::channel();
+							game
+								.worker_tasks
+								.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
+							let chunk_generator = Arc::clone(&game.world_generator);
+							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+							let block_type_table = Arc::clone(&game.block_type_table);
+							game.pool.enqueue_task(Box::new(move || {
+								// TODO: Remove the sleeping!
+								// Test delay to make sure that the main thread keeps working even
+								// when the workers tasks take very long.
+								//std::thread::sleep(std::time::Duration::from_secs_f32(
+								//	rand::thread_rng().gen_range(0.1..0.3),
+								//));
+
+								let chunk_blocks = chunk_generator
+									.generate_chunk_blocks(coords_span, Arc::clone(&block_type_table));
+								let chunk_culling_info =
+									ChunkCullingInfo::compute_from_blocks(&chunk_blocks, block_type_table);
+								let _ = sender.send((chunk_blocks, chunk_culling_info));
+							}));
+						}
 					}
+
+					/*
+					let mut neighbor_chunk_coords_array: Vec<_> =
+						iter_3d_cube_center_radius(player_chunk_coords, generation_distance_in_chunks_up)
+							.filter(|chunk_coords| {
+								chunk_coords
+									.map(|x| x as f32)
+									.distance(player_chunk_coords.map(|x| x as f32))
+									<= generation_distance_in_chunks
+							})
+							.collect();
+					// No early optimizations! This is an (in)valid excuse to not optimize this!
+					neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
+						(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
+							* 10.0) as u64
+					});
+
+					for neighbor_chunk_coords in neighbor_chunk_coords_array.into_iter() {
+						let blocks_was_generated = game
+							.chunk_grid
+							.map
+							.get(&neighbor_chunk_coords)
+							.is_some_and(|chunk| chunk.blocks.is_some());
+						let blocks_is_being_generated =
+							game.worker_tasks.iter().any(|worker_task| match worker_task {
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+									*chunk_coords == neighbor_chunk_coords
+								},
+								_ => false,
+							});
+
+						if (!blocks_was_generated)
+							&& (!blocks_is_being_generated)
+							&& game.worker_tasks.len()
+								< (game.pool.number_of_workers() - workers_dedicated_to_meshing)
+						{
+							// Asking a worker for the generation of chunk blocks
+							let chunk_coords = neighbor_chunk_coords;
+							let (sender, receiver) = std::sync::mpsc::channel();
+							game
+								.worker_tasks
+								.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
+							let chunk_generator = Arc::clone(&game.world_generator);
+							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+							let block_type_table = Arc::clone(&game.block_type_table);
+							game.pool.enqueue_task(Box::new(move || {
+								// TODO: Remove the sleeping!
+								// Test delay to make sure that the main thread keeps working even
+								// when the workers tasks take very long.
+								//std::thread::sleep(std::time::Duration::from_secs_f32(
+								//	rand::thread_rng().gen_range(0.1..0.3),
+								//));
+
+								let chunk_blocks = chunk_generator
+									.generate_chunk_blocks(coords_span, Arc::clone(&block_type_table));
+								let chunk_culling_info =
+									ChunkCullingInfo::compute_from_blocks(&chunk_blocks, block_type_table);
+								let _ = sender.send((chunk_blocks, chunk_culling_info));
+							}));
+						}
+					}
+					*/
 				}
 			}
 

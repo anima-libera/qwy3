@@ -576,12 +576,69 @@ fn generate_xshaped_block_face_mesh(
 	}
 }
 
+/// Information that can be used to decide if some chunks should not be loaded or be unloaded.
+#[derive(Clone)]
+pub struct ChunkCullingInfo {
+	pub all_air: bool,
+	pub all_opaque: bool,
+	pub all_opaque_faces: Vec<OrientedAxis>,
+}
+
+impl ChunkCullingInfo {
+	pub fn compute_from_blocks(
+		blocks: &ChunkBlocks,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkCullingInfo {
+		let mut all_air = true;
+		let mut all_opaque = true;
+		for block_type_id in blocks.blocks.iter().copied() {
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_air() {
+				all_air = false;
+			}
+			if !block_type.is_opaque() {
+				all_opaque = false;
+			}
+			if (!all_air) && (!all_opaque) {
+				break;
+			}
+		}
+
+		let mut all_opaque_faces = vec![];
+		for face in OrientedAxis::all_the_six_possible_directions() {
+			if ChunkCullingInfo::face_is_all_opaque(face, blocks, &block_type_table) {
+				all_opaque_faces.push(face);
+			}
+		}
+
+		ChunkCullingInfo { all_air, all_opaque, all_opaque_faces }
+	}
+
+	fn face_is_all_opaque(
+		face: OrientedAxis,
+		blocks: &ChunkBlocks,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> bool {
+		let mut all_opaque = true;
+		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
+			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_opaque() {
+				all_opaque = false;
+				break;
+			}
+		}
+		all_opaque
+	}
+}
+
 pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
 	pub remeshing_required: bool,
 	pub meshed_with_all_the_surrounding_chunks: bool,
 	pub mesh: Option<ChunkMesh>,
+	pub culling_info: Option<ChunkCullingInfo>,
 }
 
 impl Chunk {
@@ -592,6 +649,7 @@ impl Chunk {
 			remeshing_required: false,
 			meshed_with_all_the_surrounding_chunks: false,
 			mesh: None,
+			culling_info: None,
 		}
 	}
 }
@@ -628,13 +686,13 @@ impl ChunkGrid {
 	) {
 		self.set_block_but_do_not_update_meshes(coords, block);
 
+		// Request a mesh update in all the chunks that the block touches.
 		let mut chunk_coords_to_update = vec![];
 		for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 			let neighbor_coords = coords + delta.to_vec();
 			let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(neighbor_coords);
 			chunk_coords_to_update.push(chunk_coords);
 		}
-
 		for chunk_coords in chunk_coords_to_update {
 			if let Some(chunk) = self.map.get_mut(&chunk_coords) {
 				chunk.remeshing_required = true;
