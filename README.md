@@ -25,6 +25,7 @@ Advice:
 - Try out the various world generators available (`--gen-names` to display the list).
 - Try removing `--no-fog` to get a fog transparency effect (cool, but reduces the rendred area a bit, and uh it kinda hides how fast the world generation is).
 - Read `controls.qwy3_controls` to get a list of controls and see what can be done once the game run.
+- Some useful default controls: WASD to move, P to toggle physics (fly) and mouse wheel to go up and down, U to toggle the interface, K to let the mouse escape, left/right click to remove/place blocks.
 
 ### Implemented features
 
