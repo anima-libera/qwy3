@@ -1366,6 +1366,9 @@ pub fn run() {
 					if !game.chunk_generation_front_too_far.is_empty() {
 						for _ in 0..3 {
 							// Just checking a few per frame at random should be enough.
+							if game.chunk_generation_front_too_far.is_empty() {
+								break;
+							}
 							let index =
 								rand::thread_rng().gen_range(0..game.chunk_generation_front_too_far.len());
 							let front_chunk_coords = game.chunk_generation_front_too_far[index];
