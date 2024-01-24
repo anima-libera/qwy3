@@ -16,14 +16,13 @@ Wanna-be Minecraft-like in Rust using <a href="url">Wgpu</a>, very early stage.
 ### Usage
 
 Examples:
-- `cargo run --release -- --threads 8 --gen-dist 210 --gen structures-links-smooth --no-fog`
-- `cargo run --release -- --threads 4 --gen-dist 300 --gen default --seed 3 --no-fog --chunk-edge 50`
+- `cargo run --release -- --threads 8 --gen-dist 210 --gen structures-links-smooth`
+- `cargo run --release -- --threads 4 --gen-dist 300 --gen default --seed 3 --chunk-edge 50`
 
 Advice:
 - Up the number of `--threads` the game shall use to almost the number of virtual cores of the hardware.
 - Experiment with the `--chunk-edge` parameter to see how it impacts the performance while allowing to load larger areas by upping `--gen-dist`.
 - Try out the various world generators available (`--gen-names` to display the list).
-- Try removing `--no-fog` to get a fog transparency effect (cool, but reduces the rendred area a bit, and uh it kinda hides how fast the world generation is).
 - Read `controls.qwy3_controls` to get a list of controls and see what can be done once the game run.
 - Some useful default controls: WASD to move, P to toggle physics (fly) and mouse wheel to go up and down, U to toggle the interface, K to let the mouse escape, left/right click to remove/place blocks.
 
