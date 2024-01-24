@@ -636,7 +636,6 @@ pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
 	pub remeshing_required: bool,
-	pub meshed_with_all_the_surrounding_chunks: bool,
 	pub mesh: Option<ChunkMesh>,
 	pub culling_info: Option<ChunkCullingInfo>,
 }
@@ -647,7 +646,6 @@ impl Chunk {
 			_coords_span: coords_span,
 			blocks: None,
 			remeshing_required: false,
-			meshed_with_all_the_surrounding_chunks: false,
 			mesh: None,
 			culling_info: None,
 		}
