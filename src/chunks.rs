@@ -585,6 +585,7 @@ pub struct ChunkCullingInfo {
 	pub all_air: bool,
 	pub all_opaque: bool,
 	pub all_opaque_faces: Vec<OrientedAxis>,
+	pub all_air_faces: Vec<OrientedAxis>,
 }
 
 impl ChunkCullingInfo {
@@ -614,7 +615,14 @@ impl ChunkCullingInfo {
 			}
 		}
 
-		ChunkCullingInfo { all_air, all_opaque, all_opaque_faces }
+		let mut all_air_faces = vec![];
+		for face in OrientedAxis::all_the_six_possible_directions() {
+			if ChunkCullingInfo::face_is_all_air(face, blocks, &block_type_table) {
+				all_air_faces.push(face);
+			}
+		}
+
+		ChunkCullingInfo { all_air, all_opaque, all_opaque_faces, all_air_faces }
 	}
 
 	fn face_is_all_opaque(
@@ -632,6 +640,23 @@ impl ChunkCullingInfo {
 			}
 		}
 		all_opaque
+	}
+
+	fn face_is_all_air(
+		face: OrientedAxis,
+		blocks: &ChunkBlocks,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> bool {
+		let mut all_air = true;
+		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
+			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_air() {
+				all_air = false;
+				break;
+			}
+		}
+		all_air
 	}
 }
 

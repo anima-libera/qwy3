@@ -1157,21 +1157,18 @@ pub fn run() {
 								}
 							}
 
-							if !chunk_culling_info.all_opaque {
-								// The chunk is not blocking, we want it to propagate the generation front
-								// instead of blocking it.
-								let is_priority = !chunk_culling_info.all_air;
-								for straight_direction in OrientedAxis::all_the_six_possible_directions() {
-									if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
-										let delta = straight_direction.delta();
-										let adjacent_chunk_coords = chunk_coords + delta;
-										(if is_priority {
-											&mut game.chunk_generation_front
-										} else {
-											&mut game.chunk_generation_front_not_priority
-										})
-										.push(adjacent_chunk_coords);
-									}
+							for straight_direction in OrientedAxis::all_the_six_possible_directions() {
+								if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
+									let delta = straight_direction.delta();
+									let adjacent_chunk_coords = chunk_coords + delta;
+									let is_priority =
+										!chunk_culling_info.all_air_faces.contains(&straight_direction);
+									(if is_priority {
+										&mut game.chunk_generation_front
+									} else {
+										&mut game.chunk_generation_front_not_priority
+									})
+									.push(adjacent_chunk_coords);
 								}
 							}
 						}
