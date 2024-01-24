@@ -1251,9 +1251,15 @@ pub fn run() {
 					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 					let opaqueness_layer = game.chunk_grid.get_opaqueness_layer_around_chunk(
 						chunk_coords,
-						false,
+						true,
 						Arc::clone(&game.block_type_table),
 					);
+					let opaqueness_layer_for_ambiant_occlusion =
+						game.chunk_grid.get_opaqueness_layer_around_chunk(
+							chunk_coords,
+							false,
+							Arc::clone(&game.block_type_table),
+						);
 					let chunk_blocks = game
 						.chunk_grid
 						.map
@@ -1274,6 +1280,7 @@ pub fn run() {
 
 						let mut mesh = chunk_blocks.generate_mesh_given_surrounding_opaqueness(
 							opaqueness_layer,
+							opaqueness_layer_for_ambiant_occlusion,
 							block_type_table,
 						);
 						mesh.update_gpu_data(&device);

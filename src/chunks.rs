@@ -190,15 +190,16 @@ impl ChunkBlocks {
 	pub(crate) fn generate_mesh_given_surrounding_opaqueness(
 		&self,
 		mut opaqueness_layer: OpaquenessLayerAroundChunk,
+		mut opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkMesh {
-		let mut is_opaque = |coords: BlockCoords| {
+		let mut is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
 			if let Some(block_id) = self.get(coords) {
 				block_type_table.get(block_id).unwrap().is_opaque()
-			} else if let Some(opaque) = opaqueness_layer.get(coords) {
-				opaque
+			} else if for_ambiant_occlusion {
+				opaqueness_layer_for_ambiant_occlusion.get(coords).unwrap()
 			} else {
-				unreachable!()
+				opaqueness_layer.get(coords).unwrap()
 			}
 		};
 
@@ -208,36 +209,36 @@ impl ChunkBlocks {
 			match block_type_table.get(block_id).unwrap() {
 				BlockType::Air => {},
 				BlockType::Solid { texture_coords_on_atlas } => {
-					let opacity_bit_cube_3 = {
+					let opacity_bit_cube_3_for_ambiant_occlusion = {
 						let mut cube = BitCube3::new_zero();
 						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 							let neighbor_coords = coords + delta.to_vec();
-							cube.set(delta.into(), is_opaque(neighbor_coords));
+							cube.set(delta.into(), is_opaque(neighbor_coords, true));
 						}
 						cube
 					};
 					for direction in OrientedAxis::all_the_six_possible_directions() {
 						let is_covered_by_neighbor = {
 							let neighbor_coords = coords + direction.delta();
-							is_opaque(neighbor_coords)
+							is_opaque(neighbor_coords, false)
 						};
 						if !is_covered_by_neighbor {
 							generate_block_face_mesh(
 								&mut block_vertices,
 								direction,
 								coords.map(|x| x as f32),
-								opacity_bit_cube_3,
+								opacity_bit_cube_3_for_ambiant_occlusion,
 								*texture_coords_on_atlas,
 							);
 						}
 					}
 				},
 				BlockType::XShaped { texture_coords_on_atlas } => {
-					let opacity_bit_cube_3 = {
+					let opacity_bit_cube_3_for_ambiant_occlusion = {
 						let mut cube = BitCube3::new_zero();
 						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 							let neighbor_coords = coords + delta.to_vec();
-							cube.set(delta.into(), is_opaque(neighbor_coords));
+							cube.set(delta.into(), is_opaque(neighbor_coords, true));
 						}
 						cube
 					};
@@ -250,7 +251,7 @@ impl ChunkBlocks {
 						generate_xshaped_block_face_mesh(
 							&mut block_vertices,
 							coords.map(|x| x as f32),
-							opacity_bit_cube_3,
+							opacity_bit_cube_3_for_ambiant_occlusion,
 							vertices_offets_xy,
 							*texture_coords_on_atlas,
 						);
@@ -296,7 +297,7 @@ fn generate_block_face_mesh(
 	vertices: &mut Vec<BlockVertexPod>,
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
-	neighborhood_opaqueness: BitCube3,
+	neighborhood_opaqueness_for_ambiant_occlusion: BitCube3,
 	texture_coords_on_atlas: cgmath::Point2<i32>,
 ) {
 	// NO EARLY OPTIMIZATION
@@ -382,6 +383,8 @@ fn generate_block_face_mesh(
 		}
 	};
 	let ambiant_occlusion_uwu = |along_a: i32, along_b: i32| {
+		let neighborhood_opaqueness = neighborhood_opaqueness_for_ambiant_occlusion;
+
 		let mut coords: BitCube3Coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
 		coords.set(face_orientation.axis, face_orientation.orientation.sign());
 		coords.set(other_axis_a, along_a);
