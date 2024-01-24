@@ -190,15 +190,16 @@ impl ChunkBlocks {
 	pub(crate) fn generate_mesh_given_surrounding_opaqueness(
 		&self,
 		mut opaqueness_layer: OpaquenessLayerAroundChunk,
+		mut opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkMesh {
-		let mut is_opaque = |coords: BlockCoords| {
+		let mut is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
 			if let Some(block_id) = self.get(coords) {
 				block_type_table.get(block_id).unwrap().is_opaque()
-			} else if let Some(opaque) = opaqueness_layer.get(coords) {
-				opaque
+			} else if for_ambiant_occlusion {
+				opaqueness_layer_for_ambiant_occlusion.get(coords).unwrap()
 			} else {
-				unreachable!()
+				opaqueness_layer.get(coords).unwrap()
 			}
 		};
 
@@ -208,36 +209,36 @@ impl ChunkBlocks {
 			match block_type_table.get(block_id).unwrap() {
 				BlockType::Air => {},
 				BlockType::Solid { texture_coords_on_atlas } => {
-					let opacity_bit_cube_3 = {
+					let opacity_bit_cube_3_for_ambiant_occlusion = {
 						let mut cube = BitCube3::new_zero();
 						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 							let neighbor_coords = coords + delta.to_vec();
-							cube.set(delta.into(), is_opaque(neighbor_coords));
+							cube.set(delta.into(), is_opaque(neighbor_coords, true));
 						}
 						cube
 					};
 					for direction in OrientedAxis::all_the_six_possible_directions() {
 						let is_covered_by_neighbor = {
 							let neighbor_coords = coords + direction.delta();
-							is_opaque(neighbor_coords)
+							is_opaque(neighbor_coords, false)
 						};
 						if !is_covered_by_neighbor {
 							generate_block_face_mesh(
 								&mut block_vertices,
 								direction,
 								coords.map(|x| x as f32),
-								opacity_bit_cube_3,
+								opacity_bit_cube_3_for_ambiant_occlusion,
 								*texture_coords_on_atlas,
 							);
 						}
 					}
 				},
 				BlockType::XShaped { texture_coords_on_atlas } => {
-					let opacity_bit_cube_3 = {
+					let opacity_bit_cube_3_for_ambiant_occlusion = {
 						let mut cube = BitCube3::new_zero();
 						for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 							let neighbor_coords = coords + delta.to_vec();
-							cube.set(delta.into(), is_opaque(neighbor_coords));
+							cube.set(delta.into(), is_opaque(neighbor_coords, true));
 						}
 						cube
 					};
@@ -250,7 +251,7 @@ impl ChunkBlocks {
 						generate_xshaped_block_face_mesh(
 							&mut block_vertices,
 							coords.map(|x| x as f32),
-							opacity_bit_cube_3,
+							opacity_bit_cube_3_for_ambiant_occlusion,
 							vertices_offets_xy,
 							*texture_coords_on_atlas,
 						);
@@ -296,7 +297,7 @@ fn generate_block_face_mesh(
 	vertices: &mut Vec<BlockVertexPod>,
 	face_orientation: OrientedAxis,
 	block_center: cgmath::Point3<f32>,
-	neighborhood_opaqueness: BitCube3,
+	neighborhood_opaqueness_for_ambiant_occlusion: BitCube3,
 	texture_coords_on_atlas: cgmath::Point2<i32>,
 ) {
 	// NO EARLY OPTIMIZATION
@@ -382,6 +383,8 @@ fn generate_block_face_mesh(
 		}
 	};
 	let ambiant_occlusion_uwu = |along_a: i32, along_b: i32| {
+		let neighborhood_opaqueness = neighborhood_opaqueness_for_ambiant_occlusion;
+
 		let mut coords: BitCube3Coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
 		coords.set(face_orientation.axis, face_orientation.orientation.sign());
 		coords.set(other_axis_a, along_a);
@@ -576,12 +579,93 @@ fn generate_xshaped_block_face_mesh(
 	}
 }
 
+/// Information that can be used to decide if some chunks should not be loaded or be unloaded.
+#[derive(Clone)]
+pub struct ChunkCullingInfo {
+	pub all_air: bool,
+	pub all_opaque: bool,
+	pub all_opaque_faces: Vec<OrientedAxis>,
+	pub all_air_faces: Vec<OrientedAxis>,
+}
+
+impl ChunkCullingInfo {
+	pub fn compute_from_blocks(
+		blocks: &ChunkBlocks,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> ChunkCullingInfo {
+		let mut all_air = true;
+		let mut all_opaque = true;
+		for block_type_id in blocks.blocks.iter().copied() {
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_air() {
+				all_air = false;
+			}
+			if !block_type.is_opaque() {
+				all_opaque = false;
+			}
+			if (!all_air) && (!all_opaque) {
+				break;
+			}
+		}
+
+		let mut all_opaque_faces = vec![];
+		for face in OrientedAxis::all_the_six_possible_directions() {
+			if ChunkCullingInfo::face_is_all_opaque(face, blocks, &block_type_table) {
+				all_opaque_faces.push(face);
+			}
+		}
+
+		let mut all_air_faces = vec![];
+		for face in OrientedAxis::all_the_six_possible_directions() {
+			if ChunkCullingInfo::face_is_all_air(face, blocks, &block_type_table) {
+				all_air_faces.push(face);
+			}
+		}
+
+		ChunkCullingInfo { all_air, all_opaque, all_opaque_faces, all_air_faces }
+	}
+
+	fn face_is_all_opaque(
+		face: OrientedAxis,
+		blocks: &ChunkBlocks,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> bool {
+		let mut all_opaque = true;
+		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
+			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_opaque() {
+				all_opaque = false;
+				break;
+			}
+		}
+		all_opaque
+	}
+
+	fn face_is_all_air(
+		face: OrientedAxis,
+		blocks: &ChunkBlocks,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> bool {
+		let mut all_air = true;
+		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
+			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type = block_type_table.get(block_type_id).unwrap();
+			if !block_type.is_air() {
+				all_air = false;
+				break;
+			}
+		}
+		all_air
+	}
+}
+
 pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
 	pub remeshing_required: bool,
-	pub meshed_with_all_the_surrounding_chunks: bool,
 	pub mesh: Option<ChunkMesh>,
+	pub culling_info: Option<ChunkCullingInfo>,
 }
 
 impl Chunk {
@@ -590,8 +674,8 @@ impl Chunk {
 			_coords_span: coords_span,
 			blocks: None,
 			remeshing_required: false,
-			meshed_with_all_the_surrounding_chunks: false,
 			mesh: None,
+			culling_info: None,
 		}
 	}
 }
@@ -612,6 +696,14 @@ impl ChunkGrid {
 			Some(chunk) => {
 				let block_dst = chunk.blocks.as_mut().unwrap().get_mut(coords).unwrap();
 				*block_dst = block;
+
+				// "Clear out" now maybe invalidated culling info.
+				// TODO: Better handling of that!
+				if let Some(culling_info) = &mut chunk.culling_info {
+					culling_info.all_air = false;
+					culling_info.all_opaque = false;
+					culling_info.all_opaque_faces.clear();
+				}
 			},
 			None => {
 				// TODO: Handle this case by storing the fact that a block
@@ -628,13 +720,13 @@ impl ChunkGrid {
 	) {
 		self.set_block_but_do_not_update_meshes(coords, block);
 
+		// Request a mesh update in all the chunks that the block touches.
 		let mut chunk_coords_to_update = vec![];
 		for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
 			let neighbor_coords = coords + delta.to_vec();
 			let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(neighbor_coords);
 			chunk_coords_to_update.push(chunk_coords);
 		}
-
 		for chunk_coords in chunk_coords_to_update {
 			if let Some(chunk) = self.map.get_mut(&chunk_coords) {
 				chunk.remeshing_required = true;
