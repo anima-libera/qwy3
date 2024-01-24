@@ -668,6 +668,14 @@ impl ChunkGrid {
 			Some(chunk) => {
 				let block_dst = chunk.blocks.as_mut().unwrap().get_mut(coords).unwrap();
 				*block_dst = block;
+
+				// "Clear out" now maybe invalidated culling info.
+				// TODO: Better handling of that!
+				if let Some(culling_info) = &mut chunk.culling_info {
+					culling_info.all_air = false;
+					culling_info.all_opaque = false;
+					culling_info.all_opaque_faces.clear();
+				}
 			},
 			None => {
 				// TODO: Handle this case by storing the fact that a block
