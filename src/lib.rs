@@ -90,6 +90,7 @@ enum Action {
 	ToggleDisplayNotSurroundedChunksAsBoxes,
 	ToggleDisplayInterfaceDebugBoxes,
 	ToggleFog,
+	ToggleFullscreen,
 }
 
 enum WorkerTask {
@@ -269,6 +270,7 @@ struct Game {
 	enable_display_interface: bool,
 	enable_display_not_surrounded_chunks_as_boxes: bool,
 	enable_fog: bool,
+	enable_fullscreen: bool,
 }
 
 fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
@@ -294,6 +296,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		display_world_generator_possible_names,
 		loading_distance,
 		chunk_edge,
+		fullscreen,
 		fog,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
@@ -309,11 +312,14 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		std::process::exit(0);
 	}
 
+	let enable_fullscreen = fullscreen;
+
 	let event_loop = winit::event_loop::EventLoop::new();
 	let window = winit::window::WindowBuilder::new()
 		.with_title("Qwy3")
 		.with_maximized(true)
 		.with_resizable(true)
+		.with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
 		.build(&event_loop)
 		.unwrap();
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -704,6 +710,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_display_interface,
 		enable_display_not_surrounded_chunks_as_boxes,
 		enable_fog,
+		enable_fullscreen,
 	};
 	(game, event_loop)
 }
@@ -955,6 +962,14 @@ pub fn run() {
 								&game.fog_inf_sup_radiuses_thingy.resource,
 								0,
 								bytemuck::cast_slice(&[Vector2Pod { values: [inf, sup] }]),
+							);
+						},
+						(Action::ToggleFullscreen, true) => {
+							game.enable_fullscreen = !game.enable_fullscreen;
+							game.window.set_fullscreen(
+								game
+									.enable_fullscreen
+									.then_some(winit::window::Fullscreen::Borderless(None)),
 							);
 						},
 						(_, false) => {},

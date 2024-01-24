@@ -34,6 +34,8 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 						} else {
 							panic!("unknown signle character key name \"{signle_char_key_name}\"")
 						}
+					} else if let Some(f_key_keycode) = try_paring_f_key(key_name) {
+						Control::KeyboardKey(f_key_keycode)
 					} else {
 						match key_name {
 							"up" => Control::KeyboardKey(VirtualKeyCode::Up),
@@ -90,6 +92,7 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					},
 					"toggle_display_interfaces_debug_boxes" => Action::ToggleDisplayInterfaceDebugBoxes,
 					"toggle_fog" => Action::ToggleFog,
+					"toggle_fullscreen" => Action::ToggleFullscreen,
 					"toggle_third_person_view" => {
 						println!(
 							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \
@@ -114,6 +117,22 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 	}
 
 	control_bindings
+}
+
+/// Parsing key names like "F11" to its proper key code.
+fn try_paring_f_key(key_name: &str) -> Option<winit::event::VirtualKeyCode> {
+	let f_number = key_name.strip_prefix('F').or_else(|| key_name.strip_prefix('f'))?;
+	let number: u32 = f_number.parse().ok()?;
+	use winit::event::VirtualKeyCode as K;
+	use Some as S;
+	#[rustfmt::skip]
+	let keycode = match number {
+		1 => S(K::F1), 2 => S(K::F2), 3 => S(K::F3), 4 => S(K::F4),
+		5 => S(K::F5), 6 => S(K::F6), 7 => S(K::F7), 8 => S(K::F8),
+		9 => S(K::F9), 10 => S(K::F10), 11 => S(K::F11), 12 => S(K::F12),
+		_ => None,
+	};
+	keycode
 }
 
 fn letter_to_keycode(letter: char) -> winit::event::VirtualKeyCode {

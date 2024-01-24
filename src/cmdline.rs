@@ -53,6 +53,10 @@ pub struct CommandLineSettings {
 	#[arg(long, default_value_t = 20, value_name = "LENGTH")]
 	pub chunk_edge: u32,
 
+	/// Enables fullscreen from the start.
+	#[arg(long)]
+	pub fullscreen: bool,
+
 	/// Enables the fog from the start.
 	#[arg(long)]
 	pub fog: bool,

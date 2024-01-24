@@ -15,6 +15,7 @@ bind_control key:U toggle_display_interface
 bind_control key:Y toggle_display_not_surrounded_chunks_as_boxes
 bind_control key:N toggle_display_interfaces_debug_boxes
 bind_control key:G toggle_fog
+bind_control key:F11 toggle_fullscreen
 bind_control key:enter open_command_line
 bind_control mouse_button:left remove_block_at_target
 bind_control mouse_button:right place_block_at_target
