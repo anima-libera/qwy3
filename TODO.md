@@ -5,14 +5,9 @@
 
 - Generate textures in an other thread (share the atlas) because it takes too long at the beginning and it is noticeable and annoying.
 - Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up).
-  - No more sorting all the chunks at every frame.
-  - Speed up the hash tables with a faster hash (we do not need the protection against collision attacks).
+  - Minimize iterations over large numbers of chunks at every frame.
   - Have (fast) sets of chunk coords that indicate if it has a mesh, contains entities, etc. Only render the chunks with meshes.
     - Chunks should have a flag that says if it is sunch a set, one for every such set. This is important for when the chunk wants to know maybe to decide to get in/out of a set. The synchronisation of that information would become a concern, encapsulation may be of use here.
-  - Load chunks only if there is a path from the player's chunk to them on non blocking chunks. A blocking chunk is a chunk filled with opaque blocks.
-    - This will disturb the fog. Chunks that are not loaded because of this should be marked as such in a set so that the fog doesn't retract to avoid them.
-    - To be more precise, we can examine each chunk to know which faces can access which faces by walking on non-opaque blocks in the chunk. This will allow for example to not load the chunks just below the surface (this may be a good opportunity to think of a way to detect that the surface chunks should be meshed properly even without the chunks below, if it doesn't happen on its own).
-    - To get crazy with the idea, we could even consider the connected spaces of non-opaque blocks in each chunk, consider which block faces on a chunk face they touch and how they are connected to the other cavities of other chunks. And in which such cavity the player is.
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 
 ## Graphics
@@ -26,6 +21,7 @@
 - Slowly rotating skybox.
 - Smooth transition between skyboxes, like when the better skybox finishes to generate it should fade in instead of replacing the old one in an instant.
 - Procedural sky texture with nice variety.
+- Small stars and stuff like wierd celestial bodies on the skybox.
 - Cascading shadow mapping. Currently there is a single shadow map, but there should be multiple shadow maps corresponding to bigger and bigger areas so that shadows can be rendered even for far away stuff but without using as much resolution as for shadows close to the player.
 - Sun. It could look like a 4-branch star in the style of star effects in Kill la Kill.
 - God rays effect when looking at sun. I recall it can be done by rendering just the sun in white and all the world in black and doing some motion blur on the result, maybe?
@@ -34,10 +30,12 @@
 ## UI
 
 - Maybe introduce type aliases to better label weather we are after or before the correction by `2.0/window_with`.
+- Better and more general loading bar widget.
 
 ## Controls
 
 - Add controler support.
+- Add customization of some controls not currently customizable, such as the mouse wheel (both vertical and horizontal) or the escape key.
 
 ## Binary command line interface
 
@@ -110,4 +108,4 @@
 - Profile but with https://github.com/plasma-umass/coz maybe?
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
-- Find a better name? Idk..
+- Find a better name? Idk.. Probably not tho, I like it that way ^^
