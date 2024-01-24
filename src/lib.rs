@@ -1381,6 +1381,9 @@ pub fn run() {
 					}
 
 					game.chunk_generation_front.push(player_chunk_coords);
+					for direction in OrientedAxis::all_the_six_possible_directions() {
+						game.chunk_generation_front.push(player_chunk_coords + direction.delta());
+					}
 
 					game.chunk_generation_front.retain(|front_chunk_coords| {
 						let blocks_was_generated = game
