@@ -1456,68 +1456,6 @@ pub fn run() {
 							}));
 						}
 					}
-
-					/*
-					let mut neighbor_chunk_coords_array: Vec<_> =
-						iter_3d_cube_center_radius(player_chunk_coords, generation_distance_in_chunks_up)
-							.filter(|chunk_coords| {
-								chunk_coords
-									.map(|x| x as f32)
-									.distance(player_chunk_coords.map(|x| x as f32))
-									<= generation_distance_in_chunks
-							})
-							.collect();
-					// No early optimizations! This is an (in)valid excuse to not optimize this!
-					neighbor_chunk_coords_array.sort_unstable_by_key(|chunk_coords| {
-						(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
-							* 10.0) as u64
-					});
-
-					for neighbor_chunk_coords in neighbor_chunk_coords_array.into_iter() {
-						let blocks_was_generated = game
-							.chunk_grid
-							.map
-							.get(&neighbor_chunk_coords)
-							.is_some_and(|chunk| chunk.blocks.is_some());
-						let blocks_is_being_generated =
-							game.worker_tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									*chunk_coords == neighbor_chunk_coords
-								},
-								_ => false,
-							});
-
-						if (!blocks_was_generated)
-							&& (!blocks_is_being_generated)
-							&& game.worker_tasks.len()
-								< (game.pool.number_of_workers() - workers_dedicated_to_meshing)
-						{
-							// Asking a worker for the generation of chunk blocks
-							let chunk_coords = neighbor_chunk_coords;
-							let (sender, receiver) = std::sync::mpsc::channel();
-							game
-								.worker_tasks
-								.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
-							let chunk_generator = Arc::clone(&game.world_generator);
-							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-							let block_type_table = Arc::clone(&game.block_type_table);
-							game.pool.enqueue_task(Box::new(move || {
-								// TODO: Remove the sleeping!
-								// Test delay to make sure that the main thread keeps working even
-								// when the workers tasks take very long.
-								//std::thread::sleep(std::time::Duration::from_secs_f32(
-								//	rand::thread_rng().gen_range(0.1..0.3),
-								//));
-
-								let chunk_blocks = chunk_generator
-									.generate_chunk_blocks(coords_span, Arc::clone(&block_type_table));
-								let chunk_culling_info =
-									ChunkCullingInfo::compute_from_blocks(&chunk_blocks, block_type_table);
-								let _ = sender.send((chunk_blocks, chunk_culling_info));
-							}));
-						}
-					}
-					*/
 				}
 			}
 
