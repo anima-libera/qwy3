@@ -57,6 +57,10 @@ pub struct CommandLineSettings {
 	#[arg(long)]
 	pub fullscreen: bool,
 
+	/// Disables V-Sync from the start.
+	#[arg(long)]
+	pub no_vsync: bool,
+
 	/// Enables the fog from the start.
 	#[arg(long)]
 	pub fog: bool,

@@ -297,6 +297,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		loading_distance,
 		chunk_edge,
 		fullscreen,
+		no_vsync,
 		fog,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
@@ -375,6 +376,12 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	.unwrap();
 	let device = Arc::new(device);
 
+	let desired_present_mode = if no_vsync {
+		wgpu::PresentMode::Immediate
+	} else {
+		wgpu::PresentMode::Fifo
+	};
+
 	let surface_capabilities = window_surface.get_capabilities(&adapter);
 	let surface_format = surface_capabilities
 		.formats
@@ -382,14 +389,15 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		.copied()
 		.find(|f| f.is_srgb())
 		.unwrap_or(surface_capabilities.formats[0]);
-	assert!(surface_capabilities.present_modes.contains(&wgpu::PresentMode::Fifo));
+	dbg!(&surface_capabilities.present_modes);
+	assert!(surface_capabilities.present_modes.contains(&desired_present_mode));
 	let size = window.inner_size();
 	let window_surface_config = wgpu::SurfaceConfiguration {
 		usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 		format: surface_format,
 		width: size.width,
 		height: size.height,
-		present_mode: wgpu::PresentMode::Fifo,
+		present_mode: desired_present_mode,
 		alpha_mode: surface_capabilities.alpha_modes[0],
 		view_formats: vec![],
 	};
