@@ -1611,7 +1611,7 @@ pub fn run() {
 					if !is_surrounded {
 						let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 						let inf = coords_span.block_coords_inf().map(|x| x as f32);
-						let dims = coords_span.cd._dimensions().map(|x| x as f32);
+						let dims = coords_span.cd._dimensions().map(|x| x as f32 - 1.0);
 						let pos = inf + dims / 2.0;
 						chunk_box_meshes.push(SimpleLineMesh::from_aligned_box(
 							&game.device,
