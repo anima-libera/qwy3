@@ -201,6 +201,7 @@ struct RectInAtlas {
 }
 
 struct Game {
+	/// The window is in an Arc because the window_surface wants a reference to it.
 	window: Arc<winit::window::Window>,
 	window_surface: wgpu::Surface<'static>,
 	device: Arc<wgpu::Device>,
@@ -327,22 +328,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 	let window_surface = instance.create_surface(Arc::clone(&window)).unwrap();
-	/*
-		// SAFETY: No idea!
-		let window_surface = unsafe {
-			// BAD: Note that we are casting away a lifetime constraint!!! Very bad!
-			// Why? Because before a Wgpu API breaking change we could just create a surface
-			// and all was working fine. The `create_surface` method was marked unsafe and
-			// the constraint on the fact that the surface shall not outlive the window was
-			// left in the documentation.
-			// Now it is enforced by a lifetime specifier in the surface. What do I do aaaaaaa.
-			// I want to store the window and its surface alongside eachother in a struct,
-			// this is what is currently done. Is the window dropped after the surface?
-			let naughty_window: &'static winit::window::Window = std::mem::transmute(&window);
-			instance.create_surface(naughty_window)
-		}
-		.unwrap();
-	*/
 
 	// Try to get a cool adapter first.
 	let adapter = instance.enumerate_adapters(wgpu::Backends::all()).into_iter().find(|adapter| {
