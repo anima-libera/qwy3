@@ -1419,9 +1419,8 @@ pub fn run() {
 							.is_some_and(|chunk| chunk.blocks.is_some());
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									chunk_coords == front_chunk_coords
-								},
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) =>
+									chunk_coords == front_chunk_coords,
 								_ => false,
 							});
 						(!blocks_was_generated) && (!blocks_is_being_generated)
@@ -1448,9 +1447,8 @@ pub fn run() {
 							.is_some_and(|chunk| chunk.blocks.is_some());
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									*chunk_coords == considered_chunk_coords
-								},
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) =>
+									*chunk_coords == considered_chunk_coords,
 								_ => false,
 							});
 

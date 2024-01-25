@@ -127,9 +127,8 @@ pub fn _default_skybox_painter_2(
 ) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
 	let noise = OctavedNoise::new(number_of_octaves, vec![seed]);
 	move |mut direction: Vector3<f32>| -> Rgba<u8> {
-		direction += (noise
-			._sample_3d_3d(Point3::from_vec(direction) * 10.0, &[])
-			.to_vec() - vec3(0.5, 0.5, 0.5))
+		direction += (noise._sample_3d_3d(Point3::from_vec(direction) * 10.0, &[]).to_vec()
+			- vec3(0.5, 0.5, 0.5))
 			* 0.5;
 		Rgba([
 			((direction.x + 1.0) / 2.0 * 255.0) as u8,

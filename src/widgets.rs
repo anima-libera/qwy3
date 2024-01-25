@@ -222,9 +222,8 @@ impl Widget {
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.for_each_rec(f),
 			Widget::SmoothlyDisappearingEmptySpace { .. } => {},
 			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.for_each_rec(f),
-			Widget::List { sub_widgets, .. } => sub_widgets
-				.iter_mut()
-				.for_each(|sub_widget| sub_widget.for_each_rec(f)),
+			Widget::List { sub_widgets, .. } =>
+				sub_widgets.iter_mut().for_each(|sub_widget| sub_widget.for_each_rec(f)),
 		};
 	}
 
@@ -240,9 +239,8 @@ impl Widget {
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::SmoothlyDisappearingEmptySpace { .. } => None,
 			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.find_label(label_to_find),
-			Widget::List { sub_widgets, .. } => sub_widgets
-				.iter_mut()
-				.find_map(|sub_widget| sub_widget.find_label(label_to_find)),
+			Widget::List { sub_widgets, .. } =>
+				sub_widgets.iter_mut().find_map(|sub_widget| sub_widget.find_label(label_to_find)),
 		}
 	}
 
@@ -290,9 +288,8 @@ impl Widget {
 	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
 		match self {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
-			Widget::SimpleText { text, settings } => {
-				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
-			},
+			Widget::SimpleText { text, settings } =>
+				font.dimensions_of_text(window_width, settings.clone(), text.as_str()),
 			Widget::FaceCounter { settings, .. } => font.dimensions_of_text(
 				window_width,
 				settings.clone(),
@@ -314,9 +311,8 @@ impl Widget {
 				let ratio = self.existence_ratio();
 				start_dimensions * ratio
 			},
-			Widget::DisappearWhenComplete { sub_widget, .. } => {
-				sub_widget.dimensions(font, window_width)
-			},
+			Widget::DisappearWhenComplete { sub_widget, .. } =>
+				sub_widget.dimensions(font, window_width),
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {

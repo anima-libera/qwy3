@@ -424,13 +424,8 @@ fn generate_texture_generator_not_uniform(
 		let mut view = TextureViewWrapping::from_view(sub_image);
 		view.apply_texture_generator(&generator, world_seed, 1);
 		let some_color = view.get_pixel(cgmath::point2(0, 0));
-		let max_dist = view
-			.view
-			.to_image()
-			.pixels()
-			.map(|color| color_dist(*color, some_color))
-			.max()
-			.unwrap();
+		let max_dist =
+			view.view.to_image().pixels().map(|color| color_dist(*color, some_color)).max().unwrap();
 		if max_dist > 60 {
 			// Not uniform ^^.
 			break generator;

@@ -1,7 +1,7 @@
 # See https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
 # for actual up-to-date config options.
 edition = "2021"
-binop_separator = "Back"
+binop_separator = "Front"
 match_arm_blocks = false
 match_block_trailing_comma = true
 hard_tabs = true
@@ -12,6 +12,6 @@ max_width = 100
 struct_lit_width = 65
 struct_lit_single_line = true
 struct_variant_width = 50
-wrap_comments = true
+#wrap_comments = true
 chain_width = 100
 error_on_unformatted = true

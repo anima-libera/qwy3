@@ -130,17 +130,11 @@ impl ThreadPool {
 	/// Note that dropping the `ThreadPool` should do the trick too (as it hangs up a channel
 	/// that makes the manager behaves the same way it would as by calling this method).
 	pub fn _end(self) {
-		self
-			.order_sender_to_manager
-			.send(OrderToManager::_End)
-			.unwrap();
+		self.order_sender_to_manager.send(OrderToManager::_End).unwrap();
 	}
 
 	pub fn enqueue_task(&self, task: Task) {
-		self
-			.order_sender_to_manager
-			.send(OrderToManager::Task(task))
-			.unwrap();
+		self.order_sender_to_manager.send(OrderToManager::Task(task)).unwrap();
 	}
 
 	pub fn number_of_workers(&self) -> usize {

@@ -124,9 +124,8 @@ impl Font {
 					self.max_character_height_in_pixels as f32 * screen_pixel_size * settings.scale
 						+ settings.inbetween_lines_space_height * screen_pixel_size;
 			} else {
-				let character_details = self
-					.character_details(character)
-					.unwrap_or(self.error_character_detials.clone());
+				let character_details =
+					self.character_details(character).unwrap_or(self.error_character_detials.clone());
 				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
 					* screen_pixel_size
 					* settings.scale;
@@ -164,9 +163,8 @@ impl Font {
 					self.max_character_height_in_pixels as f32 * screen_pixel_size * settings.scale
 						+ settings.inbetween_lines_space_height * screen_pixel_size;
 			} else {
-				let character_details = self
-					.character_details(character)
-					.unwrap_or(self.error_character_detials.clone());
+				let character_details =
+					self.character_details(character).unwrap_or(self.error_character_detials.clone());
 				let dimensions = character_details.dimensions_in_pixels.map(|x| x as f32)
 					* screen_pixel_size
 					* settings.scale;

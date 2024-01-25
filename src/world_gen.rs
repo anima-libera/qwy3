@@ -70,9 +70,8 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::Lines01 => Arc::new(WorldGeneratorLines01 { seed }),
 			WhichWorldGenerator::Volumes01 => Arc::new(WorldGeneratorVolumes01 { seed }),
 			WhichWorldGenerator::BallsSameSize => Arc::new(WorldGeneratorBallsSameSize { seed }),
-			WhichWorldGenerator::BallsDifferentSizes => {
-				Arc::new(WorldGeneratorBallsDifferentSizes { seed })
-			},
+			WhichWorldGenerator::BallsDifferentSizes =>
+				Arc::new(WorldGeneratorBallsDifferentSizes { seed }),
 			WhichWorldGenerator::LinksXRaw => Arc::new(WorldGeneratorLinksXRaw { seed }),
 			WhichWorldGenerator::LinksX => Arc::new(WorldGeneratorLinksX { seed }),
 			WhichWorldGenerator::Links01 => Arc::new(WorldGeneratorLinks { seed }),
@@ -90,27 +89,22 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::WierdTerrain02 => Arc::new(WorldGeneratorWierdTerrain02 { seed }),
 			WhichWorldGenerator::Height02 => Arc::new(WorldGeneratorHeight02 { seed }),
 			WhichWorldGenerator::HeightBiomes => Arc::new(WorldGeneratorHeightBiomes { seed }),
-			WhichWorldGenerator::HeightBiomesVolume => {
-				Arc::new(WorldGeneratorHeightBiomesVolume { seed })
-			},
+			WhichWorldGenerator::HeightBiomesVolume =>
+				Arc::new(WorldGeneratorHeightBiomesVolume { seed }),
 			WhichWorldGenerator::Height03 => Arc::new(WorldGeneratorHeight03 { seed }),
 			WhichWorldGenerator::StructuresPoc => Arc::new(WorldGeneratorStructuresPoc { seed }),
-			WhichWorldGenerator::StructuresLinksPoc => {
-				Arc::new(WorldGeneratorStructuresLinksPoc { seed })
-			},
+			WhichWorldGenerator::StructuresLinksPoc =>
+				Arc::new(WorldGeneratorStructuresLinksPoc { seed }),
 			WhichWorldGenerator::StructuresTrees => Arc::new(WorldGeneratorStructuresTrees { seed }),
 			WhichWorldGenerator::StructuresSpikes => Arc::new(WorldGeneratorStructuresSpikes { seed }),
 			WhichWorldGenerator::Lines02 => Arc::new(WorldGeneratorLines02 { seed }),
 			WhichWorldGenerator::Lines03 => Arc::new(WorldGeneratorLines03 { seed }),
-			WhichWorldGenerator::StructuresLinksSmooth => {
-				Arc::new(WorldGeneratorStructuresLinksSmooth { seed })
-			},
-			WhichWorldGenerator::StructuresEnginePoc => {
-				Arc::new(WorldGeneratorStructuresEnginePoc { seed })
-			},
-			WhichWorldGenerator::StructuresGeneratedBlocks => {
-				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed })
-			},
+			WhichWorldGenerator::StructuresLinksSmooth =>
+				Arc::new(WorldGeneratorStructuresLinksSmooth { seed }),
+			WhichWorldGenerator::StructuresEnginePoc =>
+				Arc::new(WorldGeneratorStructuresEnginePoc { seed }),
+			WhichWorldGenerator::StructuresGeneratedBlocks =>
+				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed }),
 		}
 	}
 }
@@ -2112,9 +2106,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 
 			let ball_radius = structure_max_blocky_radius.min(4);
 			for coords in crate::coords::iter_3d_cube_center_radius(origin_block_coords, ball_radius) {
-				if coords
-					.map(|x| x as f32)
-					.distance(origin_block_coords.map(|x| x as f32))
+				if coords.map(|x| x as f32).distance(origin_block_coords.map(|x| x as f32))
 					< ball_radius as f32
 				{
 					structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
@@ -2282,10 +2274,8 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 					))
 					.unwrap()
 					.is_air();
-				let ground_here = !block_type_table
-					.get(structure_look_terrain_block(placing_head))
-					.unwrap()
-					.is_air();
+				let ground_here =
+					!block_type_table.get(structure_look_terrain_block(placing_head)).unwrap().is_air();
 				if no_ground_above && ground_here {
 					found_ground = true;
 					break;
@@ -2314,11 +2304,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			for coords in
 				crate::coords::iter_3d_cube_center_radius(placing_head, ball_radius.ceil() as i32)
 			{
-				if coords
-					.map(|x| x as f32)
-					.distance(placing_head.map(|x| x as f32))
-					< ball_radius
-				{
+				if coords.map(|x| x as f32).distance(placing_head.map(|x| x as f32)) < ball_radius {
 					structure_place_block(coords, block_type_table.kinda_leaf_id(), chunk_blocks);
 				}
 			}
@@ -3168,9 +3154,7 @@ mod structure_gen {
 			cell_coords: cgmath::Point3<i32>,
 			origin_index: usize,
 		) -> BlockCoords {
-			let coords_in_unit_cube = self
-				.noise
-				.sample_i3d_3d(cell_coords, &[origin_index as i32]);
+			let coords_in_unit_cube = self.noise.sample_i3d_3d(cell_coords, &[origin_index as i32]);
 			let coords_in_cell =
 				coords_in_unit_cube.map(|x| (x * (self.cell_size as f32 - 0.001)).floor() as i32);
 			let cell_coords_in_world = cell_coords * self.cell_size;
@@ -3182,9 +3166,7 @@ mod structure_gen {
 			cell_coords: cgmath::Point3<i32>,
 			origin_index: usize,
 		) -> StructureTypeId {
-			let value = self
-				.noise
-				.sample_i3d_1d(cell_coords, &[origin_index as i32]);
+			let value = self.noise.sample_i3d_1d(cell_coords, &[origin_index as i32]);
 			let type_id_index = ((self.how_many_types as f32 - 0.0001) * value).floor() as usize;
 			StructureTypeId { index: type_id_index }
 		}
