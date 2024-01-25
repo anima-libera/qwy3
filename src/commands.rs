@@ -15,6 +15,7 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 	}
 
 	use winit::event::*;
+	use winit::keyboard::*;
 	if let Ok(controls_config_string) = std::fs::read_to_string(command_file_path) {
 		for (line_index, line) in controls_config_string.lines().enumerate() {
 			let line_number = line_index + 1;
@@ -27,10 +28,9 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 				let control = if let Some(key_name) = control_name.strip_prefix("key:") {
 					if key_name.chars().count() == 1 {
 						let signle_char_key_name = key_name.chars().next().unwrap();
-						if signle_char_key_name.is_ascii_alphabetic() {
-							Control::KeyboardKey(letter_to_keycode(signle_char_key_name))
-						} else if signle_char_key_name.is_ascii_digit() {
-							Control::KeyboardKey(digit_to_keycode(signle_char_key_name))
+						if signle_char_key_name.is_alphabetic() || signle_char_key_name.is_ascii_digit() {
+							let string = signle_char_key_name.to_lowercase().to_string();
+							Control::KeyboardKey(Key::Character(SmolStr::new(string)))
 						} else {
 							panic!("unknown signle character key name \"{signle_char_key_name}\"")
 						}
@@ -38,15 +38,23 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 						Control::KeyboardKey(f_key_keycode)
 					} else {
 						match key_name {
-							"up" => Control::KeyboardKey(VirtualKeyCode::Up),
-							"down" => Control::KeyboardKey(VirtualKeyCode::Down),
-							"left" => Control::KeyboardKey(VirtualKeyCode::Left),
-							"right" => Control::KeyboardKey(VirtualKeyCode::Right),
-							"space" => Control::KeyboardKey(VirtualKeyCode::Space),
-							"left_shift" => Control::KeyboardKey(VirtualKeyCode::LShift),
-							"right_shift" => Control::KeyboardKey(VirtualKeyCode::RShift),
-							"tab" => Control::KeyboardKey(VirtualKeyCode::Tab),
-							"return" | "enter" => Control::KeyboardKey(VirtualKeyCode::Return),
+							"up" => Control::KeyboardKey(Key::Named(NamedKey::ArrowUp)),
+							"down" => Control::KeyboardKey(Key::Named(NamedKey::ArrowDown)),
+							"left" => Control::KeyboardKey(Key::Named(NamedKey::ArrowLeft)),
+							"right" => Control::KeyboardKey(Key::Named(NamedKey::ArrowRight)),
+							"space" => Control::KeyboardKey(Key::Named(NamedKey::Space)),
+							"left_shift" | "right_shift" => {
+								// TODO: Add a `winit::keyboardKeyLocation` to `Control::KeyboardKey`
+								// to reintroduce the difference between these two keys.
+								println!(
+									"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \
+									The \"left_shift\" and \"right_shift\" key names both refer to both keys
+									for now (this will be fixed at some point)\x1b[39m"
+								);
+								Control::KeyboardKey(Key::Named(NamedKey::Shift))
+							},
+							"tab" => Control::KeyboardKey(Key::Named(NamedKey::Tab)),
+							"return" | "enter" => Control::KeyboardKey(Key::Named(NamedKey::Enter)),
 							unknown_key_name => panic!("unknown key name \"{unknown_key_name}\""),
 						}
 					}
@@ -87,8 +95,9 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					"remove_block_at_target" => Action::RemoveBlockAtTarget,
 					"toggle_display_interface" => Action::ToggleDisplayInterface,
 					"open_command_line" => Action::OpenCommandLine,
-					"toggle_display_not_surrounded_chunks_as_boxes" =>
-						Action::ToggleDisplayNotSurroundedChunksAsBoxes,
+					"toggle_display_not_surrounded_chunks_as_boxes" => {
+						Action::ToggleDisplayNotSurroundedChunksAsBoxes
+					},
 					"toggle_display_interfaces_debug_boxes" => Action::ToggleDisplayInterfaceDebugBoxes,
 					"toggle_fog" => Action::ToggleFog,
 					"toggle_fullscreen" => Action::ToggleFullscreen,
@@ -119,10 +128,10 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 }
 
 /// Parsing key names like "F11" to its proper key code.
-fn try_paring_f_key(key_name: &str) -> Option<winit::event::VirtualKeyCode> {
+fn try_paring_f_key(key_name: &str) -> Option<winit::keyboard::Key> {
 	let f_number = key_name.strip_prefix('F').or_else(|| key_name.strip_prefix('f'))?;
 	let number: u32 = f_number.parse().ok()?;
-	use winit::event::VirtualKeyCode as K;
+	use winit::keyboard::NamedKey as K;
 	use Some as S;
 	#[rustfmt::skip]
 	let keycode = match number {
@@ -131,29 +140,5 @@ fn try_paring_f_key(key_name: &str) -> Option<winit::event::VirtualKeyCode> {
 		9 => S(K::F9), 10 => S(K::F10), 11 => S(K::F11), 12 => S(K::F12),
 		_ => None,
 	};
-	keycode
-}
-
-fn letter_to_keycode(letter: char) -> winit::event::VirtualKeyCode {
-	use winit::event::VirtualKeyCode as K;
-	#[rustfmt::skip]
-	let keycode = match letter.to_ascii_uppercase() {
-		'A' => K::A, 'B' => K::B, 'C' => K::C, 'D' => K::D, 'E' => K::E, 'F' => K::F, 'G' => K::G,
-		'H' => K::H, 'I' => K::I, 'J' => K::J, 'K' => K::K, 'L' => K::L, 'M' => K::M, 'N' => K::N,
-		'O' => K::O, 'P' => K::P, 'Q' => K::Q, 'R' => K::R, 'S' => K::S, 'T' => K::T, 'U' => K::U,
-		'V' => K::V, 'W' => K::W, 'X' => K::X, 'Y' => K::Y, 'Z' => K::Z,
-		not_a_letter => panic!("can't convert \"{not_a_letter}\" to an ascii letter keycode"),
-	};
-	keycode
-}
-
-fn digit_to_keycode(digit: char) -> winit::event::VirtualKeyCode {
-	use winit::event::VirtualKeyCode as K;
-	#[rustfmt::skip]
-	let keycode = match digit {
-		'0' => K::Key0, '1' => K::Key1, '2' => K::Key2, '3' => K::Key3, '4' => K::Key4,
-		'5' => K::Key5, '6' => K::Key6, '7' => K::Key7, '8' => K::Key8, '9' => K::Key9,
-		not_a_digit => panic!("can't convert \"{not_a_digit}\" to an digit keycode"),
-	};
-	keycode
+	keycode.map(winit::keyboard::Key::Named)
 }

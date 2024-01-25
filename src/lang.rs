@@ -18,6 +18,7 @@ pub enum Type {
 	Nothing,
 	Integer,
 	Function(FunctionTypeSignature),
+	#[allow(clippy::enum_variant_names)]
 	Type,
 	Name,
 }
@@ -394,23 +395,25 @@ fn parse_leaf_expression(
 					Expression::Const(Value::Name(name)),
 					Span { start: sigil_span.start, end: name_span.end },
 				),
-				Some((unexpected_token, span)) =>
+				Some((unexpected_token, span)) => {
 					return Err(
 						ExpressionParsingError::ExpectedWordAfterSigilButGotUnexpectedToken(
 							unexpected_token,
 							span,
 						),
-					),
+					)
+				},
 				None => return Err(ExpressionParsingError::ExpectedWordAfterSigilButGotNoMoreTokens),
 			}
 		},
-		Some((unexpected_token, span)) =>
+		Some((unexpected_token, span)) => {
 			return Err(
 				ExpressionParsingError::ExpectedStartOfExpressionButGotUnexpectedToken(
 					unexpected_token,
 					span,
 				),
-			),
+			)
+		},
 		None => return Err(ExpressionParsingError::ExpectedStartOfExpressionButGotNoMoreTokens),
 	};
 
@@ -446,11 +449,12 @@ fn parse_leaf_or_call_expression(
 
 		let function_type_signature = match expression.get_type(type_context) {
 			Ok(Type::Function(type_signature)) => type_signature,
-			Ok(not_a_function_type) =>
+			Ok(not_a_function_type) => {
 				return Err(ExpressionParsingError::FunctionCallOnNotAFunction(
 					not_a_function_type,
 					expression_span.clone(),
-				)),
+				))
+			},
 			Err(_) => unreachable!("handled earlier"),
 		};
 
@@ -642,14 +646,15 @@ fn check_function_call_argument_types(
 		let type_constraints = &function_type_signature.arg_types[arg_i];
 		let actual_type = match arg.get_type(type_context) {
 			Ok(actual_type) => actual_type,
-			Err(type_error) =>
+			Err(type_error) => {
 				return Err(FunctionCallTypingError::ArgumentExpressionTypingError {
 					arg_typing_error: type_error,
 					faulty_arg_span: arg_span.clone(),
 					faulty_arg_index: arg_i,
 					function_span,
 					function_call_span,
-				}),
+				})
+			},
 		};
 		if !type_constraints.is_satisfied_by_type(&actual_type) {
 			return Err(FunctionCallTypingError::ArgumentOfTheWrongType {
@@ -692,10 +697,12 @@ fn evaluate_expression(expression: &Expression, context: &mut Context, log: &mut
 			let arg_values: Vec<_> =
 				args.iter().map(|arg| evaluate_expression(&arg.0, context, log)).collect();
 			match func_body {
-				FunctionBody::Expression(body_expression) =>
-					evaluate_expression(&body_expression, context, log),
-				FunctionBody::BuiltIn(built_in_function_body) =>
-					built_in_function_body.evaluate(arg_values, context, log),
+				FunctionBody::Expression(body_expression) => {
+					evaluate_expression(&body_expression, context, log)
+				},
+				FunctionBody::BuiltIn(built_in_function_body) => {
+					built_in_function_body.evaluate(arg_values, context, log)
+				},
 			}
 		},
 		Expression::Block(expr_sequence) => {

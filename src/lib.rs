@@ -30,7 +30,6 @@ use cgmath::{point3, ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
 use rand::Rng;
 use skybox::SkyboxFaces;
 use wgpu::util::DeviceExt;
-use winit::event_loop::ControlFlow;
 
 use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, CameraSettings};
 use chunks::*;
@@ -60,9 +59,9 @@ enum WhichCameraToUse {
 	Sun,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum Control {
-	KeyboardKey(winit::event::VirtualKeyCode),
+	KeyboardKey(winit::keyboard::Key),
 	MouseButton(winit::event::MouseButton),
 }
 struct ControlEvent {
@@ -202,8 +201,8 @@ struct RectInAtlas {
 }
 
 struct Game {
-	window: winit::window::Window,
-	window_surface: wgpu::Surface,
+	window: Arc<winit::window::Window>,
+	window_surface: wgpu::Surface<'static>,
 	device: Arc<wgpu::Device>,
 	queue: wgpu::Queue,
 	window_surface_config: wgpu::SurfaceConfiguration,
@@ -313,24 +312,40 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		std::process::exit(0);
 	}
 
-	let enable_fullscreen = fullscreen;
+	let event_loop = winit::event_loop::EventLoop::new().unwrap();
+	event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-	let event_loop = winit::event_loop::EventLoop::new();
+	let enable_fullscreen = fullscreen;
 	let window = winit::window::WindowBuilder::new()
 		.with_title("Qwy3")
 		.with_maximized(true)
 		.with_resizable(true)
-		.with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
+		.with_fullscreen(enable_fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
 		.build(&event_loop)
 		.unwrap();
-	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-		backends: wgpu::Backends::all(),
-		dx12_shader_compiler: Default::default(),
-	});
-	let window_surface = unsafe { instance.create_surface(&window) }.unwrap();
+	let window = Arc::new(window);
+
+	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+	let window_surface = instance.create_surface(Arc::clone(&window)).unwrap();
+	/*
+		// SAFETY: No idea!
+		let window_surface = unsafe {
+			// BAD: Note that we are casting away a lifetime constraint!!! Very bad!
+			// Why? Because before a Wgpu API breaking change we could just create a surface
+			// and all was working fine. The `create_surface` method was marked unsafe and
+			// the constraint on the fact that the surface shall not outlive the window was
+			// left in the documentation.
+			// Now it is enforced by a lifetime specifier in the surface. What do I do aaaaaaa.
+			// I want to store the window and its surface alongside eachother in a struct,
+			// this is what is currently done. Is the window dropped after the surface?
+			let naughty_window: &'static winit::window::Window = std::mem::transmute(&window);
+			instance.create_surface(naughty_window)
+		}
+		.unwrap();
+	*/
 
 	// Try to get a cool adapter first.
-	let adapter = instance.enumerate_adapters(wgpu::Backends::all()).find(|adapter| {
+	let adapter = instance.enumerate_adapters(wgpu::Backends::all()).into_iter().find(|adapter| {
 		let info = adapter.get_info();
 		info.device_type == wgpu::DeviceType::DiscreteGpu
 			&& adapter.is_surface_supported(&window_surface)
@@ -365,8 +380,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		adapter
 			.request_device(
 				&wgpu::DeviceDescriptor {
-					features: wgpu::Features::empty(),
-					limits: wgpu::Limits { ..wgpu::Limits::default() },
+					required_features: wgpu::Features::empty(),
+					required_limits: wgpu::Limits { ..wgpu::Limits::default() },
 					label: None,
 				},
 				None,
@@ -401,6 +416,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		width: size.width,
 		height: size.height,
 		present_mode: desired_present_mode,
+		desired_maximum_frame_latency: 2,
 		alpha_mode: surface_capabilities.alpha_modes[0],
 		view_formats: vec![],
 	};
@@ -730,18 +746,19 @@ pub fn run() {
 	let (mut game, event_loop) = init_game();
 
 	use winit::event::*;
-	event_loop.run(move |event, _, control_flow| match event {
+	use winit::keyboard::*;
+	let res = event_loop.run(move |event, elwt| match event {
 		Event::WindowEvent { ref event, window_id } if window_id == game.window.id() => match event {
 			WindowEvent::CloseRequested
 			| WindowEvent::KeyboardInput {
-				input:
-					KeyboardInput {
+				event:
+					KeyEvent {
+						logical_key: Key::Named(NamedKey::Escape),
 						state: ElementState::Pressed,
-						virtual_keycode: Some(VirtualKeyCode::Escape),
 						..
 					},
 				..
-			} => *control_flow = ControlFlow::Exit,
+			} => elwt.exit(),
 
 			WindowEvent::Resized(new_size) => {
 				let winit::dpi::PhysicalSize { width, height } = *new_size;
@@ -770,23 +787,23 @@ pub fn run() {
 			},
 
 			WindowEvent::KeyboardInput {
-				input: KeyboardInput { state, virtual_keycode: Some(key), .. },
-				..
+				event: KeyEvent { logical_key, state, repeat, .. }, ..
 			} => {
 				if game.typing_in_command_line && *state == ElementState::Pressed {
-					if matches!(key, VirtualKeyCode::Return) {
+					if matches!(logical_key, Key::Named(NamedKey::Enter)) {
 						game.command_confirmed = true;
 						game.typing_in_command_line = false;
 						game.last_command_line_interaction = Some(std::time::Instant::now());
-					} else if matches!(key, VirtualKeyCode::Back) {
+					} else if matches!(logical_key, Key::Named(NamedKey::Backspace)) {
 						game.command_line_content.pop();
 						game.last_command_line_interaction = Some(std::time::Instant::now());
-					} else {
-						// Handeled by the `winit::WindowEvent::ReceivedCharacter` case.
+					} else if let Key::Character(string) = logical_key {
+						game.command_line_content += string;
+						game.last_command_line_interaction = Some(std::time::Instant::now());
 					}
-				} else {
+				} else if !repeat {
 					game.controls_to_trigger.push(ControlEvent {
-						control: Control::KeyboardKey(*key),
+						control: Control::KeyboardKey(logical_key.clone()),
 						pressed: *state == ElementState::Pressed,
 					});
 				}
@@ -797,14 +814,6 @@ pub fn run() {
 					control: Control::MouseButton(*button),
 					pressed: *state == ElementState::Pressed,
 				});
-			},
-
-			WindowEvent::ReceivedCharacter(character) => {
-				const BACKSPACE: char = '\u{8}';
-				if game.typing_in_command_line && *character != BACKSPACE {
-					game.command_line_content.push(*character);
-					game.last_command_line_interaction = Some(std::time::Instant::now());
-				}
 			},
 
 			_ => {},
@@ -840,7 +849,7 @@ pub fn run() {
 				direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
 		},
 
-		Event::MainEventsCleared => {
+		Event::AboutToWait => {
 			let _time_since_beginning = game.time_beginning.elapsed();
 			let now = std::time::Instant::now();
 			let dt = now - game.time_from_last_iteration;
@@ -1419,8 +1428,9 @@ pub fn run() {
 							.is_some_and(|chunk| chunk.blocks.is_some());
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) =>
-									chunk_coords == front_chunk_coords,
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+									chunk_coords == front_chunk_coords
+								},
 								_ => false,
 							});
 						(!blocks_was_generated) && (!blocks_is_being_generated)
@@ -1447,8 +1457,9 @@ pub fn run() {
 							.is_some_and(|chunk| chunk.blocks.is_some());
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) =>
-									*chunk_coords == considered_chunk_coords,
+								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
+									*chunk_coords == considered_chunk_coords
+								},
 								_ => false,
 							});
 
@@ -1690,9 +1701,14 @@ pub fn run() {
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &game.shadow_map_view_thingy.resource,
-						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						depth_ops: Some(wgpu::Operations {
+							load: wgpu::LoadOp::Clear(1.0),
+							store: wgpu::StoreOp::Store,
+						}),
 						stencil_ops: None,
 					}),
+					timestamp_writes: None,
+					occlusion_query_set: None,
 				});
 
 				render_pass.set_pipeline(&game.rendering.block_shadow_render_pipeline);
@@ -1718,10 +1734,12 @@ pub fn run() {
 						resolve_target: None,
 						ops: wgpu::Operations {
 							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
-							store: true,
+							store: wgpu::StoreOp::Store,
 						},
 					})],
 					depth_stencil_attachment: None,
+					timestamp_writes: None,
+					occlusion_query_set: None,
 				});
 
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
@@ -1748,13 +1766,18 @@ pub fn run() {
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
-						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &game.z_buffer_view,
-						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						depth_ops: Some(wgpu::Operations {
+							load: wgpu::LoadOp::Clear(1.0),
+							store: wgpu::StoreOp::Store,
+						}),
 						stencil_ops: None,
 					}),
+					timestamp_writes: None,
+					occlusion_query_set: None,
 				});
 
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
@@ -1809,13 +1832,18 @@ pub fn run() {
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
-						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: true },
+						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &game.z_buffer_view,
-						depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(1.0), store: true }),
+						depth_ops: Some(wgpu::Operations {
+							load: wgpu::LoadOp::Clear(1.0),
+							store: wgpu::StoreOp::Store,
+						}),
 						stencil_ops: None,
 					}),
+					timestamp_writes: None,
+					occlusion_query_set: None,
 				});
 
 				if game.enable_display_interface
@@ -1851,9 +1879,10 @@ pub fn run() {
 
 			if game.close_after_one_frame {
 				println!("Closing after one frame, as asked via command line arguments");
-				*control_flow = ControlFlow::Exit;
+				elwt.exit();
 			}
 		},
 		_ => {},
 	});
+	res.unwrap();
 }
