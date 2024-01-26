@@ -30,6 +30,7 @@ Advice:
 
 - Blocks, chunks, meshes.
 - Chunks, loading and unloading so that an area around the player is loaded.
+- Infinite-ish world, in all directions including up and down.
 - Removing and placing blocks.
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.
