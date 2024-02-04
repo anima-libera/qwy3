@@ -10,6 +10,7 @@
     - Chunks should have a flag that says if it is sunch a set, one for every such set. This is important for when the chunk wants to know maybe to decide to get in/out of a set. The synchronisation of that information would become a concern, encapsulation may be of use here.
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
+- Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.
 
 ## Graphics
 
@@ -35,7 +36,7 @@
 
 ## Controls
 
-- Add controler support.
+- Add controler support (see the `gilrs` crate).
 - Add customization of some controls not currently customizable, such as the mouse wheel (both vertical and horizontal) or the escape key.
 - Add mouse back and forward button names (they were added in the last major winit release).
 - Auto default configure the walking keys to ZQSD or WASD by detecting the keyboard layout.

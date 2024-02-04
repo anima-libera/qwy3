@@ -39,6 +39,7 @@ use physics::AlignedPhysBox;
 use rendering::*;
 use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
+use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 use world_gen::WorldGenerator;
 
 use crate::{
@@ -772,7 +773,8 @@ pub fn run() {
 			},
 
 			WindowEvent::KeyboardInput {
-				event: KeyEvent { logical_key, state, repeat, .. }, ..
+				event: event @ KeyEvent { logical_key, state, repeat, .. },
+				..
 			} => {
 				if game.typing_in_command_line && *state == ElementState::Pressed {
 					if matches!(logical_key, Key::Named(NamedKey::Enter)) {
@@ -788,7 +790,7 @@ pub fn run() {
 					}
 				} else if !repeat {
 					game.controls_to_trigger.push(ControlEvent {
-						control: Control::KeyboardKey(logical_key.clone()),
+						control: Control::KeyboardKey(event.key_without_modifiers()),
 						pressed: *state == ElementState::Pressed,
 					});
 				}
