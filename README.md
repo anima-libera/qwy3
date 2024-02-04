@@ -23,6 +23,7 @@ Advice:
 - Up the number of `--threads` the game shall use to almost the number of virtual cores of the hardware.
 - Experiment with the `--chunk-edge` parameter to see how it impacts the performance while allowing to load larger areas by upping `--gen-dist`.
 - Try out the various world generators available (`--gen-names` to display the list).
+- Be ready to press P (default key) to disable falling when using world generators that lack a ground, or be ready to fall for some time.
 - Read `controls.qwy3_controls` to get a list of controls and see what can be done once the game run.
 - Some useful default controls: WASD to move, P to toggle physics (fly) and mouse wheel to go up and down, U to toggle the interface, K to let the mouse escape, left/right click to remove/place blocks.
 
