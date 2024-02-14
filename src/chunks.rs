@@ -664,7 +664,6 @@ pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
 	pub remeshing_required: bool,
-	pub mesh: Option<ChunkMesh>,
 	pub culling_info: Option<ChunkCullingInfo>,
 }
 
@@ -674,7 +673,6 @@ impl Chunk {
 			_coords_span: coords_span,
 			blocks: None,
 			remeshing_required: false,
-			mesh: None,
 			culling_info: None,
 		}
 	}
@@ -683,11 +681,12 @@ impl Chunk {
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
 	pub map: FxHashMap<ChunkCoords, Chunk>,
+	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 }
 
 impl ChunkGrid {
 	pub fn new(cd: ChunkDimensions) -> ChunkGrid {
-		ChunkGrid { cd, map: HashMap::default() }
+		ChunkGrid { cd, map: HashMap::default(), mesh_map: HashMap::default() }
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {

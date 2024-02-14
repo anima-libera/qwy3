@@ -997,12 +997,7 @@ pub fn run() {
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.map.len();
 				let block_count = chunk_count * game.cd.number_of_blocks();
-				let chunk_meshed_count = game
-					.chunk_grid
-					.map
-					.iter()
-					.filter(|(_chunk_coords, chunk)| chunk.mesh.is_some())
-					.count();
+				let chunk_meshed_count = game.chunk_grid.mesh_map.len();
 				let player_block_coords = (game.player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
@@ -1204,8 +1199,8 @@ pub fn run() {
 							receiver.try_recv().ok().map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
-							if let Some(chunk) = game.chunk_grid.map.get_mut(&chunk_coords) {
-								chunk.mesh = Some(chunk_mesh);
+							if game.chunk_grid.map.contains_key(&chunk_coords) {
+								game.chunk_grid.mesh_map.insert(chunk_coords, chunk_mesh);
 							} else {
 								// The chunk have been unloaded since the meshing was ordered.
 								// It really can happen, for example when the player travels very fast.
@@ -1233,8 +1228,7 @@ pub fn run() {
 			let mut closest_unmeshed_chunk_distance: Option<f32> = None;
 			let chunk_coords_list: Vec<_> = game.chunk_grid.map.keys().copied().collect();
 			for chunk_coords in chunk_coords_list.iter().copied() {
-				let already_has_mesh =
-					game.chunk_grid.map.get(&chunk_coords).map(|chunk| chunk.mesh.is_some()).unwrap();
+				let already_has_mesh = game.chunk_grid.mesh_map.contains_key(&chunk_coords);
 
 				if !already_has_mesh {
 					let chunk_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
@@ -1522,6 +1516,7 @@ pub fn run() {
 					if dist_in_chunks > unloading_distance_in_chunks {
 						// TODO: Save blocks to database on disk or something.
 						game.chunk_grid.map.remove(&chunk_coords);
+						game.chunk_grid.mesh_map.remove(&chunk_coords);
 					}
 				}
 			}
@@ -1724,12 +1719,10 @@ pub fn run() {
 
 				render_pass.set_pipeline(&game.rendering.block_shadow_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.block_shadow_bind_group, &[]);
-				for chunk in game.chunk_grid.map.values() {
-					if let Some(ref mesh) = chunk.mesh {
-						render_pass
-							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
-					}
+				for mesh in game.chunk_grid.mesh_map.values() {
+					render_pass
+						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
+					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 				}
 			}
 
@@ -1802,12 +1795,10 @@ pub fn run() {
 
 				render_pass.set_pipeline(&game.rendering.block_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.block_bind_group, &[]);
-				for chunk in game.chunk_grid.map.values() {
-					if let Some(ref mesh) = chunk.mesh {
-						render_pass
-							.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-						render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
-					}
+				for mesh in game.chunk_grid.mesh_map.values() {
+					render_pass
+						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
+					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 				}
 
 				if game.enable_display_phys_box {
