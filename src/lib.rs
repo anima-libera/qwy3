@@ -252,6 +252,7 @@ struct Game {
 	fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
 	fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
 	fog_inf_sup_radiuses: (f32, f32),
+	fog_margin: f32,
 
 	worker_tasks: Vec<WorkerTask>,
 	pool: threadpool::ThreadPool,
@@ -442,7 +443,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		0,
 		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
 	);
-	let fog_inf_sup_radiuses = (0.0, 20.0);
+	let fog_margin = 30.0;
+	let fog_inf_sup_radiuses = (0.0, fog_margin);
 	queue.write_buffer(
 		&fog_inf_sup_radiuses_thingy.resource,
 		0,
@@ -704,6 +706,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		fog_center_position_thingy,
 		fog_inf_sup_radiuses_thingy,
 		fog_inf_sup_radiuses,
+		fog_margin,
 
 		worker_tasks,
 		pool,
@@ -1315,8 +1318,8 @@ pub fn run() {
 
 				let sqrt_3 = 3.0_f32.sqrt();
 				let distance = game.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
-				game.fog_inf_sup_radiuses.1 = distance.max(20.0);
-				game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - 20.0;
+				game.fog_inf_sup_radiuses.1 = distance.max(game.fog_margin);
+				game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
 				if game.enable_fog {
 					game.queue.write_buffer(
 						&game.fog_inf_sup_radiuses_thingy.resource,
@@ -1343,8 +1346,8 @@ pub fn run() {
 				let evolution = evolution.clamp(-delta.abs(), delta.abs());
 				if evolution != 0.0 {
 					game.fog_inf_sup_radiuses.1 += evolution;
-					game.fog_inf_sup_radiuses.1 = game.fog_inf_sup_radiuses.1.max(20.0);
-					game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - 20.0;
+					game.fog_inf_sup_radiuses.1 = game.fog_inf_sup_radiuses.1.max(game.fog_margin);
+					game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
 					if game.enable_fog {
 						game.queue.write_buffer(
 							&game.fog_inf_sup_radiuses_thingy.resource,
