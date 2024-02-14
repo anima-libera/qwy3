@@ -1309,7 +1309,28 @@ pub fn run() {
 			}
 
 			// Handle fog adjustment.
-			if let Some(distance) = closest_unmeshed_chunk_distance {
+			if true {
+				// Current fog fix,
+				// works fine when the loading of chunks is finished or almost finished.
+
+				let sqrt_3 = 3.0_f32.sqrt();
+				let distance = game.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
+				game.fog_inf_sup_radiuses.1 = distance.max(20.0);
+				game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - 20.0;
+				if game.enable_fog {
+					game.queue.write_buffer(
+						&game.fog_inf_sup_radiuses_thingy.resource,
+						0,
+						bytemuck::cast_slice(&[Vector2Pod {
+							values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
+						}]),
+					);
+				}
+			} else if let Some(distance) = closest_unmeshed_chunk_distance {
+				// TODO: Fix this setting.
+				// Currently broken due to assuming that all the chunks in the fog must
+				// be meshed, which is not the case anymore.
+
 				let delta = distance - game.fog_inf_sup_radiuses.1;
 				let delta_normalized = if delta < 0.0 {
 					-1.0
