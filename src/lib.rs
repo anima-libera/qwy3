@@ -300,7 +300,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_edge,
 		fullscreen,
 		no_vsync,
-		fog,
+		no_fog,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -436,7 +436,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let FogStuff { fog_center_position_thingy, fog_inf_sup_radiuses_thingy } =
 		init_fog_stuff(Arc::clone(&device));
 
-	let enable_fog = fog;
+	let enable_fog = !no_fog;
 
 	queue.write_buffer(
 		&fog_center_position_thingy.resource,

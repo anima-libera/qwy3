@@ -61,9 +61,9 @@ pub struct CommandLineSettings {
 	#[arg(long)]
 	pub no_vsync: bool,
 
-	/// Enables the fog from the start.
+	/// Disables the fog from the start.
 	#[arg(long)]
-	pub fog: bool,
+	pub no_fog: bool,
 
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]

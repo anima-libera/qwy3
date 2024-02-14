@@ -35,6 +35,7 @@ Advice:
 - Removing and placing blocks.
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.
+- Fog effect (blocks in the distance fading in the skybox).
 - Multithreading.
 - Command bar (the command language has basically nothing in it yet but the command bar is there).
 - Shadows.
