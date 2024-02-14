@@ -1,7 +1,10 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+	collections::{HashMap, HashSet},
+	sync::Arc,
+};
 
 use cgmath::{EuclideanSpace, InnerSpace};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use wgpu::util::DeviceExt;
 
 pub(crate) use crate::{
@@ -663,18 +666,12 @@ impl ChunkCullingInfo {
 pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
 	pub blocks: Option<ChunkBlocks>,
-	pub remeshing_required: bool,
 	pub culling_info: Option<ChunkCullingInfo>,
 }
 
 impl Chunk {
 	pub fn new_empty(coords_span: ChunkCoordsSpan) -> Chunk {
-		Chunk {
-			_coords_span: coords_span,
-			blocks: None,
-			remeshing_required: false,
-			culling_info: None,
-		}
+		Chunk { _coords_span: coords_span, blocks: None, culling_info: None }
 	}
 }
 
@@ -682,11 +679,17 @@ pub struct ChunkGrid {
 	cd: ChunkDimensions,
 	pub map: FxHashMap<ChunkCoords, Chunk>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
+	pub remeshing_required: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
 	pub fn new(cd: ChunkDimensions) -> ChunkGrid {
-		ChunkGrid { cd, map: HashMap::default(), mesh_map: HashMap::default() }
+		ChunkGrid {
+			cd,
+			map: HashMap::default(),
+			mesh_map: HashMap::default(),
+			remeshing_required: HashSet::default(),
+		}
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
@@ -727,8 +730,8 @@ impl ChunkGrid {
 			chunk_coords_to_update.push(chunk_coords);
 		}
 		for chunk_coords in chunk_coords_to_update {
-			if let Some(chunk) = self.map.get_mut(&chunk_coords) {
-				chunk.remeshing_required = true;
+			if self.map.contains_key(&chunk_coords) {
+				self.remeshing_required.insert(chunk_coords);
 			}
 		}
 	}
