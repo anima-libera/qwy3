@@ -1163,9 +1163,10 @@ pub fn run() {
 							chunk_coords_and_result_opt
 						{
 							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-							let mut chunk = Chunk::new_empty(coords_span);
 
-							chunk.blocks = Some(chunk_blocks);
+							game.chunk_grid.blocks_map.insert(chunk_coords, chunk_blocks);
+
+							let mut chunk = Chunk::new_empty(coords_span);
 							chunk.culling_info = Some(chunk_culling_info.clone());
 							game.chunk_grid.map.insert(chunk_coords, chunk);
 
@@ -1274,14 +1275,8 @@ pub fn run() {
 							false,
 							Arc::clone(&game.block_type_table),
 						);
-					let chunk_blocks = game
-						.chunk_grid
-						.map
-						.get(&chunk_coords)
-						.unwrap()
-						.blocks
-						.clone() // TODO: Find a way to avoid cloning all these blocks ><.
-						.unwrap();
+					// TODO: Find a way to avoid cloning all these blocks ><.
+					let chunk_blocks = game.chunk_grid.blocks_map.get(&chunk_coords).unwrap().clone();
 					let device = Arc::clone(&game.device);
 					let block_type_table = Arc::clone(&game.block_type_table);
 					game.pool.enqueue_task(Box::new(move || {
@@ -1424,11 +1419,7 @@ pub fn run() {
 					}
 
 					game.chunk_generation_front.retain(|front_chunk_coords| {
-						let blocks_was_generated = game
-							.chunk_grid
-							.map
-							.get(front_chunk_coords)
-							.is_some_and(|chunk| chunk.blocks.is_some());
+						let blocks_was_generated = game.chunk_grid.is_loaded(*front_chunk_coords);
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
 								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
@@ -1453,11 +1444,7 @@ pub fn run() {
 							None => break,
 						};
 
-						let blocks_was_generated = game
-							.chunk_grid
-							.map
-							.get(&considered_chunk_coords)
-							.is_some_and(|chunk| chunk.blocks.is_some());
+						let blocks_was_generated = game.chunk_grid.is_loaded(considered_chunk_coords);
 						let blocks_is_being_generated =
 							game.worker_tasks.iter().any(|worker_task| match worker_task {
 								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {

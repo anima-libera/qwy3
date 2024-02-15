@@ -665,19 +665,19 @@ impl ChunkCullingInfo {
 
 pub struct Chunk {
 	pub _coords_span: ChunkCoordsSpan,
-	pub blocks: Option<ChunkBlocks>,
 	pub culling_info: Option<ChunkCullingInfo>,
 }
 
 impl Chunk {
 	pub fn new_empty(coords_span: ChunkCoordsSpan) -> Chunk {
-		Chunk { _coords_span: coords_span, blocks: None, culling_info: None }
+		Chunk { _coords_span: coords_span, culling_info: None }
 	}
 }
 
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
 	pub map: FxHashMap<ChunkCoords, Chunk>,
+	pub blocks_map: FxHashMap<ChunkCoords, ChunkBlocks>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	pub remeshing_required: FxHashSet<ChunkCoords>,
 }
@@ -687,31 +687,36 @@ impl ChunkGrid {
 		ChunkGrid {
 			cd,
 			map: HashMap::default(),
+			blocks_map: HashMap::default(),
 			mesh_map: HashMap::default(),
 			remeshing_required: HashSet::default(),
 		}
 	}
 
+	pub fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
+		self.map.contains_key(&chunk_coords)
+	}
+
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
-		match self.map.get_mut(&chunk_coords) {
-			Some(chunk) => {
-				let block_dst = chunk.blocks.as_mut().unwrap().get_mut(coords).unwrap();
-				*block_dst = block;
+		if !self.is_loaded(chunk_coords) {
+			// TODO: Handle this case by storing the fact that a block
+			// has to be set when loding the chunk.
+			unimplemented!();
+		} else {
+			let entry = self.blocks_map.entry(chunk_coords);
+			let chunk_blocks = entry
+				.or_insert_with(|| ChunkBlocks::new(ChunkCoordsSpan { cd: self.cd, chunk_coords }));
+			let block_dst = chunk_blocks.get_mut(coords).unwrap();
+			*block_dst = block;
 
-				// "Clear out" now maybe invalidated culling info.
-				// TODO: Better handling of that!
-				if let Some(culling_info) = &mut chunk.culling_info {
-					culling_info.all_air = false;
-					culling_info.all_opaque = false;
-					culling_info.all_opaque_faces.clear();
-				}
-			},
-			None => {
-				// TODO: Handle this case by storing the fact that a block
-				// has to be set when loding the chunk.
-				unimplemented!()
-			},
+			// "Clear out" now maybe invalidated culling info.
+			// TODO: Better handling of that!
+			if let Some(culling_info) = &mut self.map.get_mut(&chunk_coords).unwrap().culling_info {
+				culling_info.all_air = false;
+				culling_info.all_opaque = false;
+				culling_info.all_opaque_faces.clear();
+			}
 		}
 	}
 
@@ -738,8 +743,8 @@ impl ChunkGrid {
 
 	pub(crate) fn get_block(&self, coords: BlockCoords) -> Option<BlockTypeId> {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
-		let chunk = self.map.get(&chunk_coords)?;
-		Some(chunk.blocks.as_ref().unwrap().get(coords).unwrap())
+		let chunk_blocks = self.blocks_map.get(&chunk_coords)?;
+		Some(chunk_blocks.get(coords).unwrap())
 	}
 
 	pub(crate) fn get_opaqueness_layer_around_chunk(
