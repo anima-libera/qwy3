@@ -57,6 +57,7 @@ enum WhichCameraToUse {
 	ThirdPersonNear,
 	ThirdPersonFar,
 	ThirdPersonVeryFar,
+	ThirdPersonTooFar,
 	Sun,
 }
 
@@ -876,7 +877,8 @@ pub fn run() {
 								WhichCameraToUse::FirstPerson => WhichCameraToUse::ThirdPersonNear,
 								WhichCameraToUse::ThirdPersonNear => WhichCameraToUse::ThirdPersonFar,
 								WhichCameraToUse::ThirdPersonFar => WhichCameraToUse::ThirdPersonVeryFar,
-								WhichCameraToUse::ThirdPersonVeryFar => WhichCameraToUse::FirstPerson,
+								WhichCameraToUse::ThirdPersonVeryFar => WhichCameraToUse::ThirdPersonTooFar,
+								WhichCameraToUse::ThirdPersonTooFar => WhichCameraToUse::FirstPerson,
 								WhichCameraToUse::Sun => WhichCameraToUse::FirstPerson,
 							};
 						},
@@ -1637,12 +1639,21 @@ pub fn run() {
 				} else {
 					let mut camera_position = first_person_camera_position;
 					let camera_direction_vector = game.camera_direction.to_vec3();
-					if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonNear) {
-						camera_position -= camera_direction_vector * 5.0;
-					} else if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonFar) {
-						camera_position -= camera_direction_vector * 40.0;
-					} else if matches!(game.selected_camera, WhichCameraToUse::ThirdPersonVeryFar) {
-						camera_position -= camera_direction_vector * 200.0;
+					match game.selected_camera {
+						WhichCameraToUse::FirstPerson | WhichCameraToUse::Sun => {},
+						WhichCameraToUse::ThirdPersonNear => {
+							camera_position -= camera_direction_vector * 5.0;
+						},
+						WhichCameraToUse::ThirdPersonFar => {
+							camera_position -= camera_direction_vector * 40.0;
+						},
+						WhichCameraToUse::ThirdPersonVeryFar => {
+							camera_position -= camera_direction_vector * 200.0;
+						},
+						WhichCameraToUse::ThirdPersonTooFar => {
+							camera_position -=
+								camera_direction_vector * (game.loading_distance + 250.0).max(300.0);
+						},
 					}
 					let camera_up_vector =
 						game.camera_direction.add_to_vertical_angle(-TAU / 4.0).to_vec3();
