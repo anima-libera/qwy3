@@ -663,21 +663,10 @@ impl ChunkCullingInfo {
 	}
 }
 
-pub struct Chunk {
-	pub _coords_span: ChunkCoordsSpan,
-	pub culling_info: Option<ChunkCullingInfo>,
-}
-
-impl Chunk {
-	pub fn new_empty(coords_span: ChunkCoordsSpan) -> Chunk {
-		Chunk { _coords_span: coords_span, culling_info: None }
-	}
-}
-
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
-	pub map: FxHashMap<ChunkCoords, Chunk>,
 	pub blocks_map: FxHashMap<ChunkCoords, ChunkBlocks>,
+	pub culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	pub remeshing_required: FxHashSet<ChunkCoords>,
 }
@@ -686,15 +675,15 @@ impl ChunkGrid {
 	pub fn new(cd: ChunkDimensions) -> ChunkGrid {
 		ChunkGrid {
 			cd,
-			map: HashMap::default(),
 			blocks_map: HashMap::default(),
+			culling_info_map: HashMap::default(),
 			mesh_map: HashMap::default(),
 			remeshing_required: HashSet::default(),
 		}
 	}
 
 	pub fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
-		self.map.contains_key(&chunk_coords)
+		self.blocks_map.contains_key(&chunk_coords)
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
@@ -712,11 +701,7 @@ impl ChunkGrid {
 
 			// "Clear out" now maybe invalidated culling info.
 			// TODO: Better handling of that!
-			if let Some(culling_info) = &mut self.map.get_mut(&chunk_coords).unwrap().culling_info {
-				culling_info.all_air = false;
-				culling_info.all_opaque = false;
-				culling_info.all_opaque_faces.clear();
-			}
+			self.culling_info_map.remove(&chunk_coords);
 		}
 	}
 
@@ -735,7 +720,7 @@ impl ChunkGrid {
 			chunk_coords_to_update.push(chunk_coords);
 		}
 		for chunk_coords in chunk_coords_to_update {
-			if self.map.contains_key(&chunk_coords) {
+			if self.is_loaded(chunk_coords) {
 				self.remeshing_required.insert(chunk_coords);
 			}
 		}

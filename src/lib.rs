@@ -995,7 +995,7 @@ pub fn run() {
 				game.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
 			{
 				let fps = 1.0 / dt.as_secs_f32();
-				let chunk_count = game.chunk_grid.map.len();
+				let chunk_count = game.chunk_grid.blocks_map.len();
 				let block_count = chunk_count * game.cd.number_of_blocks();
 				let chunk_meshed_count = game.chunk_grid.mesh_map.len();
 				let player_block_coords = (game.player_phys.aligned_box.pos
@@ -1162,16 +1162,14 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-
 							game.chunk_grid.blocks_map.insert(chunk_coords, chunk_blocks);
-
-							let mut chunk = Chunk::new_empty(coords_span);
-							chunk.culling_info = Some(chunk_culling_info.clone());
-							game.chunk_grid.map.insert(chunk_coords, chunk);
+							game
+								.chunk_grid
+								.culling_info_map
+								.insert(chunk_coords, chunk_culling_info.clone());
 
 							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-								if game.chunk_grid.map.contains_key(&neighbor_chunk_coords) {
+								if game.chunk_grid.is_loaded(neighbor_chunk_coords) {
 									game.chunk_grid.remeshing_required.insert(neighbor_chunk_coords);
 								}
 							}
@@ -1198,7 +1196,7 @@ pub fn run() {
 							receiver.try_recv().ok().map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
-							if game.chunk_grid.map.contains_key(&chunk_coords) {
+							if game.chunk_grid.is_loaded(chunk_coords) {
 								game.chunk_grid.mesh_map.insert(chunk_coords, chunk_mesh);
 							} else {
 								// The chunk have been unloaded since the meshing was ordered.
@@ -1225,7 +1223,7 @@ pub fn run() {
 
 			// Request meshing for chunks that can be meshed or should be re-meshed.
 			let mut closest_unmeshed_chunk_distance: Option<f32> = None;
-			let chunk_coords_list: Vec<_> = game.chunk_grid.map.keys().copied().collect();
+			let chunk_coords_list: Vec<_> = game.chunk_grid.blocks_map.keys().copied().collect();
 			for chunk_coords in chunk_coords_list.iter().copied() {
 				let already_has_mesh = game.chunk_grid.mesh_map.contains_key(&chunk_coords);
 
@@ -1247,14 +1245,16 @@ pub fn run() {
 					}
 				}
 
-				let doesnt_need_mesh = game.chunk_grid.map.get(&chunk_coords).is_some_and(|chunk| {
-					chunk.culling_info.as_ref().is_some_and(|culling_info| culling_info.all_air)
-				});
+				let doesnt_need_mesh = game
+					.chunk_grid
+					.culling_info_map
+					.get(&chunk_coords)
+					.is_some_and(|culling_info| culling_info.all_air);
 				let is_being_meshed = game.worker_tasks.iter().any(|worker_task| match worker_task {
 					WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
 					_ => false,
 				});
-				let should_be_remeshed = game.chunk_grid.map.contains_key(&chunk_coords)
+				let should_be_remeshed = game.chunk_grid.is_loaded(chunk_coords)
 					&& game.chunk_grid.remeshing_required.contains(&chunk_coords);
 				let shall_be_meshed = (!doesnt_need_mesh)
 					&& (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
@@ -1500,7 +1500,8 @@ pub fn run() {
 						chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
 					if dist_in_chunks > unloading_distance_in_chunks {
 						// TODO: Save blocks to database on disk or something.
-						game.chunk_grid.map.remove(&chunk_coords);
+						game.chunk_grid.culling_info_map.remove(&chunk_coords);
+						game.chunk_grid.blocks_map.remove(&chunk_coords);
 						game.chunk_grid.mesh_map.remove(&chunk_coords);
 					}
 				}
@@ -1588,11 +1589,11 @@ pub fn run() {
 
 			let mut chunk_box_meshes = vec![];
 			if game.enable_display_not_surrounded_chunks_as_boxes {
-				for chunk_coords in game.chunk_grid.map.keys().copied() {
+				for chunk_coords in game.chunk_grid.blocks_map.keys().copied() {
 					let is_surrounded = 'is_surrounded: {
 						for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 							let blocks_was_generated =
-								game.chunk_grid.map.contains_key(&neighbor_chunk_coords);
+								game.chunk_grid.blocks_map.contains_key(&neighbor_chunk_coords);
 							if !blocks_was_generated {
 								break 'is_surrounded false;
 							}
