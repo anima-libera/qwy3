@@ -694,7 +694,6 @@ impl ChunkCullingInfo {
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
 	pub blocks_map: FxHashMap<ChunkCoords, ChunkBlocks>,
-	pub air_set: FxHashSet<ChunkCoords>,
 	pub culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	pub remeshing_required_set: FxHashSet<ChunkCoords>,
@@ -705,7 +704,6 @@ impl ChunkGrid {
 		ChunkGrid {
 			cd,
 			blocks_map: HashMap::default(),
-			air_set: HashSet::default(),
 			culling_info_map: HashMap::default(),
 			mesh_map: HashMap::default(),
 			remeshing_required_set: HashSet::default(),
@@ -713,7 +711,7 @@ impl ChunkGrid {
 	}
 
 	pub fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
-		self.blocks_map.contains_key(&chunk_coords) || self.air_set.contains(&chunk_coords)
+		self.blocks_map.contains_key(&chunk_coords)
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
