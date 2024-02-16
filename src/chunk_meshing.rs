@@ -11,7 +11,7 @@ use crate::{
 
 /// All the data that is needed to generate the mesh of a chunk.
 pub struct DataForChunkMeshing {
-	chunk_blocks: ChunkBlocks,
+	chunk_blocks: Arc<ChunkBlocks>,
 	opaqueness_layer_for_face_culling: OpaquenessLayerAroundChunk,
 	opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
 	block_type_table: Arc<BlockTypeTable>,
@@ -599,18 +599,17 @@ impl ChunkGrid {
 		&self,
 		chunk_coords: ChunkCoords,
 		block_type_table: Arc<BlockTypeTable>,
-	) -> DataForChunkMeshing {
+	) -> Option<DataForChunkMeshing> {
+		let chunk_blocks = Arc::clone(self.blocks_map.get(&chunk_coords)?);
 		let opaqueness_layer_for_face_culling =
 			self.get_opaqueness_layer_around_chunk(chunk_coords, true, Arc::clone(&block_type_table));
 		let opaqueness_layer_for_ambiant_occlusion =
 			self.get_opaqueness_layer_around_chunk(chunk_coords, false, Arc::clone(&block_type_table));
-		// TODO: Find a way to avoid cloning all these blocks ><.
-		let chunk_blocks = self.blocks_map.get(&chunk_coords).unwrap().clone();
-		DataForChunkMeshing {
+		Some(DataForChunkMeshing {
 			chunk_blocks,
 			opaqueness_layer_for_face_culling,
 			opaqueness_layer_for_ambiant_occlusion,
 			block_type_table,
-		}
+		})
 	}
 }

@@ -153,7 +153,7 @@ impl ChunkCullingInfo {
 
 pub struct ChunkGrid {
 	pub cd: ChunkDimensions,
-	pub blocks_map: FxHashMap<ChunkCoords, ChunkBlocks>,
+	pub blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
 	pub culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	pub remeshing_required_set: FxHashSet<ChunkCoords>,
@@ -181,11 +181,10 @@ impl ChunkGrid {
 			// has to be set when loding the chunk.
 			unimplemented!();
 		} else {
-			let entry = self.blocks_map.entry(chunk_coords);
-			let chunk_blocks = entry.or_insert_with(|| {
-				ChunkBlocks::new_empty(ChunkCoordsSpan { cd: self.cd, chunk_coords })
-			});
+			let chunk_blocks_arc = self.blocks_map.remove(&chunk_coords).unwrap();
+			let mut chunk_blocks = Arc::unwrap_or_clone(chunk_blocks_arc);
 			chunk_blocks.set(coords, block);
+			self.blocks_map.insert(chunk_coords, Arc::new(chunk_blocks));
 
 			// "Clear out" now maybe-invalidated culling info.
 			self.culling_info_map.remove(&chunk_coords);

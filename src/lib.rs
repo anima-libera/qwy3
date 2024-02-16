@@ -1166,7 +1166,7 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							game.chunk_grid.blocks_map.insert(chunk_coords, chunk_blocks);
+							game.chunk_grid.blocks_map.insert(chunk_coords, Arc::new(chunk_blocks));
 							game
 								.chunk_grid
 								.culling_info_map
@@ -1270,7 +1270,8 @@ pub fn run() {
 					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 					let data_for_chunk_meshing = game
 						.chunk_grid
-						.get_data_for_chunk_meshing(chunk_coords, Arc::clone(&game.block_type_table));
+						.get_data_for_chunk_meshing(chunk_coords, Arc::clone(&game.block_type_table))
+						.unwrap();
 					let device = Arc::clone(&game.device);
 					game.pool.enqueue_task(Box::new(move || {
 						let mut mesh = data_for_chunk_meshing.generate_mesh();

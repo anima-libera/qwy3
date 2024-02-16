@@ -7,7 +7,6 @@
 - Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up).
   - Minimize iterations over large numbers of chunks at every frame.
   - Have (fast) sets of chunk coords that indicate if it has a mesh, contains entities, etc. Only render the chunks with meshes.
-    - Chunks should have a flag that says if it is sunch a set, one for every such set. This is important for when the chunk wants to know maybe to decide to get in/out of a set. The synchronisation of that information would become a concern, encapsulation may be of use here.
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
 - Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.
