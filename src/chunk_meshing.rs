@@ -9,177 +9,30 @@ use crate::{
 	ChunkGrid, NonOrientedAxis, OrientedAxis,
 };
 
-/// Information about the opaqueness of each block
-/// contained in a 1-block-thick cubic layer around a chunk.
-///
-/// It is used for meshing of the chunk inside
-/// (to get face culling and ambiant occlusion right on the edges)e
-pub struct OpaquenessLayerAroundChunk {
-	/// The coords span of the chunk that is surrounded by the layer that this struct describes.
-	/// This is NOT the coords span of the layer. The layer is 1-block thick and encloses that
-	/// coords span.
-	surrounded_chunk_coords_span: ChunkCoordsSpan,
-	data: bitvec::vec::BitVec,
+/// All the data that is needed to generate the mesh of a chunk.
+pub struct DataForChunkMeshing {
+	chunk_blocks: ChunkBlocks,
+	opaqueness_layer_for_face_culling: OpaquenessLayerAroundChunk,
+	opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
+	block_type_table: Arc<BlockTypeTable>,
 }
 
-impl OpaquenessLayerAroundChunk {
-	fn new(surrounded_chunk_coords_span: ChunkCoordsSpan) -> OpaquenessLayerAroundChunk {
-		let data = bitvec::vec::BitVec::repeat(
-			false,
-			OpaquenessLayerAroundChunk::data_size(surrounded_chunk_coords_span.cd),
-		);
-		OpaquenessLayerAroundChunk { surrounded_chunk_coords_span, data }
-	}
-
-	fn data_size(cd: ChunkDimensions) -> usize {
-		let face_size = cd.edge.pow(2);
-		let edge_size = cd.edge;
-		let corner_size = 1;
-		(face_size * 6 + edge_size * 12 + corner_size * 8) as usize
-	}
-
-	/// One of the functions of all times, ever!
-	fn coords_to_index_in_data_unchecked(&self, coords: BlockCoords) -> Option<usize> {
-		// Ok so here the goal is to map the coords that are in the layer to a unique index.
-		if self.surrounded_chunk_coords_span.contains(coords) {
-			// If we fall in the chunk that the layer encloses, then we are not in the layer
-			// but we are just in the hole in the middle of the layer.
-			return None;
-		}
-		// Get `inf` and `sup` to represent the cube that is the layer (if we ignore the hole
-		// in the middle that was already taken care of), `sup` is included.
-		let inf: BlockCoords =
-			self.surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
-		let sup: BlockCoords = self.surrounded_chunk_coords_span.block_coords_sup_excluded();
-		let contained_in_the_layer = inf.x <= coords.x
-			&& coords.x <= sup.x
-			&& inf.y <= coords.y
-			&& coords.y <= sup.y
-			&& inf.z <= coords.z
-			&& coords.z <= sup.z;
-		if !contained_in_the_layer {
-			// We are outside of the layer.
-			return None;
-		}
-		// If we get here, then it meas we are in the layer and a unique index has to be determined.
-		// `layer_edge` is the length in blocks of an edge of the layer.
-		let layer_edge = self.surrounded_chunk_coords_span.cd.edge + 2;
-		let ix = coords.x - inf.x;
-		let iy = coords.y - inf.y;
-		let iz = coords.z - inf.z;
-		if iz == 0 {
-			// Bottom face (lowest Z value).
-			Some((ix + iy * layer_edge) as usize)
-		} else if iz == layer_edge - 1 {
-			// Top face (higest Z value).
-			Some((layer_edge.pow(2) + (ix + iy * layer_edge)) as usize)
-		} else {
-			// One of the side faces that are not in the top/bottom faces.
-			// We consider horizontal slices of the layer which are just squares here,
-			// `sub_index` is just a unique index in the square we are in, and
-			// we have to add enough `square_size` to distinguish between the different squares
-			// (for different Z values).
-			// `square_size` is the number of blocks in the line of the square (no middle).
-			let square_size = (layer_edge - 1) * 4;
-			let sub_index = if ix == 0 {
-				iy
-			} else if ix == layer_edge - 1 {
-				layer_edge + iy
-			} else if iy == 0 {
-				layer_edge * 2 + (ix - 1)
-			} else if iy == layer_edge - 1 {
-				layer_edge * 2 + (layer_edge - 2) + (ix - 1)
-			} else {
-				unreachable!()
-			};
-			Some((layer_edge.pow(2) * 2 + (iz - 1) * square_size + sub_index) as usize)
-			// >w<
-		}
-	}
-
-	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
-		let index_opt = self.coords_to_index_in_data_unchecked(coords);
-		if let Some(index) = index_opt {
-			assert!(index < self.data.len());
-		}
-		index_opt
-	}
-
-	fn set(&mut self, coords: BlockCoords, value: bool) {
-		let index = self.coords_to_index_in_data(coords).unwrap();
-		self.data.set(index, value);
-	}
-
-	fn get(&mut self, coords: BlockCoords) -> Option<bool> {
-		let index = self.coords_to_index_in_data(coords)?;
-		Some(*self.data.get(index).unwrap())
-	}
-}
-
-#[cfg(test)]
-mod test {
-	use crate::coords::iter_3d_rect_inf_sup_excluded;
-
-	use super::*;
-	#[test]
-	fn indexing_of_the_funky_layer_data_structure() {
-		let cd = ChunkDimensions::from(18);
-		let chunk_coords_span = ChunkCoordsSpan { cd, chunk_coords: (2, -3, 0).into() };
-		let layer = OpaquenessLayerAroundChunk::new(chunk_coords_span);
-
-		let layer_size = OpaquenessLayerAroundChunk::data_size(cd);
-		let mut indices = vec![];
-
-		// We iterate over all the coords in the layer and in the layer hole.
-		let inf: BlockCoords = chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
-		let sup_excluded: BlockCoords =
-			chunk_coords_span.block_coords_sup_excluded() + cgmath::vec3(1, 1, 1);
-		for coords in iter_3d_rect_inf_sup_excluded(inf, sup_excluded) {
-			let index_opt = layer.coords_to_index_in_data(coords);
-			if let Some(index) = index_opt {
-				// The layer gave an index to the coords, which means we are supposed
-				// to be on the layer.
-				// Indices must be unique so we check for that.
-				assert!(!indices.contains(&index));
-				indices.push(index);
-			} else {
-				// The layer didn't give an index so it means we are not on the layer.
-				// We don't test for coords outside of the layer and its hole so we
-				// must be in the hole at the center of the layer.
-				assert!(chunk_coords_span.contains(coords));
-			}
-		}
-
-		// The indices must be unique, and we already checked for that.
-		// The indices also must cover all possible indices from 0 to the max expected index,
-		// we check for that here.
-		for expected_index in 0..layer_size {
-			assert!(indices.contains(&expected_index));
-		}
-	}
-}
-
-impl ChunkBlocks {
-	pub(crate) fn generate_mesh(
-		&self,
-		mut opaqueness_layer_for_face_culling: OpaquenessLayerAroundChunk,
-		mut opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
-		block_type_table: Arc<BlockTypeTable>,
-	) -> ChunkMesh {
-		let mut is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
-			if let Some(block_id) = self.get(coords) {
-				block_type_table.get(block_id).unwrap().is_opaque()
+impl DataForChunkMeshing {
+	pub(crate) fn generate_mesh(self) -> ChunkMesh {
+		let is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
+			if let Some(block_id) = self.chunk_blocks.get(coords) {
+				self.block_type_table.get(block_id).unwrap().is_opaque()
 			} else if for_ambiant_occlusion {
-				opaqueness_layer_for_ambiant_occlusion.get(coords).unwrap()
+				self.opaqueness_layer_for_ambiant_occlusion.get(coords).unwrap()
 			} else {
-				opaqueness_layer_for_face_culling.get(coords).unwrap()
+				self.opaqueness_layer_for_face_culling.get(coords).unwrap()
 			}
 		};
 
 		let mut block_vertices = Vec::new();
-		for coords in self.coords_span.iter_coords() {
-			let block_id = self.get(coords).unwrap();
-			match block_type_table.get(block_id).unwrap() {
+		for coords in self.chunk_blocks.coords_span.iter_coords() {
+			let block_id = self.chunk_blocks.get(coords).unwrap();
+			match self.block_type_table.get(block_id).unwrap() {
 				BlockType::Air => {},
 				BlockType::Solid { texture_coords_on_atlas } => {
 					let opacity_bit_cube_3_for_ambiant_occlusion = {
@@ -552,8 +405,158 @@ fn generate_xshaped_block_face_mesh(
 	}
 }
 
+/// Information about the opaqueness of each block
+/// contained in a 1-block-thick cubic layer around a chunk.
+///
+/// It is used for meshing of the chunk inside
+/// (to get face culling and ambiant occlusion right on the edges)e
+pub struct OpaquenessLayerAroundChunk {
+	/// The coords span of the chunk that is surrounded by the layer that this struct describes.
+	/// This is NOT the coords span of the layer. The layer is 1-block thick and encloses that
+	/// coords span.
+	surrounded_chunk_coords_span: ChunkCoordsSpan,
+	data: bitvec::vec::BitVec,
+}
+
+impl OpaquenessLayerAroundChunk {
+	fn new(surrounded_chunk_coords_span: ChunkCoordsSpan) -> OpaquenessLayerAroundChunk {
+		let data = bitvec::vec::BitVec::repeat(
+			false,
+			OpaquenessLayerAroundChunk::data_size(surrounded_chunk_coords_span.cd),
+		);
+		OpaquenessLayerAroundChunk { surrounded_chunk_coords_span, data }
+	}
+
+	fn data_size(cd: ChunkDimensions) -> usize {
+		let face_size = cd.edge.pow(2);
+		let edge_size = cd.edge;
+		let corner_size = 1;
+		(face_size * 6 + edge_size * 12 + corner_size * 8) as usize
+	}
+
+	/// One of the functions of all times, ever!
+	fn coords_to_index_in_data_unchecked(&self, coords: BlockCoords) -> Option<usize> {
+		// Ok so here the goal is to map the coords that are in the layer to a unique index.
+		if self.surrounded_chunk_coords_span.contains(coords) {
+			// If we fall in the chunk that the layer encloses, then we are not in the layer
+			// but we are just in the hole in the middle of the layer.
+			return None;
+		}
+		// Get `inf` and `sup` to represent the cube that is the layer (if we ignore the hole
+		// in the middle that was already taken care of), `sup` is included.
+		let inf: BlockCoords =
+			self.surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
+		let sup: BlockCoords = self.surrounded_chunk_coords_span.block_coords_sup_excluded();
+		let contained_in_the_layer = inf.x <= coords.x
+			&& coords.x <= sup.x
+			&& inf.y <= coords.y
+			&& coords.y <= sup.y
+			&& inf.z <= coords.z
+			&& coords.z <= sup.z;
+		if !contained_in_the_layer {
+			// We are outside of the layer.
+			return None;
+		}
+		// If we get here, then it meas we are in the layer and a unique index has to be determined.
+		// `layer_edge` is the length in blocks of an edge of the layer.
+		let layer_edge = self.surrounded_chunk_coords_span.cd.edge + 2;
+		let ix = coords.x - inf.x;
+		let iy = coords.y - inf.y;
+		let iz = coords.z - inf.z;
+		if iz == 0 {
+			// Bottom face (lowest Z value).
+			Some((ix + iy * layer_edge) as usize)
+		} else if iz == layer_edge - 1 {
+			// Top face (higest Z value).
+			Some((layer_edge.pow(2) + (ix + iy * layer_edge)) as usize)
+		} else {
+			// One of the side faces that are not in the top/bottom faces.
+			// We consider horizontal slices of the layer which are just squares here,
+			// `sub_index` is just a unique index in the square we are in, and
+			// we have to add enough `square_size` to distinguish between the different squares
+			// (for different Z values).
+			// `square_size` is the number of blocks in the line of the square (no middle).
+			let square_size = (layer_edge - 1) * 4;
+			let sub_index = if ix == 0 {
+				iy
+			} else if ix == layer_edge - 1 {
+				layer_edge + iy
+			} else if iy == 0 {
+				layer_edge * 2 + (ix - 1)
+			} else if iy == layer_edge - 1 {
+				layer_edge * 2 + (layer_edge - 2) + (ix - 1)
+			} else {
+				unreachable!()
+			};
+			Some((layer_edge.pow(2) * 2 + (iz - 1) * square_size + sub_index) as usize)
+			// >w<
+		}
+	}
+
+	fn coords_to_index_in_data(&self, coords: BlockCoords) -> Option<usize> {
+		let index_opt = self.coords_to_index_in_data_unchecked(coords);
+		if let Some(index) = index_opt {
+			assert!(index < self.data.len());
+		}
+		index_opt
+	}
+
+	fn set(&mut self, coords: BlockCoords, value: bool) {
+		let index = self.coords_to_index_in_data(coords).unwrap();
+		self.data.set(index, value);
+	}
+
+	fn get(&self, coords: BlockCoords) -> Option<bool> {
+		let index = self.coords_to_index_in_data(coords)?;
+		Some(*self.data.get(index).unwrap())
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use crate::coords::iter_3d_rect_inf_sup_excluded;
+
+	use super::*;
+	#[test]
+	fn indexing_of_the_funky_layer_data_structure() {
+		let cd = ChunkDimensions::from(18);
+		let chunk_coords_span = ChunkCoordsSpan { cd, chunk_coords: (2, -3, 0).into() };
+		let layer = OpaquenessLayerAroundChunk::new(chunk_coords_span);
+
+		let layer_size = OpaquenessLayerAroundChunk::data_size(cd);
+		let mut indices = vec![];
+
+		// We iterate over all the coords in the layer and in the layer hole.
+		let inf: BlockCoords = chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);
+		let sup_excluded: BlockCoords =
+			chunk_coords_span.block_coords_sup_excluded() + cgmath::vec3(1, 1, 1);
+		for coords in iter_3d_rect_inf_sup_excluded(inf, sup_excluded) {
+			let index_opt = layer.coords_to_index_in_data(coords);
+			if let Some(index) = index_opt {
+				// The layer gave an index to the coords, which means we are supposed
+				// to be on the layer.
+				// Indices must be unique so we check for that.
+				assert!(!indices.contains(&index));
+				indices.push(index);
+			} else {
+				// The layer didn't give an index so it means we are not on the layer.
+				// We don't test for coords outside of the layer and its hole so we
+				// must be in the hole at the center of the layer.
+				assert!(chunk_coords_span.contains(coords));
+			}
+		}
+
+		// The indices must be unique, and we already checked for that.
+		// The indices also must cover all possible indices from 0 to the max expected index,
+		// we check for that here.
+		for expected_index in 0..layer_size {
+			assert!(indices.contains(&expected_index));
+		}
+	}
+}
+
 impl ChunkGrid {
-	pub(crate) fn get_opaqueness_layer_around_chunk(
+	fn get_opaqueness_layer_around_chunk(
 		&self,
 		chunk_coords: ChunkCoords,
 		default_to_opaque: bool,
@@ -590,5 +593,24 @@ impl ChunkGrid {
 		}
 
 		layer
+	}
+
+	pub fn get_data_for_chunk_meshing(
+		&self,
+		chunk_coords: ChunkCoords,
+		block_type_table: Arc<BlockTypeTable>,
+	) -> DataForChunkMeshing {
+		let opaqueness_layer_for_face_culling =
+			self.get_opaqueness_layer_around_chunk(chunk_coords, true, Arc::clone(&block_type_table));
+		let opaqueness_layer_for_ambiant_occlusion =
+			self.get_opaqueness_layer_around_chunk(chunk_coords, false, Arc::clone(&block_type_table));
+		// TODO: Find a way to avoid cloning all these blocks ><.
+		let chunk_blocks = self.blocks_map.get(&chunk_coords).unwrap().clone();
+		DataForChunkMeshing {
+			chunk_blocks,
+			opaqueness_layer_for_face_culling,
+			opaqueness_layer_for_ambiant_occlusion,
+			block_type_table,
+		}
 	}
 }

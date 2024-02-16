@@ -1268,35 +1268,12 @@ pub fn run() {
 					game.chunk_grid.remeshing_required_set.remove(&chunk_coords);
 					let (sender, receiver) = std::sync::mpsc::channel();
 					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
-					let opaqueness_layer_for_face_culling =
-						game.chunk_grid.get_opaqueness_layer_around_chunk(
-							chunk_coords,
-							true,
-							Arc::clone(&game.block_type_table),
-						);
-					let opaqueness_layer_for_ambiant_occlusion =
-						game.chunk_grid.get_opaqueness_layer_around_chunk(
-							chunk_coords,
-							false,
-							Arc::clone(&game.block_type_table),
-						);
-					// TODO: Find a way to avoid cloning all these blocks ><.
-					let chunk_blocks = game.chunk_grid.blocks_map.get(&chunk_coords).unwrap().clone();
+					let data_for_chunk_meshing = game
+						.chunk_grid
+						.get_data_for_chunk_meshing(chunk_coords, Arc::clone(&game.block_type_table));
 					let device = Arc::clone(&game.device);
-					let block_type_table = Arc::clone(&game.block_type_table);
 					game.pool.enqueue_task(Box::new(move || {
-						// TODO: Remove the sleeping!
-						// Test delay to make sure that the main thread keeps working even
-						// when the workers tasks take very long.
-						//std::thread::sleep(std::time::Duration::from_secs_f32(
-						//	rand::thread_rng().gen_range(0.1..0.3),
-						//));
-
-						let mut mesh = chunk_blocks.generate_mesh(
-							opaqueness_layer_for_face_culling,
-							opaqueness_layer_for_ambiant_occlusion,
-							block_type_table,
-						);
+						let mut mesh = data_for_chunk_meshing.generate_mesh();
 						mesh.update_gpu_data(&device);
 						let _ = sender.send(mesh);
 					}));
@@ -1471,13 +1448,6 @@ pub fn run() {
 							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 							let block_type_table = Arc::clone(&game.block_type_table);
 							game.pool.enqueue_task(Box::new(move || {
-								// TODO: Remove the sleeping!
-								// Test delay to make sure that the main thread keeps working even
-								// when the workers tasks take very long.
-								//std::thread::sleep(std::time::Duration::from_secs_f32(
-								//	rand::thread_rng().gen_range(0.1..0.3),
-								//));
-
 								let chunk_blocks = chunk_generator
 									.generate_chunk_blocks(coords_span, Arc::clone(&block_type_table));
 								let chunk_culling_info =
