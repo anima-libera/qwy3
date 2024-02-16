@@ -15,7 +15,7 @@ enum OrderToManager {
 	_End,
 }
 
-pub struct ThreadPool {
+pub(crate) struct ThreadPool {
 	order_sender_to_manager: mpsc::Sender<OrderToManager>,
 	number_of_workers: usize,
 }
@@ -37,7 +37,7 @@ impl ThreadPool {
 	/// and a ot of place ahead in the pending task queue, so we would want the high priority
 	/// remeshing tasks to skip the whole queue and maybe even not wait for a worker to finish
 	/// by being handled by dedicated workers.
-	pub fn new(number_of_workers: usize) -> ThreadPool {
+	pub(crate) fn new(number_of_workers: usize) -> ThreadPool {
 		// The threadpool owner can order the manager around via this channel.
 		let (order_sender_to_manager, manager_order_receiver) = mpsc::channel::<OrderToManager>();
 
@@ -129,15 +129,15 @@ impl ThreadPool {
 	/// Ends the manager and worker threads.
 	/// Note that dropping the `ThreadPool` should do the trick too (as it hangs up a channel
 	/// that makes the manager behaves the same way it would as by calling this method).
-	pub fn _end(self) {
+	pub(crate) fn _end(self) {
 		self.order_sender_to_manager.send(OrderToManager::_End).unwrap();
 	}
 
-	pub fn enqueue_task(&self, task: Task) {
+	pub(crate) fn enqueue_task(&self, task: Task) {
 		self.order_sender_to_manager.send(OrderToManager::Task(task)).unwrap();
 	}
 
-	pub fn number_of_workers(&self) -> usize {
+	pub(crate) fn number_of_workers(&self) -> usize {
 		self.number_of_workers
 	}
 }

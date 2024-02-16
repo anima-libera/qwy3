@@ -5,13 +5,13 @@ pub(crate) use crate::{coords::AlignedBox, shaders::simple_line::SimpleLineVerte
 /// Mesh of simple lines.
 ///
 /// Can be used (for example) to display hit boxes for debugging purposes.
-pub struct SimpleLineMesh {
-	pub vertices: Vec<SimpleLineVertexPod>,
-	pub vertex_buffer: wgpu::Buffer,
+pub(crate) struct SimpleLineMesh {
+	pub(crate) vertices: Vec<SimpleLineVertexPod>,
+	pub(crate) vertex_buffer: wgpu::Buffer,
 }
 
 impl SimpleLineMesh {
-	pub fn from_vertices(
+	pub(crate) fn from_vertices(
 		device: &wgpu::Device,
 		vertices: Vec<SimpleLineVertexPod>,
 	) -> SimpleLineMesh {
@@ -73,7 +73,7 @@ impl SimpleLineMesh {
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
 
-	pub fn interface_2d_cursor(device: &wgpu::Device) -> SimpleLineMesh {
+	pub(crate) fn interface_2d_cursor(device: &wgpu::Device) -> SimpleLineMesh {
 		let color = [1.0, 1.0, 1.0];
 		let size = 0.015;
 		let vertices = vec![

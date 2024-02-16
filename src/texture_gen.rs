@@ -2,9 +2,9 @@ use image::{GenericImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 
 use crate::noise::OctavedNoise;
 
-pub type View<'a> = SubImage<&'a mut ImageBuffer<Rgba<u8>, Vec<u8>>>;
+pub(crate) type View<'a> = SubImage<&'a mut ImageBuffer<Rgba<u8>, Vec<u8>>>;
 
-pub struct TextureViewWrapping<'a> {
+pub(crate) struct TextureViewWrapping<'a> {
 	view: View<'a>,
 }
 
@@ -268,13 +268,13 @@ fn color_weighted_mean(weighted_colors: &[WeightedValue<Color>]) -> Color {
 	image::Rgba::from(rgba)
 }
 
-pub fn default_ground(view: View, world_seed: i32, texture_seed: i32) {
+pub(crate) fn default_ground(view: View, world_seed: i32, texture_seed: i32) {
 	let mut texture = TextureViewWrapping::from_view(view);
 	let initializer = Initializer::GreyRandom { inf: 240, sup_included: 255, seed: 1 };
 	texture.apply_initializer(&initializer, world_seed, texture_seed);
 }
 
-pub fn generate_texture(view: View, world_seed: i32, texture_seed: i32) {
+pub(crate) fn generate_texture(view: View, world_seed: i32, texture_seed: i32) {
 	let mut texture = TextureViewWrapping::from_view(view);
 	texture.apply_texture_generator(
 		&generate_texture_generator_not_uniform(world_seed, texture_seed),

@@ -1,11 +1,11 @@
 use super::simple_line::SimpleLineVertexPod;
 pub(crate) use crate::BindingThingy;
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
-pub fn render_pipeline(
+pub(crate) fn render_pipeline(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,

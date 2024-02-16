@@ -1,13 +1,13 @@
 use super::block::BlockVertexPod;
 pub(crate) use crate::BindingThingy;
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
-pub fn render_pipeline_and_bind_group(
+pub(crate) fn render_pipeline_and_bind_group(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	z_buffer_format: wgpu::TextureFormat,

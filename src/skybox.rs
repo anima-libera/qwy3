@@ -18,15 +18,15 @@ use wgpu::util::DeviceExt;
 
 use crate::{noise::OctavedNoise, shaders::skybox::SkyboxVertexPod, OrientedAxis, SkyboxData};
 
-pub const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);
+pub(crate) const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);
 
-pub struct SkyboxMesh {
-	pub vertices: Vec<SkyboxVertexPod>,
-	pub vertex_buffer: wgpu::Buffer,
+pub(crate) struct SkyboxMesh {
+	pub(crate) vertices: Vec<SkyboxVertexPod>,
+	pub(crate) vertex_buffer: wgpu::Buffer,
 }
 
 impl SkyboxMesh {
-	pub fn new(device: &wgpu::Device, center_coords: Point3<f32>) -> SkyboxMesh {
+	pub(crate) fn new(device: &wgpu::Device, center_coords: Point3<f32>) -> SkyboxMesh {
 		let new_vertex =
 			|position: Point3<f32>, transformations: &[Transformation]| -> SkyboxVertexPod {
 				SkyboxVertexPod {
@@ -112,7 +112,7 @@ impl SkyboxMesh {
 	}
 }
 
-pub fn default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
+pub(crate) fn default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
 	Rgba([
 		((direction.x + 1.0) / 2.0 * 255.0) as u8,
 		((direction.y + 1.0) / 2.0 * 255.0) as u8,
@@ -121,7 +121,7 @@ pub fn default_skybox_painter(direction: Vector3<f32>) -> Rgba<u8> {
 	])
 }
 
-pub fn _default_skybox_painter_2(
+pub(crate) fn _default_skybox_painter_2(
 	number_of_octaves: u32,
 	seed: i32,
 ) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
@@ -139,7 +139,7 @@ pub fn _default_skybox_painter_2(
 	}
 }
 
-pub fn default_skybox_painter_3(
+pub(crate) fn default_skybox_painter_3(
 	number_of_octaves: u32,
 	seed: i32,
 ) -> impl Fn(Vector3<f32>) -> Rgba<u8> {
@@ -226,7 +226,7 @@ fn generate_a_skybox_cubemap_face_image(
 	image
 }
 
-pub fn generate_skybox_cubemap_faces_images(
+pub(crate) fn generate_skybox_cubemap_faces_images(
 	skybox_painter: &dyn Fn(Vector3<f32>) -> Rgba<u8>,
 	face_counter: Option<Arc<AtomicI32>>,
 ) -> SkyboxFaces {
@@ -244,17 +244,17 @@ pub fn generate_skybox_cubemap_faces_images(
 	}
 	SkyboxFaces {
 		faces: faces.try_into().unwrap(),
-		face_directions: face_directions.try_into().unwrap(),
+		_face_directions: face_directions.try_into().unwrap(),
 	}
 }
 
-pub struct SkyboxFaces {
-	pub faces: [image::RgbaImage; 6],
-	pub face_directions: [OrientedAxis; 6],
+pub(crate) struct SkyboxFaces {
+	pub(crate) faces: [image::RgbaImage; 6],
+	pub(crate) _face_directions: [OrientedAxis; 6],
 }
 
 impl SkyboxFaces {
-	pub fn data(&self) -> SkyboxData {
+	pub(crate) fn data(&self) -> SkyboxData {
 		[
 			self.faces[0].as_ref(),
 			self.faces[1].as_ref(),

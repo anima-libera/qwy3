@@ -50,17 +50,17 @@ fn simple_line_vertices_for_diamond(
 
 /// Vertices for mutliple meshes used to render the interface.
 /// Widgets can draw themselves by adding vertices in here.
-pub struct InterfaceMeshesVertices {
-	pub simple_texture_vertices: Vec<SimpleTextureVertexPod>,
-	pub simple_line_vertices: Vec<SimpleLineVertexPod>,
+pub(crate) struct InterfaceMeshesVertices {
+	pub(crate) simple_texture_vertices: Vec<SimpleTextureVertexPod>,
+	pub(crate) simple_line_vertices: Vec<SimpleLineVertexPod>,
 }
 
 impl InterfaceMeshesVertices {
-	pub fn new() -> InterfaceMeshesVertices {
+	pub(crate) fn new() -> InterfaceMeshesVertices {
 		InterfaceMeshesVertices { simple_texture_vertices: vec![], simple_line_vertices: vec![] }
 	}
 
-	pub fn add_simple_texture_vertices(&mut self, mut vertices: Vec<SimpleTextureVertexPod>) {
+	pub(crate) fn add_simple_texture_vertices(&mut self, mut vertices: Vec<SimpleTextureVertexPod>) {
 		self.simple_texture_vertices.append(&mut vertices);
 	}
 
@@ -70,12 +70,12 @@ impl InterfaceMeshesVertices {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum WidgetLabel {
+pub(crate) enum WidgetLabel {
 	GeneralDebugInfo,
 	LogLineList,
 }
 
-pub enum Widget {
+pub(crate) enum Widget {
 	Nothing,
 	SimpleText {
 		text: String,
@@ -132,33 +132,33 @@ impl Widget {
 		Widget::Nothing
 	}
 
-	pub fn new_simple_text(text: String, settings: font::TextRenderingSettings) -> Widget {
+	pub(crate) fn new_simple_text(text: String, settings: font::TextRenderingSettings) -> Widget {
 		Widget::SimpleText { text, settings }
 	}
 
-	pub fn new_face_counter(
+	pub(crate) fn new_face_counter(
 		settings: font::TextRenderingSettings,
 		counter: Arc<AtomicI32>,
 	) -> Widget {
 		Widget::FaceCounter { settings, counter }
 	}
 
-	pub fn new_labeled_nothing(label: WidgetLabel) -> Widget {
+	pub(crate) fn new_labeled_nothing(label: WidgetLabel) -> Widget {
 		Widget::Label { sub_widget: Box::new(Widget::new_nothing()), label }
 	}
 
-	pub fn new_label(label: WidgetLabel, sub_widget: Box<Widget>) -> Widget {
+	pub(crate) fn new_label(label: WidgetLabel, sub_widget: Box<Widget>) -> Widget {
 		Widget::Label { sub_widget, label }
 	}
 
-	pub fn new_margins(
+	pub(crate) fn new_margins(
 		(margin_left, margin_top, margin_right, margin_bottom): (f32, f32, f32, f32),
 		sub_widget: Box<Widget>,
 	) -> Widget {
 		Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom }
 	}
 
-	pub fn new_smoothly_incoming(
+	pub(crate) fn new_smoothly_incoming(
 		start_top_left: cgmath::Point2<f32>,
 		animation_start_time: std::time::Instant,
 		animation_duration: std::time::Duration,
@@ -172,18 +172,18 @@ impl Widget {
 		}
 	}
 
-	pub fn new_disappear_when_complete(
+	pub(crate) fn new_disappear_when_complete(
 		delay_before_disappearing: std::time::Duration,
 		sub_widget: Box<Widget>,
 	) -> Widget {
 		Widget::DisappearWhenComplete { sub_widget, completed_time: None, delay_before_disappearing }
 	}
 
-	pub fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
+	pub(crate) fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
 		Widget::List { sub_widgets, interspace }
 	}
 
-	pub fn pop_while_smoothly_closing_space(
+	pub(crate) fn pop_while_smoothly_closing_space(
 		&mut self,
 		animation_start_time: std::time::Instant,
 		animation_duration: std::time::Duration,
@@ -199,11 +199,11 @@ impl Widget {
 		widget
 	}
 
-	pub fn is_diappearing(&self) -> bool {
+	pub(crate) fn is_diappearing(&self) -> bool {
 		matches!(self, Widget::SmoothlyDisappearingEmptySpace { .. })
 	}
 
-	pub fn is_completed(&self) -> bool {
+	pub(crate) fn is_completed(&self) -> bool {
 		if let Widget::FaceCounter { counter, .. } = self {
 			counter.load(atomic::Ordering::Relaxed) >= 6
 		} else {
@@ -211,7 +211,7 @@ impl Widget {
 		}
 	}
 
-	pub fn for_each_rec(&mut self, f: &mut dyn FnMut(&mut Widget)) {
+	pub(crate) fn for_each_rec(&mut self, f: &mut dyn FnMut(&mut Widget)) {
 		f(self);
 		match self {
 			Widget::Nothing => {},
@@ -222,8 +222,9 @@ impl Widget {
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.for_each_rec(f),
 			Widget::SmoothlyDisappearingEmptySpace { .. } => {},
 			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.for_each_rec(f),
-			Widget::List { sub_widgets, .. } =>
-				sub_widgets.iter_mut().for_each(|sub_widget| sub_widget.for_each_rec(f)),
+			Widget::List { sub_widgets, .. } => {
+				sub_widgets.iter_mut().for_each(|sub_widget| sub_widget.for_each_rec(f))
+			},
 		};
 	}
 
@@ -239,13 +240,14 @@ impl Widget {
 			Widget::SmoothlyIncoming { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::SmoothlyDisappearingEmptySpace { .. } => None,
 			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.find_label(label_to_find),
-			Widget::List { sub_widgets, .. } =>
-				sub_widgets.iter_mut().find_map(|sub_widget| sub_widget.find_label(label_to_find)),
+			Widget::List { sub_widgets, .. } => {
+				sub_widgets.iter_mut().find_map(|sub_widget| sub_widget.find_label(label_to_find))
+			},
 		}
 	}
 
 	/// Returns the content of the first found label widget that matches with the given label.
-	pub fn find_label_content(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
+	pub(crate) fn find_label_content(&mut self, label_to_find: WidgetLabel) -> Option<&mut Widget> {
 		self.find_label(label_to_find).map(|label_widget| {
 			if let Widget::Label { sub_widget, .. } = label_widget {
 				Box::as_mut(sub_widget)
@@ -288,8 +290,9 @@ impl Widget {
 	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
 		match self {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
-			Widget::SimpleText { text, settings } =>
-				font.dimensions_of_text(window_width, settings.clone(), text.as_str()),
+			Widget::SimpleText { text, settings } => {
+				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
+			},
 			Widget::FaceCounter { settings, .. } => font.dimensions_of_text(
 				window_width,
 				settings.clone(),
@@ -311,8 +314,9 @@ impl Widget {
 				let ratio = self.existence_ratio();
 				start_dimensions * ratio
 			},
-			Widget::DisappearWhenComplete { sub_widget, .. } =>
-				sub_widget.dimensions(font, window_width),
+			Widget::DisappearWhenComplete { sub_widget, .. } => {
+				sub_widget.dimensions(font, window_width)
+			},
 			Widget::List { sub_widgets, interspace } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
@@ -337,7 +341,7 @@ impl Widget {
 	}
 
 	/// Generates the mesh vertices in the given `meshes` that draw the widget.
-	pub fn generate_mesh_vertices(
+	pub(crate) fn generate_mesh_vertices(
 		&self,
 		top_left: cgmath::Point3<f32>,
 		meshes: &mut InterfaceMeshesVertices,

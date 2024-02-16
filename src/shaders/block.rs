@@ -7,14 +7,14 @@ pub(crate) use crate::BindingThingy;
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct BlockVertexPod {
-	pub position: [f32; 3],
-	pub coords_in_atlas: [f32; 2],
-	pub normal: [f32; 3],
-	pub ambiant_occlusion: f32,
+pub(crate) struct BlockVertexPod {
+	pub(crate) position: [f32; 3],
+	pub(crate) coords_in_atlas: [f32; 2],
+	pub(crate) normal: [f32; 3],
+	pub(crate) ambiant_occlusion: f32,
 }
 impl BlockVertexPod {
-	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 4] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 4] {
 		vertex_attr_array![
 			0 => Float32x3,
 			1 => Float32x2,
@@ -24,7 +24,7 @@ impl BlockVertexPod {
 	}
 }
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
@@ -36,7 +36,7 @@ pub struct BindingThingies<'a> {
 	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
-pub fn render_pipeline_and_bind_group(
+pub(crate) fn render_pipeline_and_bind_group(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,

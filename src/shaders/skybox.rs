@@ -7,15 +7,15 @@ pub(crate) use crate::BindingThingy;
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct SkyboxVertexPod {
-	pub position: [f32; 3],
+pub(crate) struct SkyboxVertexPod {
+	pub(crate) position: [f32; 3],
 	/// 3D direction vector pointing from the origin to a point on the cubemap.
 	/// This is how `Cube`-dimensional cubemap textures are sampled.
 	/// See https://www.w3.org/TR/WGSL/#texture-dimensionality and related notions for more.
-	pub coords_in_skybox_cubemap: [f32; 3],
+	pub(crate) coords_in_skybox_cubemap: [f32; 3],
 }
 impl SkyboxVertexPod {
-	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 2] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 2] {
 		vertex_attr_array![
 			0 => Float32x3,
 			1 => Float32x3,
@@ -23,13 +23,13 @@ impl SkyboxVertexPod {
 	}
 }
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) skybox_cubemap_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) skybox_cubemap_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
-pub fn render_pipeline_and_bind_group(
+pub(crate) fn render_pipeline_and_bind_group(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,

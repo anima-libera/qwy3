@@ -20,18 +20,18 @@ pub(crate) use crate::{
 ///
 /// If no non-air block is ever placed in a `ChunkBlocks` then it never allocates memory.
 #[derive(Clone)]
-pub struct ChunkBlocks {
-	pub coords_span: ChunkCoordsSpan,
+pub(crate) struct ChunkBlocks {
+	pub(crate) coords_span: ChunkCoordsSpan,
 	/// If the length is zero then it means the chunk is full of air.
 	blocks: Vec<BlockTypeId>,
 }
 
 impl ChunkBlocks {
-	pub fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
+	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks { coords_span, blocks: vec![] }
 	}
 
-	pub fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
+	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
 		let internal_index = self.coords_span.internal_index(coords)?;
 		Some(if self.blocks.is_empty() {
 			BlockTypeId { value: 0 }
@@ -40,7 +40,7 @@ impl ChunkBlocks {
 		})
 	}
 
-	pub fn set(&mut self, coords: BlockCoords, block: BlockTypeId) {
+	pub(crate) fn set(&mut self, coords: BlockCoords, block: BlockTypeId) {
 		if let Some(internal_index) = self.coords_span.internal_index(coords) {
 			if self.blocks.is_empty() && block.value == 0 {
 				// Setting a block to air, but we are already empty, there is no need to allocate.
@@ -63,22 +63,22 @@ impl ChunkBlocks {
 
 /// Information that can be used to decide if some chunks should not be loaded or be unloaded.
 #[derive(Clone)]
-pub struct ChunkCullingInfo {
-	pub all_air: bool,
-	pub all_opaque: bool,
-	pub all_opaque_faces: Vec<OrientedAxis>,
-	pub all_air_faces: Vec<OrientedAxis>,
+pub(crate) struct ChunkCullingInfo {
+	pub(crate) all_air: bool,
+	pub(crate) _all_opaque: bool,
+	pub(crate) all_opaque_faces: Vec<OrientedAxis>,
+	pub(crate) all_air_faces: Vec<OrientedAxis>,
 }
 
 impl ChunkCullingInfo {
-	pub fn compute_from_blocks(
+	pub(crate) fn compute_from_blocks(
 		blocks: &ChunkBlocks,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkCullingInfo {
 		if !blocks.may_contain_non_air() {
 			return ChunkCullingInfo {
 				all_air: true,
-				all_opaque: false,
+				_all_opaque: false,
 				all_opaque_faces: vec![],
 				all_air_faces: OrientedAxis::all_the_six_possible_directions().collect(),
 			};
@@ -113,7 +113,7 @@ impl ChunkCullingInfo {
 			}
 		}
 
-		ChunkCullingInfo { all_air, all_opaque, all_opaque_faces, all_air_faces }
+		ChunkCullingInfo { all_air, _all_opaque: all_opaque, all_opaque_faces, all_air_faces }
 	}
 
 	fn face_is_all_opaque(
@@ -151,16 +151,16 @@ impl ChunkCullingInfo {
 	}
 }
 
-pub struct ChunkGrid {
-	pub cd: ChunkDimensions,
-	pub blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
-	pub culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
-	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
-	pub remeshing_required_set: FxHashSet<ChunkCoords>,
+pub(crate) struct ChunkGrid {
+	pub(crate) cd: ChunkDimensions,
+	pub(crate) blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
+	pub(crate) culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
+	pub(crate) mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
+	pub(crate) remeshing_required_set: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
-	pub fn new(cd: ChunkDimensions) -> ChunkGrid {
+	pub(crate) fn new(cd: ChunkDimensions) -> ChunkGrid {
 		ChunkGrid {
 			cd,
 			blocks_map: HashMap::default(),
@@ -170,7 +170,7 @@ impl ChunkGrid {
 		}
 	}
 
-	pub fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
+	pub(crate) fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.blocks_map.contains_key(&chunk_coords)
 	}
 

@@ -1,15 +1,15 @@
 use cgmath::Zero;
 
 /// Width / height.
-pub type AspectRatio = f32;
-pub fn aspect_ratio(width: u32, height: u32) -> AspectRatio {
+pub(crate) type AspectRatio = f32;
+pub(crate) fn aspect_ratio(width: u32, height: u32) -> AspectRatio {
 	width as f32 / height as f32
 }
 
 /// A camera setting type does not contain the position of a camera
 /// or of its target, but it contains all the other setting values
 /// used in the computation of the view projection matrix.
-pub trait CameraSettings {
+pub(crate) trait CameraSettings {
 	/// Get the base projection matrix, like the matrix that does the perspective projection
 	/// or the orthographic projection or something.
 	fn projection_matrix(&self) -> cgmath::Matrix4<f32>;
@@ -49,7 +49,7 @@ pub trait CameraSettings {
 		// range is not (-1, 1) but instead is (0, 1).
 		// `cgmath` assumes OpenGL-like conventions and here we correct these assumptions to Wgpu.
 		#[rustfmt::skip]
-		pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+		pub(crate) const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 			1.0, 0.0, 0.0, 0.0,
 			0.0, 1.0, 0.0, 0.0,
 			0.0, 0.0, 0.5, 0.0,
@@ -62,14 +62,14 @@ pub trait CameraSettings {
 }
 
 /// Camera settings with perspective.
-pub struct CameraPerspectiveSettings {
-	pub up_direction: cgmath::Vector3<f32>,
+pub(crate) struct CameraPerspectiveSettings {
+	pub(crate) up_direction: cgmath::Vector3<f32>,
 	/// Width / height.
-	pub aspect_ratio: AspectRatio,
+	pub(crate) aspect_ratio: AspectRatio,
 	/// Angle (unsigned, in radians) of view on the vertical axis, "fovy".
-	pub field_of_view_y: f32,
-	pub near_plane: f32,
-	pub far_plane: f32,
+	pub(crate) field_of_view_y: f32,
+	pub(crate) near_plane: f32,
+	pub(crate) far_plane: f32,
 }
 
 impl CameraSettings for CameraPerspectiveSettings {
@@ -88,11 +88,11 @@ impl CameraSettings for CameraPerspectiveSettings {
 }
 
 /// Camera settings with no perspective (orthographic).
-pub struct CameraOrthographicSettings {
-	pub up_direction: cgmath::Vector3<f32>,
-	pub width: f32,
-	pub height: f32,
-	pub depth: f32,
+pub(crate) struct CameraOrthographicSettings {
+	pub(crate) up_direction: cgmath::Vector3<f32>,
+	pub(crate) width: f32,
+	pub(crate) height: f32,
+	pub(crate) depth: f32,
 }
 
 impl CameraSettings for CameraOrthographicSettings {
@@ -117,6 +117,6 @@ impl CameraSettings for CameraOrthographicSettings {
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Matrix4x4Pod {
+pub(crate) struct Matrix4x4Pod {
 	values: [[f32; 4]; 4],
 }

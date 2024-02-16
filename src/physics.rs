@@ -6,15 +6,15 @@ use crate::{
 use std::{sync::Arc, time::Duration};
 
 /// Represents an `AlignedBox`-shaped object that has physics or something like that.
-pub struct AlignedPhysBox {
-	pub aligned_box: AlignedBox,
-	pub motion: cgmath::Vector3<f32>,
+pub(crate) struct AlignedPhysBox {
+	pub(crate) aligned_box: AlignedBox,
+	pub(crate) motion: cgmath::Vector3<f32>,
 	/// Gravity's acceleration of this box is influenced by this parameter.
 	/// It may not be exactly analog to weight but it's not too far.
-	pub gravity_factor: f32,
+	pub(crate) gravity_factor: f32,
 }
 
-pub fn apply_on_physics_step(
+pub(crate) fn apply_on_physics_step(
 	player_phys: &mut AlignedPhysBox,
 	chunk_grid: &ChunkGrid,
 	block_type_table: &Arc<BlockTypeTable>,

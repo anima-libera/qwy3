@@ -7,13 +7,13 @@ pub(crate) use crate::BindingThingy;
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct SimpleTextureVertexPod {
-	pub position: [f32; 3],
-	pub coords_in_atlas: [f32; 2],
-	pub color_factor: [f32; 3],
+pub(crate) struct SimpleTextureVertexPod {
+	pub(crate) position: [f32; 3],
+	pub(crate) coords_in_atlas: [f32; 2],
+	pub(crate) color_factor: [f32; 3],
 }
 impl SimpleTextureVertexPod {
-	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 3] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 3] {
 		vertex_attr_array![
 			0 => Float32x3,
 			1 => Float32x2,
@@ -22,13 +22,13 @@ impl SimpleTextureVertexPod {
 	}
 }
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
-pub fn render_pipeline(
+pub(crate) fn render_pipeline(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,

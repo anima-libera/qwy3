@@ -14,7 +14,7 @@ use enum_iterator::Sequence;
 
 /// A type in Qwy Script.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Type {
+pub(crate) enum Type {
 	Nothing,
 	Integer,
 	Function(FunctionTypeSignature),
@@ -25,7 +25,7 @@ pub enum Type {
 
 /// A value in Qwy Script.
 #[derive(Clone, Debug)]
-pub enum Value {
+pub(crate) enum Value {
 	Nothing,
 	Integer(i32),
 	Function(Function),
@@ -49,7 +49,7 @@ impl Value {
 /// Function signatures present such constraints for the argument types instead of directly types,
 /// so that functions such as `type_of` can take a value of any type as its argument.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum TypeConstraints {
+pub(crate) enum TypeConstraints {
 	/// Only one type satisfy the constraints.
 	Only(Type),
 	/// Any type can do.
@@ -66,7 +66,7 @@ impl TypeConstraints {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct FunctionTypeSignature {
+pub(crate) struct FunctionTypeSignature {
 	arg_types: Vec<TypeConstraints>,
 	/// The returned type is really a type and not a type constraint to make sure that
 	/// expressions can all be typed.
@@ -191,7 +191,7 @@ enum FunctionBody {
 }
 
 #[derive(Clone, Debug)]
-pub struct Function {
+pub(crate) struct Function {
 	signature: FunctionTypeSignature,
 	body: FunctionBody,
 }
@@ -208,7 +208,7 @@ enum Expression {
 }
 
 #[derive(Debug)]
-pub enum ExpressionTypingError {
+pub(crate) enum ExpressionTypingError {
 	FunctionCallOnNotAFunction,
 	FunctionCallOnErroneousType,
 	UnknownVariable,
@@ -238,15 +238,15 @@ impl Expression {
 	}
 }
 
-pub struct Context {
+pub(crate) struct Context {
 	variables: HashMap<String, Value>,
 }
-pub struct TypeContext {
+pub(crate) struct TypeContext {
 	variables: HashMap<String, Type>,
 }
 
 impl Context {
-	pub fn with_builtins() -> Context {
+	pub(crate) fn with_builtins() -> Context {
 		let mut variables = HashMap::new();
 		for built_in_function_body in enum_iterator::all::<BuiltInFunctionBody>() {
 			variables.insert(
@@ -268,14 +268,14 @@ impl Context {
 
 /// Indicates a non-empty interval in the qwyllang source code text.
 #[derive(Clone, Debug)]
-pub struct Span {
+pub(crate) struct Span {
 	start: usize,
 	/// Included.
 	end: usize,
 }
 
 #[derive(Clone, Debug)]
-pub enum Token {
+pub(crate) enum Token {
 	Word(String),
 	Integer(i32),
 	OpenParenthesis,
@@ -355,7 +355,7 @@ fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 }
 
 #[derive(Debug)]
-pub enum ExpressionParsingError {
+pub(crate) enum ExpressionParsingError {
 	ExpectedStartOfExpressionButGotNoMoreTokens,
 	ExpectedStartOfExpressionButGotUnexpectedToken(Token, Span),
 	ExpectedCommaToSeparateArgumentsButGotUnexpectedToken(Token, Span),
@@ -569,7 +569,8 @@ fn parse_expression(
 }
 
 #[derive(Debug)]
-pub enum FunctionCallTypingError {
+#[allow(dead_code)]
+pub(crate) enum FunctionCallTypingError {
 	/// How many arguments are missing.
 	MissingArguments {
 		how_many_args_missing: u32,
@@ -670,16 +671,16 @@ fn check_function_call_argument_types(
 	Ok(())
 }
 
-pub enum LogItem {
+pub(crate) enum LogItem {
 	Text(String),
 }
 
-pub struct Log {
-	pub log_items: Vec<LogItem>,
+pub(crate) struct Log {
+	pub(crate) log_items: Vec<LogItem>,
 }
 
 impl Log {
-	pub fn new() -> Log {
+	pub(crate) fn new() -> Log {
 		Log { log_items: vec![] }
 	}
 }
@@ -724,7 +725,7 @@ fn parse(
 	parse_expression(&mut tokens, type_context)
 }
 
-pub fn run(
+pub(crate) fn run(
 	qwy_script_code: &str,
 	context: &mut Context,
 	log: &mut Log,
@@ -734,7 +735,7 @@ pub fn run(
 	Ok(())
 }
 
-pub fn test_lang(test_id: u32) {
+pub(crate) fn test_lang(test_id: u32) {
 	match test_id {
 		1 => {
 			run(

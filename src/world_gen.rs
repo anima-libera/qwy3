@@ -14,7 +14,7 @@ pub(crate) use crate::{
 	noise,
 };
 
-pub trait WorldGenerator {
+pub(crate) trait WorldGenerator {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
@@ -23,7 +23,7 @@ pub trait WorldGenerator {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-pub enum WhichWorldGenerator {
+pub(crate) enum WhichWorldGenerator {
 	Default,
 	Flat,
 	Empty,
@@ -62,7 +62,10 @@ pub enum WhichWorldGenerator {
 }
 
 impl WhichWorldGenerator {
-	pub fn get_the_actual_generator(self, seed: i32) -> Arc<dyn WorldGenerator + Sync + Send> {
+	pub(crate) fn get_the_actual_generator(
+		self,
+		seed: i32,
+	) -> Arc<dyn WorldGenerator + Sync + Send> {
 		match self {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
 			WhichWorldGenerator::Flat => Arc::new(FlatWorldGenerator {}),
@@ -115,8 +118,8 @@ impl WhichWorldGenerator {
 	}
 }
 
-pub struct DefaultWorldGenerator {
-	pub seed: i32,
+pub(crate) struct DefaultWorldGenerator {
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for DefaultWorldGenerator {
@@ -235,7 +238,7 @@ impl WorldGenerator for EmptyWorldGenerator {
 }
 
 struct WorldGeneratorLines01 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLines01 {
@@ -311,7 +314,7 @@ impl WorldGenerator for WorldGeneratorLines01 {
 }
 
 struct WorldGeneratorVolumes01 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorVolumes01 {
@@ -347,7 +350,7 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 }
 
 struct WorldGeneratorBallsSameSize {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorBallsSameSize {
@@ -392,7 +395,7 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 }
 
 struct WorldGeneratorBallsDifferentSizes {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
@@ -461,7 +464,7 @@ fn distance_to_segment(
 }
 
 struct WorldGeneratorLinksXRaw {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinksXRaw {
@@ -514,7 +517,7 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 }
 
 struct WorldGeneratorLinksX {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinksX {
@@ -582,7 +585,7 @@ impl WorldGenerator for WorldGeneratorLinksX {
 }
 
 struct WorldGeneratorLinks {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinks {
@@ -660,7 +663,7 @@ impl WorldGenerator for WorldGeneratorLinks {
 }
 
 struct WorldGeneratorLinksGround {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinksGround {
@@ -744,7 +747,7 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 }
 
 struct WorldGeneratorLinksCaves {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinksCaves {
@@ -825,7 +828,7 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 }
 
 struct WorldGeneratorLinks02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinks02 {
@@ -929,7 +932,7 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 }
 
 struct WorldGeneratorLinksFlat {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLinksFlat {
@@ -1049,7 +1052,7 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 }
 
 struct WorldGeneratorSkyIslands {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorSkyIslands {
@@ -1144,7 +1147,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 }
 
 struct WorldGeneratorVolumes02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorVolumes02 {
@@ -1194,7 +1197,7 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 }
 
 struct WorldGeneratorVolumes03 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorVolumes03 {
@@ -1237,7 +1240,7 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 }
 
 struct WorldGeneratorHeight01 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorHeight01 {
@@ -1287,7 +1290,7 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 }
 
 struct WorldGeneratorPlane01 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorPlane01 {
@@ -1334,7 +1337,7 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 }
 
 struct WorldGeneratorWierdTerrain01 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorWierdTerrain01 {
@@ -1381,7 +1384,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 }
 
 struct WorldGeneratorPlane02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorPlane02 {
@@ -1427,7 +1430,7 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 }
 
 struct WorldGeneratorWierdTerrain02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorWierdTerrain02 {
@@ -1471,7 +1474,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 }
 
 struct WorldGeneratorHeight02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorHeight02 {
@@ -1522,7 +1525,7 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 }
 
 struct WorldGeneratorHeightBiomes {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorHeightBiomes {
@@ -1619,7 +1622,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 }
 
 struct WorldGeneratorHeightBiomesVolume {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
@@ -1710,7 +1713,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 }
 
 struct WorldGeneratorHeight03 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorHeight03 {
@@ -1747,7 +1750,7 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 }
 
 struct WorldGeneratorStructuresPoc {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresPoc {
@@ -1918,7 +1921,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 }
 
 struct WorldGeneratorStructuresLinksPoc {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
@@ -2195,7 +2198,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 }
 
 struct WorldGeneratorStructuresTrees {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresTrees {
@@ -2394,7 +2397,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 }
 
 struct WorldGeneratorStructuresSpikes {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresSpikes {
@@ -2619,7 +2622,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 }
 
 struct WorldGeneratorLines02 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLines02 {
@@ -2698,7 +2701,7 @@ impl WorldGenerator for WorldGeneratorLines02 {
 }
 
 struct WorldGeneratorLines03 {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorLines03 {
@@ -2783,7 +2786,7 @@ impl WorldGenerator for WorldGeneratorLines03 {
 }
 
 struct WorldGeneratorStructuresLinksSmooth {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
@@ -3089,8 +3092,8 @@ mod structure_gen {
 	};
 
 	#[derive(Clone, Copy)]
-	pub struct StructureTypeId {
-		pub index: usize,
+	pub(crate) struct StructureTypeId {
+		pub(crate) index: usize,
 	}
 
 	/// A structure origin is a first step in the generation of a structure.
@@ -3104,20 +3107,20 @@ mod structure_gen {
 	/// allows for a chunk to know which origins could place/remove blocks in the chunk
 	/// and thus should actually have their structure generated.
 	#[derive(Clone, Copy)]
-	pub struct StructureOrigin {
-		pub coords: BlockCoords,
-		pub type_id: StructureTypeId,
+	pub(crate) struct StructureOrigin {
+		pub(crate) coords: BlockCoords,
+		pub(crate) type_id: StructureTypeId,
 	}
 
 	/// Handles generation of structure origins.
-	pub trait StructureOriginGenerator {
+	pub(crate) trait StructureOriginGenerator {
 		fn get_origins_in_span(&self, span: CubicCoordsSpan) -> Vec<StructureOrigin>;
 	}
 
 	/// The idea of this structure origin generator is that it considers a grid of big cubic cells
 	/// and uses noise to deterministically place, in each cell, a noise-obtained number of origins
 	/// at noise-obtained coords in the cell.
-	pub struct TestStructureOriginGenerator {
+	pub(crate) struct TestStructureOriginGenerator {
 		cell_size: i32,
 		/// How many structure origins to generate per cell (min, max_included).
 		/// The range can overlap with the negatives, getting a negative number of origins
@@ -3144,7 +3147,7 @@ mod structure_gen {
 	}
 
 	impl TestStructureOriginGenerator {
-		pub fn new(
+		pub(crate) fn new(
 			seed: i32,
 			cell_size: i32,
 			how_many_min_max: (i32, i32),
@@ -3219,25 +3222,25 @@ mod structure_gen {
 	/// All that is needed for the generation of a structure instance.
 	/// A structure instance is just one structure with an origin position
 	/// (and a type, though that is given in an other way).
-	pub struct StructureInstanceGenerationContext<'a> {
-		pub origin: StructureOrigin,
-		pub chunk_blocks: &'a mut ChunkBlocks,
-		pub origin_generator: &'a dyn StructureOriginGenerator,
-		pub block_type_table: &'a Arc<BlockTypeTable>,
-		pub terrain_generator: &'a TerrainGenerator<'a>,
+	pub(crate) struct StructureInstanceGenerationContext<'a> {
+		pub(crate) origin: StructureOrigin,
+		pub(crate) chunk_blocks: &'a mut ChunkBlocks,
+		pub(crate) _origin_generator: &'a dyn StructureOriginGenerator,
+		pub(crate) block_type_table: &'a Arc<BlockTypeTable>,
+		pub(crate) terrain_generator: &'a TerrainGenerator<'a>,
 	}
 
 	/// When a structure generation wants to place a block, it may want to do so in some way
 	/// that is specified by this type. For example, the structure generation might want to
 	/// place some block somewhere but only if it replaces air, well this would be specified
 	/// by this type.
-	pub struct BlockPlacing {
-		pub block_type_to_place: BlockTypeId,
-		pub only_place_on_air: bool,
+	pub(crate) struct BlockPlacing {
+		pub(crate) block_type_to_place: BlockTypeId,
+		pub(crate) only_place_on_air: bool,
 	}
 
 	impl<'a> StructureInstanceGenerationContext<'a> {
-		pub fn place_block(&mut self, block_placing: &BlockPlacing, coords: BlockCoords) {
+		pub(crate) fn place_block(&mut self, block_placing: &BlockPlacing, coords: BlockCoords) {
 			let shall_place_block = !block_placing.only_place_on_air
 				|| self
 					.chunk_blocks
@@ -3248,7 +3251,7 @@ mod structure_gen {
 			}
 		}
 
-		pub fn place_ball(
+		pub(crate) fn place_ball(
 			&mut self,
 			block_placing: &BlockPlacing,
 			center: cgmath::Point3<f32>,
@@ -3269,13 +3272,14 @@ mod structure_gen {
 	}
 
 	/// Generates a structure instance of one specific type.
-	pub type StructureTypeInstanceGenerator<'a> = dyn Fn(StructureInstanceGenerationContext) + 'a;
+	pub(crate) type StructureTypeInstanceGenerator<'a> =
+		dyn Fn(StructureInstanceGenerationContext) + 'a;
 }
 
 use structure_gen::*;
 
 struct WorldGeneratorStructuresEnginePoc {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
@@ -3428,7 +3432,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			let context = StructureInstanceGenerationContext {
 				origin,
 				chunk_blocks: &mut chunk_blocks,
-				origin_generator: &structure_origin_generator,
+				_origin_generator: &structure_origin_generator,
 				block_type_table: &block_type_table,
 				terrain_generator: &coords_to_terrain,
 			};
@@ -3440,7 +3444,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 }
 
 struct WorldGeneratorStructuresGeneratedBlocks {
-	pub seed: i32,
+	pub(crate) seed: i32,
 }
 
 impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
@@ -3542,7 +3546,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			let context = StructureInstanceGenerationContext {
 				origin,
 				chunk_blocks: &mut chunk_blocks,
-				origin_generator: &structure_origin_generator,
+				_origin_generator: &structure_origin_generator,
 				block_type_table: &block_type_table,
 				terrain_generator: &coords_to_terrain,
 			};

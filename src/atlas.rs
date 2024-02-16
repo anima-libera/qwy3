@@ -4,14 +4,14 @@ use rand::Rng;
 
 use crate::texture_gen;
 
-pub const ATLAS_DIMS: (usize, usize) = (512, 512);
+pub(crate) const ATLAS_DIMS: (usize, usize) = (512, 512);
 
-pub struct Atlas {
-	pub image: image::RgbaImage,
+pub(crate) struct Atlas {
+	pub(crate) image: image::RgbaImage,
 }
 
 impl Atlas {
-	pub fn new(world_gen_seed: i32) -> Atlas {
+	pub(crate) fn new(world_gen_seed: i32) -> Atlas {
 		let mut image: image::RgbaImage =
 			image::ImageBuffer::new(ATLAS_DIMS.0 as u32, ATLAS_DIMS.1 as u32);
 

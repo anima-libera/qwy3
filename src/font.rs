@@ -10,7 +10,7 @@ struct CharacterDetails {
 	dimensions_in_pixels: cgmath::Vector2<i32>,
 }
 
-pub struct Font {
+pub(crate) struct Font {
 	character_details_map: HashMap<char, CharacterDetails>,
 	/// Character details for the special character that is used to represent errors
 	/// in representing normal characters.
@@ -19,7 +19,7 @@ pub struct Font {
 }
 
 impl Font {
-	pub fn font_01() -> Font {
+	pub(crate) fn font_01() -> Font {
 		let mut character_details_map = HashMap::new();
 
 		let coords_asset_to_details = |x: i32, y: i32, w: i32, h: i32| -> CharacterDetails {
@@ -99,7 +99,7 @@ impl Font {
 
 	/// Returns (width, height) in screen pixels of the smallest rect
 	/// that would contain the rendering of the given text.
-	pub fn dimensions_of_text(
+	pub(crate) fn dimensions_of_text(
 		&self,
 		window_width: f32,
 		settings: TextRenderingSettings,
@@ -140,7 +140,7 @@ impl Font {
 		cgmath::vec2(max_width, max_height)
 	}
 
-	pub fn simple_texture_vertices_from_text(
+	pub(crate) fn simple_texture_vertices_from_text(
 		&self,
 		window_width: f32,
 		mut coords: cgmath::Point3<f32>,
@@ -184,7 +184,7 @@ impl Font {
 		vertices
 	}
 
-	pub fn _simple_texture_mesh_from_text(
+	pub(crate) fn _simple_texture_mesh_from_text(
 		&self,
 		device: &wgpu::Device,
 		window_width: f32,
@@ -198,21 +198,21 @@ impl Font {
 }
 
 #[derive(Clone)]
-pub struct TextRenderingSettings {
+pub(crate) struct TextRenderingSettings {
 	/// Factor by which are stretched the character textures.
 	/// Should be integer values or else it won't render pixel-perfect ><.
-	pub scale: f32,
+	pub(crate) scale: f32,
 	/// In screen pixels times `scale`.
-	pub space_character_scaled_width: f32,
+	pub(crate) space_character_scaled_width: f32,
 	/// In screen pixels.
-	pub inbetween_characters_space_width: f32,
+	pub(crate) inbetween_characters_space_width: f32,
 	/// In screen pixels.
-	pub inbetween_lines_space_height: f32,
-	pub color: [f32; 3],
+	pub(crate) inbetween_lines_space_height: f32,
+	pub(crate) color: [f32; 3],
 }
 
 impl TextRenderingSettings {
-	pub fn with_scale(scale: f32) -> TextRenderingSettings {
+	pub(crate) fn with_scale(scale: f32) -> TextRenderingSettings {
 		TextRenderingSettings {
 			scale,
 			space_character_scaled_width: 3.0,

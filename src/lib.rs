@@ -106,9 +106,9 @@ enum WorkerTask {
 	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
 }
 
-pub struct SimpleTextureMesh {
-	pub vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
-	pub vertex_buffer: wgpu::Buffer,
+pub(crate) struct SimpleTextureMesh {
+	pub(crate) vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
+	pub(crate) vertex_buffer: wgpu::Buffer,
 }
 
 impl SimpleTextureMesh {

@@ -7,12 +7,12 @@ pub(crate) use crate::BindingThingy;
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub struct SimpleLineVertexPod {
-	pub position: [f32; 3],
-	pub color: [f32; 3],
+pub(crate) struct SimpleLineVertexPod {
+	pub(crate) position: [f32; 3],
+	pub(crate) color: [f32; 3],
 }
 impl SimpleLineVertexPod {
-	pub fn vertex_attributes() -> [wgpu::VertexAttribute; 2] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 2] {
 		vertex_attr_array![
 			0 => Float32x3,
 			1 => Float32x3,
@@ -20,11 +20,11 @@ impl SimpleLineVertexPod {
 	}
 }
 
-pub struct BindingThingies<'a> {
+pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
-pub fn render_pipeline_and_bind_group(
+pub(crate) fn render_pipeline_and_bind_group(
 	device: &wgpu::Device,
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,

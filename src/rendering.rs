@@ -7,13 +7,13 @@ use crate::shaders::Vector2Pod;
 use crate::{camera::Matrix4x4Pod, shaders, Vector3Pod};
 
 /// Type representation for the `ty` and `count` fields of a `wgpu::BindGroupLayoutEntry`.
-pub struct BindingType {
-	pub ty: wgpu::BindingType,
-	pub count: Option<std::num::NonZeroU32>,
+pub(crate) struct BindingType {
+	pub(crate) ty: wgpu::BindingType,
+	pub(crate) count: Option<std::num::NonZeroU32>,
 }
 
 impl BindingType {
-	pub fn layout_entry(
+	pub(crate) fn layout_entry(
 		&self,
 		binding: u32,
 		visibility: wgpu::ShaderStages,
@@ -23,7 +23,7 @@ impl BindingType {
 }
 
 /// Can be a `wgpu::BindingResource`.
-pub trait AsBindingResource {
+pub(crate) trait AsBindingResource {
 	fn as_binding_resource(&self) -> wgpu::BindingResource;
 }
 impl AsBindingResource for wgpu::Buffer {
@@ -44,13 +44,13 @@ impl AsBindingResource for wgpu::Sampler {
 
 /// Resource and associated information required for creations of both
 /// a `wgpu::BindGroupLayoutEntry` and a `wgpu::BindGroupEntry`.
-pub struct BindingThingy<T: AsBindingResource> {
-	pub binding_type: BindingType,
-	pub resource: T,
+pub(crate) struct BindingThingy<T: AsBindingResource> {
+	pub(crate) binding_type: BindingType,
+	pub(crate) resource: T,
 }
 
 impl<T: AsBindingResource> BindingThingy<T> {
-	pub fn layout_entry(
+	pub(crate) fn layout_entry(
 		&self,
 		binding: u32,
 		visibility: wgpu::ShaderStages,
@@ -58,12 +58,12 @@ impl<T: AsBindingResource> BindingThingy<T> {
 		self.binding_type.layout_entry(binding, visibility)
 	}
 
-	pub fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
+	pub(crate) fn bind_group_entry(&self, binding: u32) -> wgpu::BindGroupEntry {
 		wgpu::BindGroupEntry { binding, resource: self.resource.as_binding_resource() }
 	}
 }
 
-pub fn make_z_buffer_texture_view(
+pub(crate) fn make_z_buffer_texture_view(
 	device: &wgpu::Device,
 	format: wgpu::TextureFormat,
 	width: u32,
@@ -83,22 +83,22 @@ pub fn make_z_buffer_texture_view(
 	z_buffer_texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
-pub struct RenderPipelinesAndBindGroups {
-	pub block_shadow_render_pipeline: wgpu::RenderPipeline,
-	pub block_shadow_bind_group: wgpu::BindGroup,
-	pub block_render_pipeline: wgpu::RenderPipeline,
-	pub block_bind_group: wgpu::BindGroup,
-	pub simple_line_render_pipeline: wgpu::RenderPipeline,
-	pub simple_line_bind_group: wgpu::BindGroup,
-	pub simple_line_2d_render_pipeline: wgpu::RenderPipeline,
-	pub simple_line_2d_bind_group: wgpu::BindGroup,
-	pub simple_texture_2d_render_pipeline: wgpu::RenderPipeline,
-	pub simple_texture_2d_bind_group: wgpu::BindGroup,
-	pub skybox_render_pipeline: wgpu::RenderPipeline,
-	pub skybox_bind_group: wgpu::BindGroup,
+pub(crate) struct RenderPipelinesAndBindGroups {
+	pub(crate) block_shadow_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) block_shadow_bind_group: wgpu::BindGroup,
+	pub(crate) block_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) block_bind_group: wgpu::BindGroup,
+	pub(crate) simple_line_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) simple_line_bind_group: wgpu::BindGroup,
+	pub(crate) simple_line_2d_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) simple_line_2d_bind_group: wgpu::BindGroup,
+	pub(crate) simple_texture_2d_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) simple_texture_2d_bind_group: wgpu::BindGroup,
+	pub(crate) skybox_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) skybox_bind_group: wgpu::BindGroup,
 }
 
-pub struct AllBindingThingies<'a> {
+pub(crate) struct AllBindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
@@ -113,7 +113,7 @@ pub struct AllBindingThingies<'a> {
 	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
-pub fn init_rendering_stuff(
+pub(crate) fn init_rendering_stuff(
 	device: Arc<wgpu::Device>,
 	all_binding_thingies: AllBindingThingies,
 	shadow_map_format: wgpu::TextureFormat,
@@ -209,7 +209,7 @@ pub fn init_rendering_stuff(
 	}
 }
 
-pub fn init_aspect_ratio_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+pub(crate) fn init_aspect_ratio_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
 	let aspect_ratio_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Aspect Ratio Buffer"),
 		contents: bytemuck::cast_slice(&[f32::zeroed()]),
@@ -229,12 +229,12 @@ pub fn init_aspect_ratio_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu
 	}
 }
 
-pub struct ShadowMapStuff {
-	pub shadow_map_format: wgpu::TextureFormat,
-	pub shadow_map_view_thingy: BindingThingy<wgpu::TextureView>,
-	pub shadow_map_sampler_thingy: BindingThingy<wgpu::Sampler>,
+pub(crate) struct ShadowMapStuff {
+	pub(crate) shadow_map_format: wgpu::TextureFormat,
+	pub(crate) shadow_map_view_thingy: BindingThingy<wgpu::TextureView>,
+	pub(crate) shadow_map_sampler_thingy: BindingThingy<wgpu::Sampler>,
 }
-pub fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff {
+pub(crate) fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff {
 	let shadow_map_format = wgpu::TextureFormat::Depth32Float;
 	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("Shadow Map Texture"),
@@ -286,7 +286,9 @@ pub fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff {
 	}
 }
 
-pub fn init_sun_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+pub(crate) fn init_sun_camera_matrix_thingy(
+	device: Arc<wgpu::Device>,
+) -> BindingThingy<wgpu::Buffer> {
 	let sun_camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Sun Camera Buffer"),
 		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
@@ -306,7 +308,9 @@ pub fn init_sun_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy
 	}
 }
 
-pub fn init_sun_light_direction_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+pub(crate) fn init_sun_light_direction_thingy(
+	device: Arc<wgpu::Device>,
+) -> BindingThingy<wgpu::Buffer> {
 	let sun_light_direction_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Sun Light Direction Buffer"),
 		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),
@@ -326,7 +330,7 @@ pub fn init_sun_light_direction_thingy(device: Arc<wgpu::Device>) -> BindingThin
 	}
 }
 
-pub fn init_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
+pub(crate) fn init_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgpu::Buffer> {
 	let camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Camera Buffer"),
 		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
@@ -348,11 +352,11 @@ pub fn init_camera_matrix_thingy(device: Arc<wgpu::Device>) -> BindingThingy<wgp
 
 use crate::atlas::ATLAS_DIMS;
 
-pub struct AtlasStuff {
-	pub atlas_texture_view_thingy: BindingThingy<wgpu::TextureView>,
-	pub atlas_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
+pub(crate) struct AtlasStuff {
+	pub(crate) atlas_texture_view_thingy: BindingThingy<wgpu::TextureView>,
+	pub(crate) atlas_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
 }
-pub fn init_atlas_stuff(
+pub(crate) fn init_atlas_stuff(
 	device: Arc<wgpu::Device>,
 	queue: &wgpu::Queue,
 	atlas_data: &[u8],
@@ -425,12 +429,12 @@ pub fn init_atlas_stuff(
 
 use crate::skybox::SKYBOX_SIDE_DIMS;
 
-pub struct SkyboxStuff {
-	pub skybox_cubemap_texture_view_thingy: BindingThingy<wgpu::TextureView>,
-	pub skybox_cubemap_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
-	pub skybox_cubemap_texture: wgpu::Texture,
+pub(crate) struct SkyboxStuff {
+	pub(crate) skybox_cubemap_texture_view_thingy: BindingThingy<wgpu::TextureView>,
+	pub(crate) skybox_cubemap_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
+	pub(crate) skybox_cubemap_texture: wgpu::Texture,
 }
-pub fn init_skybox_stuff(
+pub(crate) fn init_skybox_stuff(
 	device: Arc<wgpu::Device>,
 	queue: &wgpu::Queue,
 	skybox_data: &SkyboxData,
@@ -499,8 +503,8 @@ pub fn init_skybox_stuff(
 	}
 }
 
-pub type SkyboxData<'a> = [&'a [u8]; 6];
-pub fn update_skybox_texture(
+pub(crate) type SkyboxData<'a> = [&'a [u8]; 6];
+pub(crate) fn update_skybox_texture(
 	queue: &wgpu::Queue,
 	skybox_cubemap_texture: &wgpu::Texture,
 	skybox_data: &SkyboxData,
@@ -528,11 +532,11 @@ pub fn update_skybox_texture(
 	}
 }
 
-pub struct FogStuff {
-	pub fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
-	pub fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
+pub(crate) struct FogStuff {
+	pub(crate) fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
+	pub(crate) fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
 }
-pub fn init_fog_stuff(device: Arc<wgpu::Device>) -> FogStuff {
+pub(crate) fn init_fog_stuff(device: Arc<wgpu::Device>) -> FogStuff {
 	let fog_center_position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 		label: Some("Fog Center Position Buffer"),
 		contents: bytemuck::cast_slice(&[Vector3Pod::zeroed()]),

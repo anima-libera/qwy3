@@ -10,7 +10,7 @@ use crate::{
 };
 
 /// All the data that is needed to generate the mesh of a chunk.
-pub struct DataForChunkMeshing {
+pub(crate) struct DataForChunkMeshing {
 	chunk_blocks: Arc<ChunkBlocks>,
 	opaqueness_layer_for_face_culling: OpaquenessLayerAroundChunk,
 	opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
@@ -89,9 +89,9 @@ impl DataForChunkMeshing {
 	}
 }
 
-pub struct ChunkMesh {
-	pub block_vertices: Vec<BlockVertexPod>,
-	pub block_vertex_buffer: Option<wgpu::Buffer>,
+pub(crate) struct ChunkMesh {
+	pub(crate) block_vertices: Vec<BlockVertexPod>,
+	pub(crate) block_vertex_buffer: Option<wgpu::Buffer>,
 	/// When `block_vertices` is modified, `block_vertex_buffer` becomes out of sync
 	/// and must be updated. This is what this field keeps track of.
 	cpu_to_gpu_update_required: bool,
@@ -107,7 +107,7 @@ impl ChunkMesh {
 		}
 	}
 
-	pub fn update_gpu_data(&mut self, device: &wgpu::Device) {
+	pub(crate) fn update_gpu_data(&mut self, device: &wgpu::Device) {
 		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Block Vertex Buffer"),
 			contents: bytemuck::cast_slice(&self.block_vertices),
@@ -410,7 +410,7 @@ fn generate_xshaped_block_face_mesh(
 ///
 /// It is used for meshing of the chunk inside
 /// (to get face culling and ambiant occlusion right on the edges)e
-pub struct OpaquenessLayerAroundChunk {
+pub(crate) struct OpaquenessLayerAroundChunk {
 	/// The coords span of the chunk that is surrounded by the layer that this struct describes.
 	/// This is NOT the coords span of the layer. The layer is 1-block thick and encloses that
 	/// coords span.
@@ -595,7 +595,7 @@ impl ChunkGrid {
 		layer
 	}
 
-	pub fn get_data_for_chunk_meshing(
+	pub(crate) fn get_data_for_chunk_meshing(
 		&self,
 		chunk_coords: ChunkCoords,
 		block_type_table: Arc<BlockTypeTable>,

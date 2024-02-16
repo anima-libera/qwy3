@@ -149,17 +149,17 @@ fn octaves_noise(number_of_octaves: u32, xs: &mut [CoordOrChannel]) -> f32 {
 	value_sum / coef_sum
 }
 
-pub struct OctavedNoise {
+pub(crate) struct OctavedNoise {
 	number_of_octaves: u32,
 	base_channels: Vec<i32>,
 }
 
 impl OctavedNoise {
-	pub fn new(number_of_octaves: u32, base_channels: Vec<i32>) -> OctavedNoise {
+	pub(crate) fn new(number_of_octaves: u32, base_channels: Vec<i32>) -> OctavedNoise {
 		OctavedNoise { number_of_octaves, base_channels }
 	}
 
-	pub fn sample(
+	pub(crate) fn sample(
 		&self,
 		xs: &[f32],
 		additional_channels: &[i32],
@@ -187,15 +187,23 @@ impl OctavedNoise {
 		octaves_noise(self.number_of_octaves, &mut working_xs)
 	}
 
-	pub fn sample_2d_1d(&self, coords: cgmath::Point2<f32>, additional_channels: &[i32]) -> f32 {
+	pub(crate) fn sample_2d_1d(
+		&self,
+		coords: cgmath::Point2<f32>,
+		additional_channels: &[i32],
+	) -> f32 {
 		let xs: [f32; 2] = coords.into();
 		self.sample(&xs, additional_channels, &[], None)
 	}
-	pub fn sample_3d_1d(&self, coords: cgmath::Point3<f32>, additional_channels: &[i32]) -> f32 {
+	pub(crate) fn sample_3d_1d(
+		&self,
+		coords: cgmath::Point3<f32>,
+		additional_channels: &[i32],
+	) -> f32 {
 		let xs: [f32; 3] = coords.into();
 		self.sample(&xs, additional_channels, &[], None)
 	}
-	pub fn _sample_3d_3d(
+	pub(crate) fn _sample_3d_3d(
 		&self,
 		coords: cgmath::Point3<f32>,
 		additional_channels: &[i32],
@@ -206,21 +214,29 @@ impl OctavedNoise {
 		let z = self.sample(&xs, additional_channels, &[], Some(3));
 		cgmath::point3(x, y, z)
 	}
-	pub fn sample_i1d_1d(&self, coord: i32, additional_channels: &[i32]) -> f32 {
+	pub(crate) fn sample_i1d_1d(&self, coord: i32, additional_channels: &[i32]) -> f32 {
 		self.sample(&[], additional_channels, &[coord], None)
 	}
-	pub fn sample_i1d_i1d(&self, coord: i32, additional_channels: &[i32]) -> i32 {
+	pub(crate) fn sample_i1d_i1d(&self, coord: i32, additional_channels: &[i32]) -> i32 {
 		unit_to_i32(self.sample_i1d_1d(coord, additional_channels))
 	}
-	pub fn sample_i2d_1d(&self, coords: cgmath::Point2<i32>, additional_channels: &[i32]) -> f32 {
+	pub(crate) fn sample_i2d_1d(
+		&self,
+		coords: cgmath::Point2<i32>,
+		additional_channels: &[i32],
+	) -> f32 {
 		let xs: [i32; 2] = coords.into();
 		self.sample(&[], additional_channels, &xs, None)
 	}
-	pub fn sample_i3d_1d(&self, coords: cgmath::Point3<i32>, additional_channels: &[i32]) -> f32 {
+	pub(crate) fn sample_i3d_1d(
+		&self,
+		coords: cgmath::Point3<i32>,
+		additional_channels: &[i32],
+	) -> f32 {
 		let xs: [i32; 3] = coords.into();
 		self.sample(&[], additional_channels, &xs, None)
 	}
-	pub fn sample_i3d_3d(
+	pub(crate) fn sample_i3d_3d(
 		&self,
 		coords: cgmath::Point3<i32>,
 		additional_channels: &[i32],
