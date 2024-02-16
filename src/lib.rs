@@ -3,6 +3,7 @@
 mod atlas;
 mod block_types;
 mod camera;
+mod chunk_meshing;
 mod chunks;
 mod cmdline;
 mod commands;
@@ -27,6 +28,7 @@ use std::{
 };
 
 use cgmath::{point3, ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
+use chunk_meshing::ChunkMesh;
 use rand::Rng;
 use skybox::SkyboxFaces;
 use wgpu::util::DeviceExt;
@@ -1266,11 +1268,12 @@ pub fn run() {
 					game.chunk_grid.remeshing_required_set.remove(&chunk_coords);
 					let (sender, receiver) = std::sync::mpsc::channel();
 					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
-					let opaqueness_layer = game.chunk_grid.get_opaqueness_layer_around_chunk(
-						chunk_coords,
-						true,
-						Arc::clone(&game.block_type_table),
-					);
+					let opaqueness_layer_for_face_culling =
+						game.chunk_grid.get_opaqueness_layer_around_chunk(
+							chunk_coords,
+							true,
+							Arc::clone(&game.block_type_table),
+						);
 					let opaqueness_layer_for_ambiant_occlusion =
 						game.chunk_grid.get_opaqueness_layer_around_chunk(
 							chunk_coords,
@@ -1289,8 +1292,8 @@ pub fn run() {
 						//	rand::thread_rng().gen_range(0.1..0.3),
 						//));
 
-						let mut mesh = chunk_blocks.generate_mesh_given_surrounding_opaqueness(
-							opaqueness_layer,
+						let mut mesh = chunk_blocks.generate_mesh(
+							opaqueness_layer_for_face_culling,
 							opaqueness_layer_for_ambiant_occlusion,
 							block_type_table,
 						);
