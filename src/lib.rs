@@ -1172,7 +1172,7 @@ pub fn run() {
 
 							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 								if game.chunk_grid.is_loaded(neighbor_chunk_coords) {
-									game.chunk_grid.remeshing_required.insert(neighbor_chunk_coords);
+									game.chunk_grid.remeshing_required_set.insert(neighbor_chunk_coords);
 								}
 							}
 
@@ -1257,13 +1257,13 @@ pub fn run() {
 					_ => false,
 				});
 				let should_be_remeshed = game.chunk_grid.is_loaded(chunk_coords)
-					&& game.chunk_grid.remeshing_required.contains(&chunk_coords);
+					&& game.chunk_grid.remeshing_required_set.contains(&chunk_coords);
 				let shall_be_meshed = (!doesnt_need_mesh)
 					&& (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
 					&& game.worker_tasks.len() < game.pool.number_of_workers();
 				if shall_be_meshed {
 					// Asking a worker for the meshing or remeshing of the chunk
-					game.chunk_grid.remeshing_required.remove(&chunk_coords);
+					game.chunk_grid.remeshing_required_set.remove(&chunk_coords);
 					let (sender, receiver) = std::sync::mpsc::channel();
 					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 					let opaqueness_layer = game.chunk_grid.get_opaqueness_layer_around_chunk(

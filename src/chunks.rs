@@ -17,28 +17,47 @@ pub(crate) use crate::{
 };
 
 /// The blocks of a chunk.
+///
+/// If no non-air block is ever placed in a `ChunkBlocks` then it never allocates memory.
 #[derive(Clone)]
 pub struct ChunkBlocks {
 	pub coords_span: ChunkCoordsSpan,
+	/// If the length is zero then it means the chunk is full of air.
 	blocks: Vec<BlockTypeId>,
 }
 
 impl ChunkBlocks {
-	pub fn new(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
-		ChunkBlocks {
-			coords_span,
-			blocks: Vec::from_iter(
-				std::iter::repeat(BlockTypeId { value: 0 }).take(coords_span.cd.number_of_blocks()),
-			),
-		}
+	pub fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
+		ChunkBlocks { coords_span, blocks: vec![] }
 	}
 
 	pub fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
-		Some(self.blocks[self.coords_span.internal_index(coords)?])
+		let internal_index = self.coords_span.internal_index(coords)?;
+		Some(if self.blocks.is_empty() {
+			BlockTypeId { value: 0 }
+		} else {
+			self.blocks[internal_index]
+		})
 	}
 
-	pub fn get_mut(&mut self, coords: BlockCoords) -> Option<&mut BlockTypeId> {
-		Some(&mut self.blocks[self.coords_span.internal_index(coords)?])
+	pub fn set(&mut self, coords: BlockCoords, block: BlockTypeId) {
+		if let Some(internal_index) = self.coords_span.internal_index(coords) {
+			if self.blocks.is_empty() && block.value == 0 {
+				// Setting a block to air, but we are already empty, there is no need to allocate.
+			} else {
+				if self.blocks.is_empty() && block.value != 0 {
+					self.blocks = Vec::from_iter(
+						std::iter::repeat(BlockTypeId { value: 0 })
+							.take(self.coords_span.cd.number_of_blocks()),
+					);
+				}
+				self.blocks[internal_index] = block;
+			}
+		}
+	}
+
+	fn may_contain_non_air(&self) -> bool {
+		!self.blocks.is_empty()
 	}
 }
 
@@ -596,6 +615,15 @@ impl ChunkCullingInfo {
 		blocks: &ChunkBlocks,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> ChunkCullingInfo {
+		if !blocks.may_contain_non_air() {
+			return ChunkCullingInfo {
+				all_air: true,
+				all_opaque: false,
+				all_opaque_faces: vec![],
+				all_air_faces: OrientedAxis::all_the_six_possible_directions().collect(),
+			};
+		}
+
 		let mut all_air = true;
 		let mut all_opaque = true;
 		for block_type_id in blocks.blocks.iter().copied() {
@@ -666,9 +694,10 @@ impl ChunkCullingInfo {
 pub struct ChunkGrid {
 	cd: ChunkDimensions,
 	pub blocks_map: FxHashMap<ChunkCoords, ChunkBlocks>,
+	pub air_set: FxHashSet<ChunkCoords>,
 	pub culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
-	pub remeshing_required: FxHashSet<ChunkCoords>,
+	pub remeshing_required_set: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
@@ -676,14 +705,15 @@ impl ChunkGrid {
 		ChunkGrid {
 			cd,
 			blocks_map: HashMap::default(),
+			air_set: HashSet::default(),
 			culling_info_map: HashMap::default(),
 			mesh_map: HashMap::default(),
-			remeshing_required: HashSet::default(),
+			remeshing_required_set: HashSet::default(),
 		}
 	}
 
 	pub fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
-		self.blocks_map.contains_key(&chunk_coords)
+		self.blocks_map.contains_key(&chunk_coords) || self.air_set.contains(&chunk_coords)
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
@@ -694,13 +724,12 @@ impl ChunkGrid {
 			unimplemented!();
 		} else {
 			let entry = self.blocks_map.entry(chunk_coords);
-			let chunk_blocks = entry
-				.or_insert_with(|| ChunkBlocks::new(ChunkCoordsSpan { cd: self.cd, chunk_coords }));
-			let block_dst = chunk_blocks.get_mut(coords).unwrap();
-			*block_dst = block;
+			let chunk_blocks = entry.or_insert_with(|| {
+				ChunkBlocks::new_empty(ChunkCoordsSpan { cd: self.cd, chunk_coords })
+			});
+			chunk_blocks.set(coords, block);
 
-			// "Clear out" now maybe invalidated culling info.
-			// TODO: Better handling of that!
+			// "Clear out" now maybe-invalidated culling info.
 			self.culling_info_map.remove(&chunk_coords);
 		}
 	}
@@ -721,7 +750,7 @@ impl ChunkGrid {
 		}
 		for chunk_coords in chunk_coords_to_update {
 			if self.is_loaded(chunk_coords) {
-				self.remeshing_required.insert(chunk_coords);
+				self.remeshing_required_set.insert(chunk_coords);
 			}
 		}
 	}
