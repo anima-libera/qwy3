@@ -72,7 +72,7 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 			CoordOrChannel::Coord(_) => unreachable!(),
 		};
 		a ^= x;
-		b ^= 17 * (i as i32 + 11) + x;
+		b ^= 17i32.wrapping_mul(((i as i32).wrapping_add(11)).wrapping_add(x));
 		std::mem::swap(&mut a, &mut b);
 		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
 	}
