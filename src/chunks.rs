@@ -3,10 +3,8 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::EuclideanSpace;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::chunk_meshing::ChunkMesh;
 pub(crate) use crate::{
 	block_types::{BlockType, BlockTypeId, BlockTypeTable},
 	coords::{
@@ -14,6 +12,10 @@ pub(crate) use crate::{
 		OrientedAxis,
 	},
 	shaders::block::BlockVertexPod,
+};
+use crate::{
+	chunk_meshing::ChunkMesh, iter_3d_rect_inf_sup_included, threadpool::ThreadPool,
+	CubicCoordsSpan, CurrentWorkerTasks,
 };
 
 /// The blocks of a chunk.
@@ -156,7 +158,7 @@ pub(crate) struct ChunkGrid {
 	pub(crate) blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
 	pub(crate) culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub(crate) mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
-	pub(crate) remeshing_required_set: FxHashSet<ChunkCoords>,
+	remeshing_required_set: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
@@ -172,6 +174,60 @@ impl ChunkGrid {
 
 	pub(crate) fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.blocks_map.contains_key(&chunk_coords)
+	}
+
+	pub(crate) fn require_remeshing(&mut self, chunk_coords: ChunkCoords) {
+		if self.is_loaded(chunk_coords) {
+			self.remeshing_required_set.insert(chunk_coords);
+		}
+	}
+
+	pub(crate) fn run_some_required_remeshing_tasks(
+		&mut self,
+		worker_tasks: &mut CurrentWorkerTasks,
+		pool: &mut ThreadPool,
+		block_type_table: &Arc<BlockTypeTable>,
+		device: &Arc<wgpu::Device>,
+	) {
+		let mut remeshing_tasked = vec![];
+		for chunk_coords in self.remeshing_required_set.iter().copied() {
+			if worker_tasks.tasks.len() >= pool.number_of_workers() {
+				break;
+			}
+
+			if !self.is_loaded(chunk_coords) {
+				remeshing_tasked.push(chunk_coords);
+				continue;
+			}
+
+			let already_has_mesh = self.mesh_map.contains_key(&chunk_coords);
+			let doesnt_need_mesh = self
+				.culling_info_map
+				.get(&chunk_coords)
+				.is_some_and(|culling_info| culling_info.all_air);
+			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
+			let should_be_remeshed =
+				self.is_loaded(chunk_coords) && self.remeshing_required_set.contains(&chunk_coords);
+			let shall_be_meshed = (!doesnt_need_mesh)
+				&& (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
+				&& worker_tasks.tasks.len() < pool.number_of_workers();
+
+			if shall_be_meshed {
+				// Asking a worker for the meshing or remeshing of the chunk.
+				remeshing_tasked.push(chunk_coords);
+				let data_for_chunk_meshing =
+					self.get_data_for_chunk_meshing(chunk_coords, Arc::clone(block_type_table)).unwrap();
+				worker_tasks.run_chunk_meshing_task(
+					pool,
+					chunk_coords,
+					data_for_chunk_meshing,
+					Arc::clone(device),
+				);
+			}
+		}
+		for chunk_coords in remeshing_tasked {
+			self.remeshing_required_set.remove(&chunk_coords);
+		}
 	}
 
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
@@ -198,17 +254,14 @@ impl ChunkGrid {
 	) {
 		self.set_block_but_do_not_update_meshes(coords, block);
 
-		// Request a mesh update in all the chunks that the block touches.
-		let mut chunk_coords_to_update = vec![];
-		for delta in iter_3d_cube_center_radius((0, 0, 0).into(), 2) {
-			let neighbor_coords = coords + delta.to_vec();
-			let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(neighbor_coords);
-			chunk_coords_to_update.push(chunk_coords);
-		}
-		for chunk_coords in chunk_coords_to_update {
-			if self.is_loaded(chunk_coords) {
-				self.remeshing_required_set.insert(chunk_coords);
-			}
+		// Request a mesh update in all the chunks that the block touches (even with vertices),
+		// so all the chunks that contain any of the blocks in the 3x3x3 blocks cube around.
+		let block_span = CubicCoordsSpan::with_center_and_radius(coords, 2);
+		let chunk_inf = self.cd.world_coords_to_containing_chunk_coords(block_span.inf);
+		let chunk_sup_included =
+			self.cd.world_coords_to_containing_chunk_coords(block_span.sup_included());
+		for chunk_coords in iter_3d_rect_inf_sup_included(chunk_inf, chunk_sup_included) {
+			self.require_remeshing(chunk_coords);
 		}
 	}
 

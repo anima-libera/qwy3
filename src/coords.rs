@@ -130,7 +130,7 @@ impl CubicCoordsSpan {
 	}
 
 	/// A radius of 0 gives an empty area and a radius of 1 gives just the center.
-	pub(crate) fn _with_center_and_radius(
+	pub(crate) fn with_center_and_radius(
 		center: cgmath::Point3<i32>,
 		radius: i32,
 	) -> CubicCoordsSpan {
@@ -155,6 +155,10 @@ impl CubicCoordsSpan {
 			chunk_span.block_coords_inf(),
 			chunk_span.block_coords_sup_excluded(),
 		)
+	}
+
+	pub(crate) fn sup_included(&self) -> BlockCoords {
+		self.sup_excluded + cgmath::vec3(1, 1, 1)
 	}
 
 	pub(crate) fn add_margins(&mut self, margin_to_add: i32) {
@@ -199,6 +203,7 @@ impl CubicCoordsSpan {
 }
 
 /// Iterates over the 3D rectangle area `inf..sup_excluded` (`sup_excluded` not included).
+#[inline]
 pub(crate) fn iter_3d_rect_inf_sup_excluded(
 	inf: cgmath::Point3<i32>,
 	sup_excluded: cgmath::Point3<i32>,
@@ -212,7 +217,17 @@ pub(crate) fn iter_3d_rect_inf_sup_excluded(
 	})
 }
 
+/// Iterates over the 3D rectangle area `inf..=sup_included` (`sup_included` is included).
+#[inline]
+pub(crate) fn iter_3d_rect_inf_sup_included(
+	inf: cgmath::Point3<i32>,
+	sup_included: cgmath::Point3<i32>,
+) -> impl Iterator<Item = cgmath::Point3<i32>> {
+	iter_3d_rect_inf_sup_excluded(inf, sup_included + cgmath::vec3(1, 1, 1))
+}
+
 /// Iterates over the 3D rectangle area `inf..(inf+dims)` (`inf+dims` not included).
+#[inline]
 pub(crate) fn iter_3d_rect_inf_dims(
 	inf: cgmath::Point3<i32>,
 	dims: cgmath::Vector3<i32>,
@@ -222,6 +237,7 @@ pub(crate) fn iter_3d_rect_inf_dims(
 }
 
 /// Iterates over a 3D cubic area of negativewards corner at `inf` and edges of length `edge`.
+#[inline]
 pub(crate) fn iter_3d_cube_inf_edge(
 	inf: cgmath::Point3<i32>,
 	edge: i32,
@@ -233,6 +249,7 @@ pub(crate) fn iter_3d_cube_inf_edge(
 /// Iterates over a 3D cubic area of the given center and given radius.
 ///
 /// A radius of 0 gives an empty iterator and a radius of 1 gives just the center.
+#[inline]
 pub(crate) fn iter_3d_cube_center_radius(
 	center: cgmath::Point3<i32>,
 	radius: i32,

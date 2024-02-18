@@ -27,10 +27,11 @@ use std::{
 	sync::{atomic::AtomicI32, Arc},
 };
 
-use cgmath::{point3, ElementWise, EuclideanSpace, InnerSpace, MetricSpace};
-use chunk_meshing::ChunkMesh;
+use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
+use chunk_meshing::{ChunkMesh, DataForChunkMeshing};
 use rand::Rng;
 use skybox::SkyboxFaces;
+use threadpool::ThreadPool;
 use wgpu::util::DeviceExt;
 
 use camera::{aspect_ratio, CameraOrthographicSettings, CameraPerspectiveSettings, CameraSettings};
@@ -96,6 +97,7 @@ enum Action {
 	ToggleFullscreen,
 }
 
+/// The main-thread reciever for the results of a task that was given to a worker thread.
 enum WorkerTask {
 	GenerateChunkBlocks(
 		ChunkCoords,
@@ -104,6 +106,35 @@ enum WorkerTask {
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
 	/// The counter at the end is the number of faces already finished.
 	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
+}
+
+struct CurrentWorkerTasks {
+	tasks: Vec<WorkerTask>,
+}
+
+impl CurrentWorkerTasks {
+	fn run_chunk_meshing_task(
+		&mut self,
+		pool: &mut ThreadPool,
+		chunk_coords: ChunkCoords,
+		data_for_chunk_meshing: DataForChunkMeshing,
+		device: Arc<wgpu::Device>,
+	) {
+		let (sender, receiver) = std::sync::mpsc::channel();
+		self.tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
+		pool.enqueue_task(Box::new(move || {
+			let mut mesh = data_for_chunk_meshing.generate_mesh();
+			mesh.update_gpu_data(&device);
+			let _ = sender.send(mesh);
+		}));
+	}
+
+	fn is_being_meshed(&self, chunk_coords: ChunkCoords) -> bool {
+		self.tasks.iter().any(|worker_task| match worker_task {
+			WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
+			_ => false,
+		})
+	}
 }
 
 pub(crate) struct SimpleTextureMesh {
@@ -257,7 +288,7 @@ struct Game {
 	fog_inf_sup_radiuses: (f32, f32),
 	fog_margin: f32,
 
-	worker_tasks: Vec<WorkerTask>,
+	worker_tasks: CurrentWorkerTasks,
 	pool: threadpool::ThreadPool,
 
 	time_beginning: std::time::Instant,
@@ -545,13 +576,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_world_generation = true;
 
-	let mut worker_tasks = vec![];
+	let mut worker_tasks = CurrentWorkerTasks { tasks: vec![] };
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
 	let face_counter = {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		let face_counter = Arc::new(AtomicI32::new(0));
-		worker_tasks.push(WorkerTask::PaintNewSkybox(
+		worker_tasks.tasks.push(WorkerTask::PaintNewSkybox(
 			receiver,
 			Arc::clone(&face_counter),
 		));
@@ -1155,7 +1186,7 @@ pub fn run() {
 			}
 
 			// Recieve task results from workers.
-			game.worker_tasks.retain_mut(|worker_task| {
+			game.worker_tasks.tasks.retain_mut(|worker_task| {
 				let is_not_done_yet = match worker_task {
 					WorkerTask::GenerateChunkBlocks(chunk_coords, receiver) => {
 						let chunk_coords_and_result_opt =
@@ -1173,9 +1204,7 @@ pub fn run() {
 								.insert(chunk_coords, chunk_culling_info.clone());
 
 							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-								if game.chunk_grid.is_loaded(neighbor_chunk_coords) {
-									game.chunk_grid.remeshing_required_set.insert(neighbor_chunk_coords);
-								}
+								game.chunk_grid.require_remeshing(neighbor_chunk_coords);
 							}
 
 							for straight_direction in OrientedAxis::all_the_six_possible_directions() {
@@ -1226,108 +1255,28 @@ pub fn run() {
 			});
 
 			// Request meshing for chunks that can be meshed or should be re-meshed.
-			let mut closest_unmeshed_chunk_distance: Option<f32> = None;
-			let chunk_coords_list: Vec<_> = game.chunk_grid.blocks_map.keys().copied().collect();
-			for chunk_coords in chunk_coords_list.iter().copied() {
-				let already_has_mesh = game.chunk_grid.mesh_map.contains_key(&chunk_coords);
-
-				if !already_has_mesh {
-					let chunk_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-					let center = (chunk_span.block_coords_inf().map(|x| x as f32)
-						+ chunk_span.block_coords_sup_excluded().map(|x| x as f32 - 1.0).to_vec())
-						/ 2.0;
-					let distance = center.distance(game.player_phys.aligned_box.pos);
-					// Remove the longest radius of the chunk to get the worst case distance.
-					let sqrt_3 = 3.0_f32.sqrt();
-					let distance = distance - game.cd.edge as f32 * sqrt_3 / 2.0;
-					if let Some(previous_distance) = closest_unmeshed_chunk_distance {
-						if previous_distance > distance {
-							closest_unmeshed_chunk_distance = Some(distance);
-						}
-					} else {
-						closest_unmeshed_chunk_distance = Some(distance);
-					}
-				}
-
-				let doesnt_need_mesh = game
-					.chunk_grid
-					.culling_info_map
-					.get(&chunk_coords)
-					.is_some_and(|culling_info| culling_info.all_air);
-				let is_being_meshed = game.worker_tasks.iter().any(|worker_task| match worker_task {
-					WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
-					_ => false,
-				});
-				let should_be_remeshed = game.chunk_grid.is_loaded(chunk_coords)
-					&& game.chunk_grid.remeshing_required_set.contains(&chunk_coords);
-				let shall_be_meshed = (!doesnt_need_mesh)
-					&& (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
-					&& game.worker_tasks.len() < game.pool.number_of_workers();
-				if shall_be_meshed {
-					// Asking a worker for the meshing or remeshing of the chunk
-					game.chunk_grid.remeshing_required_set.remove(&chunk_coords);
-					let (sender, receiver) = std::sync::mpsc::channel();
-					game.worker_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
-					let data_for_chunk_meshing = game
-						.chunk_grid
-						.get_data_for_chunk_meshing(chunk_coords, Arc::clone(&game.block_type_table))
-						.unwrap();
-					let device = Arc::clone(&game.device);
-					game.pool.enqueue_task(Box::new(move || {
-						let mut mesh = data_for_chunk_meshing.generate_mesh();
-						mesh.update_gpu_data(&device);
-						let _ = sender.send(mesh);
-					}));
-				}
-			}
+			game.chunk_grid.run_some_required_remeshing_tasks(
+				&mut game.worker_tasks,
+				&mut game.pool,
+				&game.block_type_table,
+				&game.device,
+			);
 
 			// Handle fog adjustment.
-			if true {
-				// Current fog fix,
-				// works fine when the loading of chunks is finished or almost finished.
-
-				let sqrt_3 = 3.0_f32.sqrt();
-				let distance = game.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
-				game.fog_inf_sup_radiuses.1 = distance.max(game.fog_margin);
-				game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
-				if game.enable_fog {
-					game.queue.write_buffer(
-						&game.fog_inf_sup_radiuses_thingy.resource,
-						0,
-						bytemuck::cast_slice(&[Vector2Pod {
-							values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
-						}]),
-					);
-				}
-			} else if let Some(distance) = closest_unmeshed_chunk_distance {
-				// TODO: Fix this setting.
-				// Currently broken due to assuming that all the chunks in the fog must
-				// be meshed, which is not the case anymore.
-
-				let delta = distance - game.fog_inf_sup_radiuses.1;
-				let delta_normalized = if delta < 0.0 {
-					-1.0
-				} else if delta > 0.0 {
-					1.0
-				} else {
-					0.0
-				};
-				let evolution = delta_normalized * dt.as_secs_f32() * 15.0;
-				let evolution = evolution.clamp(-delta.abs(), delta.abs());
-				if evolution != 0.0 {
-					game.fog_inf_sup_radiuses.1 += evolution;
-					game.fog_inf_sup_radiuses.1 = game.fog_inf_sup_radiuses.1.max(game.fog_margin);
-					game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
-					if game.enable_fog {
-						game.queue.write_buffer(
-							&game.fog_inf_sup_radiuses_thingy.resource,
-							0,
-							bytemuck::cast_slice(&[Vector2Pod {
-								values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
-							}]),
-						);
-					}
-				}
+			// Current fog fix,
+			// works fine when the loading of chunks is finished or almost finished.
+			let sqrt_3 = 3.0_f32.sqrt();
+			let distance = game.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
+			game.fog_inf_sup_radiuses.1 = distance.max(game.fog_margin);
+			game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
+			if game.enable_fog {
+				game.queue.write_buffer(
+					&game.fog_inf_sup_radiuses_thingy.resource,
+					0,
+					bytemuck::cast_slice(&[Vector2Pod {
+						values: [game.fog_inf_sup_radiuses.0, game.fog_inf_sup_radiuses.1],
+					}]),
+				);
 			}
 
 			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
@@ -1335,7 +1284,7 @@ pub fn run() {
 				let workers_dedicated_to_meshing = 1;
 				let available_workers_to_generate = (game.pool.number_of_workers()
 					- workers_dedicated_to_meshing)
-					.saturating_sub(game.worker_tasks.len());
+					.saturating_sub(game.worker_tasks.tasks.len());
 
 				if available_workers_to_generate >= 1 {
 					let player_block_coords = (game.player_phys.aligned_box.pos
@@ -1404,7 +1353,7 @@ pub fn run() {
 					game.chunk_generation_front.retain(|front_chunk_coords| {
 						let blocks_was_generated = game.chunk_grid.is_loaded(*front_chunk_coords);
 						let blocks_is_being_generated =
-							game.worker_tasks.iter().any(|worker_task| match worker_task {
+							game.worker_tasks.tasks.iter().any(|worker_task| match worker_task {
 								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
 									chunk_coords == front_chunk_coords
 								},
@@ -1429,7 +1378,7 @@ pub fn run() {
 
 						let blocks_was_generated = game.chunk_grid.is_loaded(considered_chunk_coords);
 						let blocks_is_being_generated =
-							game.worker_tasks.iter().any(|worker_task| match worker_task {
+							game.worker_tasks.tasks.iter().any(|worker_task| match worker_task {
 								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
 									*chunk_coords == considered_chunk_coords
 								},
@@ -1444,6 +1393,7 @@ pub fn run() {
 							let (sender, receiver) = std::sync::mpsc::channel();
 							game
 								.worker_tasks
+								.tasks
 								.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
 							let chunk_generator = Arc::clone(&game.world_generator);
 							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
@@ -1471,6 +1421,7 @@ pub fn run() {
 
 				let unloading_distance = game.loading_distance + game.margin_before_unloading;
 				let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
+				let chunk_coords_list: Vec<_> = game.chunk_grid.blocks_map.keys().copied().collect();
 				for chunk_coords in chunk_coords_list.into_iter() {
 					let dist_in_chunks =
 						chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
