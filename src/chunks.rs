@@ -195,24 +195,20 @@ impl ChunkGrid {
 				break;
 			}
 
-			if !self.is_loaded(chunk_coords) {
-				remeshing_tasked.push(chunk_coords);
-				continue;
-			}
-
-			let already_has_mesh = self.mesh_map.contains_key(&chunk_coords);
+			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
 			let doesnt_need_mesh = self
 				.culling_info_map
 				.get(&chunk_coords)
-				.is_some_and(|culling_info| culling_info.all_air);
-			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
-			let should_be_remeshed =
-				self.is_loaded(chunk_coords) && self.remeshing_required_set.contains(&chunk_coords);
-			let shall_be_meshed = (!doesnt_need_mesh)
-				&& (((!already_has_mesh) && (!is_being_meshed)) || should_be_remeshed)
-				&& worker_tasks.tasks.len() < pool.number_of_workers();
+				.is_some_and(|culling_info| culling_info.all_air)
+				|| !self.is_loaded(chunk_coords);
 
-			if shall_be_meshed {
+			if doesnt_need_mesh {
+				remeshing_tasked.push(chunk_coords);
+			} else if is_being_meshed {
+				// Let the request be, it will be remeshed later.
+				// We wait for this chunk because it is already being meshed (from some past state)
+				// and we may not want to clog up the task queue with remeshing tasks for one chunk.
+			} else {
 				// Asking a worker for the meshing or remeshing of the chunk.
 				remeshing_tasked.push(chunk_coords);
 				let data_for_chunk_meshing =
