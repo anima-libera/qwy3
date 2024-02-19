@@ -38,21 +38,27 @@ fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
-	// Use the shadow map to know if the fragment is in shadows from other geometries.
-	var position_in_sun_screen = uniform_sun_camera_array[0] * vec4<f32>(the.world_position, 1.0);
-	// Stealing some stuff from
-	// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
-	var position_in_shadow_map =
-		position_in_sun_screen.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
-	var cascade_index = 0;
-	var not_in_shadow = textureSampleCompare(
-		uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
-		position_in_shadow_map, cascade_index, position_in_sun_screen.z);
-	if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
-		position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y
-	{
-		// If we are outside of the shadow map then we get sun light.
-		not_in_shadow = 1.0;
+	var not_in_shadow = 1.0;
+
+	var cascade_count = arrayLength(&uniform_sun_camera_array);
+	for (var cascade_index: u32 = 0; cascade_index < cascade_count; cascade_index++) {
+		// Use the shadow map to know if the fragment is in shadows from other geometries.
+		var position_in_sun_screen =
+			uniform_sun_camera_array[cascade_index] * vec4<f32>(the.world_position, 1.0);
+		// Stealing some stuff from
+		// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
+		var position_in_shadow_map =
+			position_in_sun_screen.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
+		not_in_shadow = textureSampleCompare(
+			uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
+			position_in_shadow_map, cascade_index, position_in_sun_screen.z);
+		if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+			position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y
+		{
+			not_in_shadow = 1.0;
+		} else {
+			break;
+		}
 	}
 
 	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);

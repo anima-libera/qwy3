@@ -539,15 +539,15 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let sun_cameras = vec![
 		CameraOrthographicSettings {
 			up_direction: (0.0, 0.0, 1.0).into(),
-			width: 85.0,
-			height: 85.0,
-			depth: 200.0,
+			width: 45.0,
+			height: 45.0,
+			depth: 800.0,
 		},
 		CameraOrthographicSettings {
 			up_direction: (0.0, 0.0, 1.0).into(),
-			width: 300.0,
-			height: 300.0,
-			depth: 200.0,
+			width: 750.0,
+			height: 750.0,
+			depth: 800.0,
 		},
 	];
 	let SunCameraStuff { sun_camera_matrices_thingy, sun_camera_single_matrix_thingy } =
