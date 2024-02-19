@@ -16,7 +16,7 @@ struct VertexOutput {
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> uniform_sun_light_direction: vec3<f32>;
 @group(0) @binding(2) var<uniform> uniform_sun_camera: mat4x4<f32>;
-@group(0) @binding(3) var uniform_shadow_map_texture: texture_depth_2d;
+@group(0) @binding(3) var uniform_shadow_map_texture_array: texture_depth_2d_array;
 @group(0) @binding(4) var uniform_shadow_map_sampler: sampler_comparison;
 @group(0) @binding(5) var uniform_atlas_texture: texture_2d<f32>;
 @group(0) @binding(6) var uniform_atlas_sampler: sampler;
@@ -44,9 +44,10 @@ fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
 	var position_in_shadow_map =
 		position_in_sun_screen.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
+	var cascade_index = 0;
 	var not_in_shadow = textureSampleCompare(
-		uniform_shadow_map_texture, uniform_shadow_map_sampler,
-		position_in_shadow_map, position_in_sun_screen.z);
+		uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
+		position_in_shadow_map, cascade_index, position_in_sun_screen.z);
 	if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
 		position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y
 	{

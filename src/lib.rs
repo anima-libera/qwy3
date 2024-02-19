@@ -252,7 +252,7 @@ struct Game {
 	sun_light_direction_thingy: BindingThingy<wgpu::Buffer>,
 	sun_camera: CameraOrthographicSettings,
 	sun_camera_matrix_thingy: BindingThingy<wgpu::Buffer>,
-	shadow_map_view_thingy: BindingThingy<wgpu::TextureView>,
+	shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
 	/// First is the block of matter that is targeted,
 	/// second is the empty block near it that would be filled if a block was placed now.
 	targeted_block_coords: Option<(BlockCoords, BlockCoords)>,
@@ -539,11 +539,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	};
 	let sun_camera_matrix_thingy = init_sun_camera_matrix_thingy(Arc::clone(&device));
 
+	let shadow_map_cascade_count = 2;
 	let ShadowMapStuff {
 		shadow_map_format,
 		shadow_map_view_thingy,
 		shadow_map_sampler_thingy,
-	} = init_shadow_map_stuff(Arc::clone(&device));
+		shadow_map_cascade_view_thingies,
+	} = init_shadow_map_stuff(Arc::clone(&device), shadow_map_cascade_count);
 
 	let z_buffer_format = wgpu::TextureFormat::Depth32Float;
 	let z_buffer_view = make_z_buffer_texture_view(
@@ -711,7 +713,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		sun_light_direction_thingy,
 		sun_camera,
 		sun_camera_matrix_thingy,
-		shadow_map_view_thingy,
+		shadow_map_cascade_view_thingies,
 		targeted_block_coords,
 		player_phys,
 		cd,
@@ -1628,7 +1630,7 @@ pub fn run() {
 					label: Some("Render Pass for Shadow Map"),
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &game.shadow_map_view_thingy.resource,
+						view: &game.shadow_map_cascade_view_thingies[0].resource,
 						depth_ops: Some(wgpu::Operations {
 							load: wgpu::LoadOp::Clear(1.0),
 							store: wgpu::StoreOp::Store,

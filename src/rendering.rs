@@ -7,6 +7,7 @@ use crate::shaders::Vector2Pod;
 use crate::{camera::Matrix4x4Pod, shaders, Vector3Pod};
 
 /// Type representation for the `ty` and `count` fields of a `wgpu::BindGroupLayoutEntry`.
+#[derive(Clone)]
 pub(crate) struct BindingType {
 	pub(crate) ty: wgpu::BindingType,
 	pub(crate) count: Option<std::num::NonZeroU32>,
@@ -231,14 +232,24 @@ pub(crate) fn init_aspect_ratio_thingy(device: Arc<wgpu::Device>) -> BindingThin
 
 pub(crate) struct ShadowMapStuff {
 	pub(crate) shadow_map_format: wgpu::TextureFormat,
+	/// View on the whole texture array, all cascades included.
 	pub(crate) shadow_map_view_thingy: BindingThingy<wgpu::TextureView>,
 	pub(crate) shadow_map_sampler_thingy: BindingThingy<wgpu::Sampler>,
+	/// Views on each of the textures of the array, every cascade texture gets its own view.
+	pub(crate) shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
 }
-pub(crate) fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff {
+pub(crate) fn init_shadow_map_stuff(
+	device: Arc<wgpu::Device>,
+	shadow_map_cascade_count: u32,
+) -> ShadowMapStuff {
 	let shadow_map_format = wgpu::TextureFormat::Depth32Float;
 	let shadow_map_texture = device.create_texture(&wgpu::TextureDescriptor {
 		label: Some("Shadow Map Texture"),
-		size: wgpu::Extent3d { width: 8192, height: 8192, depth_or_array_layers: 1 },
+		size: wgpu::Extent3d {
+			width: 8192,
+			height: 8192,
+			depth_or_array_layers: shadow_map_cascade_count,
+		},
 		mip_level_count: 1,
 		sample_count: 1,
 		dimension: wgpu::TextureDimension::D2,
@@ -250,13 +261,13 @@ pub(crate) fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff
 	let shadow_map_view_binding_type = BindingType {
 		ty: wgpu::BindingType::Texture {
 			sample_type: wgpu::TextureSampleType::Depth,
-			view_dimension: wgpu::TextureViewDimension::D2,
+			view_dimension: wgpu::TextureViewDimension::D2Array,
 			multisampled: false,
 		},
 		count: None,
 	};
 	let shadow_map_view_thingy = BindingThingy {
-		binding_type: shadow_map_view_binding_type,
+		binding_type: shadow_map_view_binding_type.clone(),
 		resource: shadow_map_view,
 	};
 	let shadow_map_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -279,10 +290,29 @@ pub(crate) fn init_shadow_map_stuff(device: Arc<wgpu::Device>) -> ShadowMapStuff
 		resource: shadow_map_sampler,
 	};
 
+	let shadow_map_cascade_views: Vec<_> = (0..shadow_map_cascade_count)
+		.map(|cascade_index| {
+			shadow_map_texture.create_view(&wgpu::TextureViewDescriptor {
+				dimension: Some(wgpu::TextureViewDimension::D2),
+				base_array_layer: cascade_index,
+				array_layer_count: Some(1),
+				..wgpu::TextureViewDescriptor::default()
+			})
+		})
+		.collect();
+	let shadow_map_cascade_view_thingies = shadow_map_cascade_views
+		.into_iter()
+		.map(|shadow_map_cascade_view| BindingThingy {
+			binding_type: shadow_map_view_binding_type.clone(),
+			resource: shadow_map_cascade_view,
+		})
+		.collect();
+
 	ShadowMapStuff {
 		shadow_map_format,
 		shadow_map_view_thingy,
 		shadow_map_sampler_thingy,
+		shadow_map_cascade_view_thingies,
 	}
 }
 
