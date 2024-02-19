@@ -15,7 +15,7 @@ struct VertexOutput {
 
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
 @group(0) @binding(1) var<uniform> uniform_sun_light_direction: vec3<f32>;
-@group(0) @binding(2) var<uniform> uniform_sun_camera: mat4x4<f32>;
+@group(0) @binding(2) var<storage, read> uniform_sun_camera_array: array<mat4x4<f32> >;
 @group(0) @binding(3) var uniform_shadow_map_texture_array: texture_depth_2d_array;
 @group(0) @binding(4) var uniform_shadow_map_sampler: sampler_comparison;
 @group(0) @binding(5) var uniform_atlas_texture: texture_2d<f32>;
@@ -39,7 +39,7 @@ fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 @fragment
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	// Use the shadow map to know if the fragment is in shadows from other geometries.
-	var position_in_sun_screen = uniform_sun_camera * vec4<f32>(the.world_position, 1.0);
+	var position_in_sun_screen = uniform_sun_camera_array[0] * vec4<f32>(the.world_position, 1.0);
 	// Stealing some stuff from
 	// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
 	var position_in_shadow_map =

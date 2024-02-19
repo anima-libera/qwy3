@@ -24,6 +24,7 @@ mod world_gen;
 use std::{
 	collections::HashMap,
 	f32::consts::TAU,
+	mem::size_of,
 	sync::{atomic::AtomicI32, Arc},
 };
 
@@ -47,6 +48,7 @@ use world_gen::WorldGenerator;
 
 use crate::{
 	atlas::Atlas,
+	camera::Matrix4x4Pod,
 	lang::LogItem,
 	shaders::Vector2Pod,
 	skybox::{
@@ -252,6 +254,7 @@ struct Game {
 	sun_light_direction_thingy: BindingThingy<wgpu::Buffer>,
 	sun_cameras: Vec<CameraOrthographicSettings>,
 	sun_camera_matrices_thingy: BindingThingy<wgpu::Buffer>,
+	sun_camera_single_matrix_thingy: BindingThingy<wgpu::Buffer>,
 	shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
 	/// First is the block of matter that is targeted,
 	/// second is the empty block near it that would be filled if a block was placed now.
@@ -547,7 +550,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			depth: 200.0,
 		},
 	];
-	let sun_camera_matrices_thingy =
+	let SunCameraStuff { sun_camera_matrices_thingy, sun_camera_single_matrix_thingy } =
 		init_sun_camera_matrices_thingy(Arc::clone(&device), shadow_map_cascade_count);
 
 	let ShadowMapStuff {
@@ -614,6 +617,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			camera_matrix_thingy: &camera_matrix_thingy,
 			sun_light_direction_thingy: &sun_light_direction_thingy,
 			sun_camera_matrices_thingy: &sun_camera_matrices_thingy,
+			sun_camera_single_matrix_thingy: &sun_camera_single_matrix_thingy,
 			shadow_map_view_thingy: &shadow_map_view_thingy,
 			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
@@ -723,6 +727,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		sun_light_direction_thingy,
 		sun_cameras,
 		sun_camera_matrices_thingy,
+		sun_camera_single_matrix_thingy,
 		shadow_map_cascade_view_thingies,
 		targeted_block_coords,
 		player_phys,
@@ -1638,13 +1643,21 @@ pub fn run() {
 				label: Some("Render Encoder"),
 			});
 
-			// Render pass to generate the shadow map.
-			{
+			// Render pass to generate the shadow map cascades.
+			for cascade_index in 0..game.sun_cameras.len() {
+				encoder.copy_buffer_to_buffer(
+					&game.sun_camera_matrices_thingy.resource,
+					size_of::<Matrix4x4Pod>() as u64 * cascade_index as u64,
+					&game.sun_camera_single_matrix_thingy.resource,
+					0,
+					size_of::<Matrix4x4Pod>() as u64,
+				);
+
 				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
 					label: Some("Render Pass for Shadow Map"),
 					color_attachments: &[],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &game.shadow_map_cascade_view_thingies[0].resource,
+						view: &game.shadow_map_cascade_view_thingies[cascade_index].resource,
 						depth_ops: Some(wgpu::Operations {
 							load: wgpu::LoadOp::Clear(1.0),
 							store: wgpu::StoreOp::Store,

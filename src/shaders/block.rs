@@ -27,7 +27,7 @@ impl BlockVertexPod {
 pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
@@ -54,7 +54,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		entries: &[
 			binding_thingies.camera_matrix_thingy.layout_entry(0, S::VERTEX),
 			binding_thingies.sun_light_direction_thingy.layout_entry(1, S::VERTEX),
-			binding_thingies.sun_camera_matrix_thingy.layout_entry(2, S::FRAGMENT),
+			binding_thingies.sun_camera_matrices_thingy.layout_entry(2, S::FRAGMENT),
 			binding_thingies.shadow_map_view_thingy.layout_entry(3, S::FRAGMENT),
 			binding_thingies.shadow_map_sampler_thingy.layout_entry(4, S::FRAGMENT),
 			binding_thingies.atlas_texture_view_thingy.layout_entry(5, S::FRAGMENT),
@@ -69,7 +69,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		entries: &[
 			binding_thingies.camera_matrix_thingy.bind_group_entry(0),
 			binding_thingies.sun_light_direction_thingy.bind_group_entry(1),
-			binding_thingies.sun_camera_matrix_thingy.bind_group_entry(2),
+			binding_thingies.sun_camera_matrices_thingy.bind_group_entry(2),
 			binding_thingies.shadow_map_view_thingy.bind_group_entry(3),
 			binding_thingies.shadow_map_sampler_thingy.bind_group_entry(4),
 			binding_thingies.atlas_texture_view_thingy.bind_group_entry(5),

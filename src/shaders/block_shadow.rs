@@ -2,7 +2,7 @@ use super::block::BlockVertexPod;
 pub(crate) use crate::BindingThingy;
 
 pub(crate) struct BindingThingies<'a> {
-	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_camera_single_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
@@ -22,7 +22,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 	let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
 		label: Some("Block Shadow Shader Bind Group Layout"),
 		entries: &[
-			binding_thingies.sun_camera_matrix_thingy.layout_entry(0, S::VERTEX),
+			binding_thingies.sun_camera_single_matrix_thingy.layout_entry(0, S::VERTEX),
 			binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
 			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 		],
@@ -31,7 +31,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		label: Some("Block Shadow Shader Bind Group"),
 		layout: &bind_group_layout,
 		entries: &[
-			binding_thingies.sun_camera_matrix_thingy.bind_group_entry(0),
+			binding_thingies.sun_camera_single_matrix_thingy.bind_group_entry(0),
 			binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
 			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
 		],
