@@ -1,3 +1,4 @@
+use std::mem::size_of;
 use std::sync::Arc;
 
 use bytemuck::Zeroable;
@@ -103,7 +104,7 @@ pub(crate) struct AllBindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) sun_camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
@@ -125,7 +126,7 @@ pub(crate) fn init_rendering_stuff(
 		shaders::block_shadow::render_pipeline_and_bind_group(
 			&device,
 			shaders::block_shadow::BindingThingies {
-				sun_camera_matrix_thingy: all_binding_thingies.sun_camera_matrix_thingy,
+				sun_camera_matrix_thingy: all_binding_thingies.sun_camera_matrices_thingy,
 				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
 				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
 			},
@@ -137,7 +138,7 @@ pub(crate) fn init_rendering_stuff(
 		shaders::block::BindingThingies {
 			camera_matrix_thingy: all_binding_thingies.camera_matrix_thingy,
 			sun_light_direction_thingy: all_binding_thingies.sun_light_direction_thingy,
-			sun_camera_matrix_thingy: all_binding_thingies.sun_camera_matrix_thingy,
+			sun_camera_matrix_thingy: all_binding_thingies.sun_camera_matrices_thingy,
 			shadow_map_view_thingy: all_binding_thingies.shadow_map_view_thingy,
 			shadow_map_sampler_thingy: all_binding_thingies.shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
@@ -316,13 +317,15 @@ pub(crate) fn init_shadow_map_stuff(
 	}
 }
 
-pub(crate) fn init_sun_camera_matrix_thingy(
+pub(crate) fn init_sun_camera_matrices_thingy(
 	device: Arc<wgpu::Device>,
+	shadow_map_cascade_count: u32,
 ) -> BindingThingy<wgpu::Buffer> {
-	let sun_camera_matrix_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+	let sun_camera_matrix_buffer = device.create_buffer(&wgpu::BufferDescriptor {
 		label: Some("Sun Camera Buffer"),
-		contents: bytemuck::cast_slice(&[Matrix4x4Pod::zeroed()]),
+		size: size_of::<Matrix4x4Pod>() as u64 * shadow_map_cascade_count as u64,
 		usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+		mapped_at_creation: false,
 	});
 	let sun_camera_matrix_binding_type = BindingType {
 		ty: wgpu::BindingType::Buffer {

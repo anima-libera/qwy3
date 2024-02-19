@@ -250,8 +250,8 @@ struct Game {
 	camera_matrix_thingy: BindingThingy<wgpu::Buffer>,
 	sun_position_in_sky: AngularDirection,
 	sun_light_direction_thingy: BindingThingy<wgpu::Buffer>,
-	sun_camera: CameraOrthographicSettings,
-	sun_camera_matrix_thingy: BindingThingy<wgpu::Buffer>,
+	sun_cameras: Vec<CameraOrthographicSettings>,
+	sun_camera_matrices_thingy: BindingThingy<wgpu::Buffer>,
 	shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
 	/// First is the block of matter that is targeted,
 	/// second is the empty block near it that would be filled if a block was placed now.
@@ -531,15 +531,25 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
 
-	let sun_camera = CameraOrthographicSettings {
-		up_direction: (0.0, 0.0, 1.0).into(),
-		width: 85.0,
-		height: 85.0,
-		depth: 200.0,
-	};
-	let sun_camera_matrix_thingy = init_sun_camera_matrix_thingy(Arc::clone(&device));
-
 	let shadow_map_cascade_count = 2;
+
+	let sun_cameras = vec![
+		CameraOrthographicSettings {
+			up_direction: (0.0, 0.0, 1.0).into(),
+			width: 85.0,
+			height: 85.0,
+			depth: 200.0,
+		},
+		CameraOrthographicSettings {
+			up_direction: (0.0, 0.0, 1.0).into(),
+			width: 300.0,
+			height: 300.0,
+			depth: 200.0,
+		},
+	];
+	let sun_camera_matrices_thingy =
+		init_sun_camera_matrices_thingy(Arc::clone(&device), shadow_map_cascade_count);
+
 	let ShadowMapStuff {
 		shadow_map_format,
 		shadow_map_view_thingy,
@@ -603,7 +613,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			aspect_ratio_thingy: &aspect_ratio_thingy,
 			camera_matrix_thingy: &camera_matrix_thingy,
 			sun_light_direction_thingy: &sun_light_direction_thingy,
-			sun_camera_matrix_thingy: &sun_camera_matrix_thingy,
+			sun_camera_matrices_thingy: &sun_camera_matrices_thingy,
 			shadow_map_view_thingy: &shadow_map_view_thingy,
 			shadow_map_sampler_thingy: &shadow_map_sampler_thingy,
 			atlas_texture_view_thingy: &atlas_texture_view_thingy,
@@ -711,8 +721,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		camera_matrix_thingy,
 		sun_position_in_sky,
 		sun_light_direction_thingy,
-		sun_camera,
-		sun_camera_matrix_thingy,
+		sun_cameras,
+		sun_camera_matrices_thingy,
 		shadow_map_cascade_view_thingies,
 		targeted_block_coords,
 		player_phys,
@@ -1544,25 +1554,29 @@ pub fn run() {
 
 			game.sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
 
-			let sun_camera_view_projection_matrix = {
-				let camera_position = first_person_camera_position;
-				let camera_direction_vector = -game.sun_position_in_sky.to_vec3();
-				let camera_up_vector = (0.0, 0.0, 1.0).into();
-				game.sun_camera.view_projection_matrix(
-					camera_position,
-					camera_direction_vector,
-					camera_up_vector,
-				)
-			};
+			let sun_camera_view_projection_matrices: Vec<_> = game
+				.sun_cameras
+				.iter()
+				.map(|camera| {
+					let camera_position = first_person_camera_position;
+					let camera_direction_vector = -game.sun_position_in_sky.to_vec3();
+					let camera_up_vector = (0.0, 0.0, 1.0).into();
+					camera.view_projection_matrix(
+						camera_position,
+						camera_direction_vector,
+						camera_up_vector,
+					)
+				})
+				.collect();
 			game.queue.write_buffer(
-				&game.sun_camera_matrix_thingy.resource,
+				&game.sun_camera_matrices_thingy.resource,
 				0,
-				bytemuck::cast_slice(&[sun_camera_view_projection_matrix]),
+				bytemuck::cast_slice(&sun_camera_view_projection_matrices),
 			);
 
 			let (camera_view_projection_matrix, camera_position_ifany) = {
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					(sun_camera_view_projection_matrix, None)
+					(sun_camera_view_projection_matrices[0], None)
 				} else {
 					let mut camera_position = first_person_camera_position;
 					let camera_direction_vector = game.camera_direction.to_vec3();
@@ -1671,9 +1685,9 @@ pub fn run() {
 				});
 
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					let scale = game.window_surface_config.height as f32 / game.sun_camera.height;
-					let w = game.sun_camera.width * scale;
-					let h = game.sun_camera.height * scale;
+					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
+					let w = game.sun_cameras[0].width * scale;
+					let h = game.sun_cameras[0].height * scale;
 					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
 					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
 					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
@@ -1709,9 +1723,9 @@ pub fn run() {
 				});
 
 				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					let scale = game.window_surface_config.height as f32 / game.sun_camera.height;
-					let w = game.sun_camera.width * scale;
-					let h = game.sun_camera.height * scale;
+					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
+					let w = game.sun_cameras[0].width * scale;
+					let h = game.sun_cameras[0].height * scale;
 					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
 					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
 					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
