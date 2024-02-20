@@ -1046,7 +1046,7 @@ pub fn run() {
 				game.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
 			{
 				let fps = 1.0 / dt.as_secs_f32();
-				let chunk_count = game.chunk_grid.blocks_map.len();
+				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
 				let block_count = chunk_count * game.cd.number_of_blocks();
 				let chunk_meshed_count = game.chunk_grid.mesh_map.len();
 				let player_block_coords = (game.player_phys.aligned_box.pos
@@ -1213,11 +1213,11 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							game.chunk_grid.blocks_map.insert(chunk_coords, Arc::new(chunk_blocks));
-							game
-								.chunk_grid
-								.culling_info_map
-								.insert(chunk_coords, chunk_culling_info.clone());
+							game.chunk_grid.insert_freshly_generated_chunk(
+								chunk_coords,
+								chunk_blocks,
+								chunk_culling_info.clone(),
+							);
 
 							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 								game.chunk_grid.require_remeshing(neighbor_chunk_coords);
@@ -1436,18 +1436,7 @@ pub fn run() {
 					game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
 
 				let unloading_distance = game.loading_distance + game.margin_before_unloading;
-				let unloading_distance_in_chunks = unloading_distance / game.cd.edge as f32;
-				let chunk_coords_list: Vec<_> = game.chunk_grid.blocks_map.keys().copied().collect();
-				for chunk_coords in chunk_coords_list.into_iter() {
-					let dist_in_chunks =
-						chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
-					if dist_in_chunks > unloading_distance_in_chunks {
-						// TODO: Save blocks to database on disk or something.
-						game.chunk_grid.culling_info_map.remove(&chunk_coords);
-						game.chunk_grid.blocks_map.remove(&chunk_coords);
-						game.chunk_grid.mesh_map.remove(&chunk_coords);
-					}
-				}
+				game.chunk_grid.unload_chunks_too_far(player_chunk_coords, unloading_distance);
 			}
 
 			let walking_vector = {
@@ -1532,11 +1521,10 @@ pub fn run() {
 
 			let mut chunk_box_meshes = vec![];
 			if game.enable_display_not_surrounded_chunks_as_boxes {
-				for chunk_coords in game.chunk_grid.blocks_map.keys().copied() {
+				for chunk_coords in game.chunk_grid.iterate_over_loaded() {
 					let is_surrounded = 'is_surrounded: {
 						for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-							let blocks_was_generated =
-								game.chunk_grid.blocks_map.contains_key(&neighbor_chunk_coords);
+							let blocks_was_generated = game.chunk_grid.is_loaded(neighbor_chunk_coords);
 							if !blocks_was_generated {
 								break 'is_surrounded false;
 							}

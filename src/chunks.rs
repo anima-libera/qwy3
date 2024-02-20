@@ -3,6 +3,7 @@ use std::{
 	sync::Arc,
 };
 
+use cgmath::MetricSpace;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) use crate::{
@@ -155,7 +156,7 @@ impl ChunkCullingInfo {
 
 pub(crate) struct ChunkGrid {
 	pub(crate) cd: ChunkDimensions,
-	pub(crate) blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
+	blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
 	pub(crate) culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	pub(crate) mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	remeshing_required_set: FxHashSet<ChunkCoords>,
@@ -174,6 +175,14 @@ impl ChunkGrid {
 
 	pub(crate) fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.blocks_map.contains_key(&chunk_coords)
+	}
+
+	pub(crate) fn iterate_over_loaded(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
+		self.blocks_map.keys().copied()
+	}
+
+	pub(crate) fn get_chunk_blocks(&self, chunk_coords: ChunkCoords) -> Option<&Arc<ChunkBlocks>> {
+		self.blocks_map.get(&chunk_coords)
 	}
 
 	pub(crate) fn require_remeshing(&mut self, chunk_coords: ChunkCoords) {
@@ -265,5 +274,44 @@ impl ChunkGrid {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk_blocks = self.blocks_map.get(&chunk_coords)?;
 		Some(chunk_blocks.get(coords).unwrap())
+	}
+
+	pub(crate) fn count_chunks_that_have_blocks(&self) -> usize {
+		self.blocks_map.len()
+	}
+
+	pub(crate) fn insert_freshly_generated_chunk(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		chunk_blocks: ChunkBlocks,
+		chunk_culling_info: ChunkCullingInfo,
+	) {
+		self.blocks_map.insert(chunk_coords, Arc::new(chunk_blocks));
+		self.culling_info_map.insert(chunk_coords, chunk_culling_info);
+	}
+
+	fn unload_chunk(&mut self, chunk_coords: ChunkCoords) {
+		// TODO: Save blocks to database on disk or something.
+		self.culling_info_map.remove(&chunk_coords);
+		self.blocks_map.remove(&chunk_coords);
+		self.mesh_map.remove(&chunk_coords);
+		self.remeshing_required_set.remove(&chunk_coords);
+	}
+
+	pub(crate) fn unload_chunks_too_far(
+		&mut self,
+		player_chunk_coords: ChunkCoords,
+		unloading_distance_in_blocks: f32,
+	) {
+		let unloading_distance_in_chunks = unloading_distance_in_blocks / self.cd.edge as f32;
+		// TODO: Avoid copying all the keys in a vector and iterating over all the chunks every frame.
+		let chunk_coords_list: Vec<_> = self.blocks_map.keys().copied().collect();
+		for chunk_coords in chunk_coords_list.into_iter() {
+			let dist_in_chunks =
+				chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
+			if dist_in_chunks > unloading_distance_in_chunks {
+				self.unload_chunk(chunk_coords);
+			}
+		}
 	}
 }

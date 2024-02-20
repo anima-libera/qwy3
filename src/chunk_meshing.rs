@@ -600,7 +600,7 @@ impl ChunkGrid {
 		chunk_coords: ChunkCoords,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> Option<DataForChunkMeshing> {
-		let chunk_blocks = Arc::clone(self.blocks_map.get(&chunk_coords)?);
+		let chunk_blocks = Arc::clone(self.get_chunk_blocks(chunk_coords)?);
 		let opaqueness_layer_for_face_culling =
 			self.get_opaqueness_layer_around_chunk(chunk_coords, true, Arc::clone(&block_type_table));
 		let opaqueness_layer_for_ambiant_occlusion =
