@@ -480,7 +480,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		0,
 		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
 	);
-	let fog_margin = 30.0;
+	let fog_margin = 45.0;
 	let fog_inf_sup_radiuses = (0.0, fog_margin);
 	queue.write_buffer(
 		&fog_inf_sup_radiuses_thingy.resource,
@@ -534,8 +534,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
 
-	let shadow_map_cascade_count = 2;
-
 	let sun_cameras = vec![
 		CameraOrthographicSettings {
 			up_direction: (0.0, 0.0, 1.0).into(),
@@ -550,6 +548,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			depth: 800.0,
 		},
 	];
+	let shadow_map_cascade_count = sun_cameras.len() as u32;
 	let SunCameraStuff { sun_camera_matrices_thingy, sun_camera_single_matrix_thingy } =
 		init_sun_camera_matrices_thingy(Arc::clone(&device), shadow_map_cascade_count);
 

@@ -40,26 +40,37 @@ fn vertex_shader_main(vertex_input: VertexInput) -> VertexOutput {
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	var not_in_shadow = 1.0;
 
+	// Each cascade is a shadow map, from smallest (so more precise) to largest.
+	// We querry the smallest shadow map that we are in to get the best available precision.
+	var position_in_shadow_map: vec2<f32>;
+	var position_in_sun_screen: vec4<f32>;
+	var smallest_cascade_index: u32 = 0;
 	var cascade_count = arrayLength(&uniform_sun_camera_array);
 	for (var cascade_index: u32 = 0; cascade_index < cascade_count; cascade_index++) {
-		// Use the shadow map to know if the fragment is in shadows from other geometries.
-		var position_in_sun_screen =
+		position_in_sun_screen =
 			uniform_sun_camera_array[cascade_index] * vec4<f32>(the.world_position, 1.0);
-		// Stealing some stuff from
+		// Stealed the coordinate correction from
 		// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
-		var position_in_shadow_map =
+		position_in_shadow_map =
 			position_in_sun_screen.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
-		not_in_shadow = textureSampleCompare(
-			uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
-			position_in_shadow_map, cascade_index, position_in_sun_screen.z);
-		if position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
-			position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y
-		{
-			not_in_shadow = 1.0;
-		} else {
+		var hit_this_cascade =
+			!(position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+			position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y);
+		if hit_this_cascade {
+			smallest_cascade_index = cascade_index;
 			break;
 		}
 	}
+	not_in_shadow = textureSampleCompare(
+		uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
+		position_in_shadow_map, smallest_cascade_index, position_in_sun_screen.z);
+	// Remove shadows outside all the shadow maps.
+	var missed_even_last_cascade =
+		position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+		position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y;
+	if missed_even_last_cascade {
+		not_in_shadow = 1.0;
+	} 
 
 	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
 

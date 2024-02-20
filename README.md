@@ -38,7 +38,7 @@ Advice:
 - Fog effect (blocks in the distance fading in the skybox).
 - Multithreading.
 - Command bar (the command language has basically nothing in it yet but the command bar is there).
-- Shadows.
+- Shadows via cascading shadow mapping.
 - Configurable controls for most controls.
 
 ### Controls
