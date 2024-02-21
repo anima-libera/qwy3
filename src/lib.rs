@@ -13,6 +13,7 @@ mod lang;
 mod line_meshes;
 mod noise;
 mod physics;
+mod rendering;
 mod rendering_init;
 mod shaders;
 mod skybox;
@@ -24,7 +25,6 @@ mod world_gen;
 use std::{
 	collections::HashMap,
 	f32::consts::TAU,
-	mem::size_of,
 	sync::{atomic::AtomicI32, Arc},
 };
 
@@ -48,7 +48,6 @@ use world_gen::WorldGenerator;
 
 use crate::{
 	atlas::Atlas,
-	camera::Matrix4x4Pod,
 	lang::LogItem,
 	shaders::Vector2Pod,
 	skybox::{
@@ -57,6 +56,7 @@ use crate::{
 	},
 };
 
+#[derive(Clone, Copy)]
 enum WhichCameraToUse {
 	FirstPerson,
 	ThirdPersonNear,
@@ -1621,196 +1621,31 @@ pub fn run() {
 				interface_meshes_vertices.simple_line_vertices,
 			);
 
-			let mut encoder = game.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-				label: Some("Render Encoder"),
-			});
-
-			// Render pass to generate the shadow map cascades.
-			for cascade_index in 0..game.sun_cameras.len() {
-				encoder.copy_buffer_to_buffer(
-					&game.sun_camera_matrices_thingy.resource,
-					size_of::<Matrix4x4Pod>() as u64 * cascade_index as u64,
-					&game.sun_camera_single_matrix_thingy.resource,
-					0,
-					size_of::<Matrix4x4Pod>() as u64,
-				);
-
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass for Shadow Map"),
-					color_attachments: &[],
-					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &game.shadow_map_cascade_view_thingies[cascade_index].resource,
-						depth_ops: Some(wgpu::Operations {
-							load: wgpu::LoadOp::Clear(1.0),
-							store: wgpu::StoreOp::Store,
-						}),
-						stencil_ops: None,
-					}),
-					timestamp_writes: None,
-					occlusion_query_set: None,
-				});
-
-				render_pass.set_pipeline(&game.rendering.block_shadow_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.block_shadow_bind_group, &[]);
-				for mesh in game.chunk_grid.iter_chunk_meshes() {
-					render_pass
-						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
-				}
-			}
-
-			// Render pass to render the world to the screen.
-			let window_texture = game.window_surface.get_current_texture().unwrap();
-			{
-				let window_texture_view =
-					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass to render the world"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &window_texture_view,
-						resolve_target: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 0.0 }),
-							store: wgpu::StoreOp::Store,
-						},
-					})],
-					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &game.z_buffer_view,
-						depth_ops: Some(wgpu::Operations {
-							load: wgpu::LoadOp::Clear(1.0),
-							store: wgpu::StoreOp::Store,
-						}),
-						stencil_ops: None,
-					}),
-					timestamp_writes: None,
-					occlusion_query_set: None,
-				});
-
-				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
-					let w = game.sun_cameras[0].width * scale;
-					let h = game.sun_cameras[0].height * scale;
-					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
-					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
-					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
-				}
-
-				render_pass.set_pipeline(&game.rendering.block_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.block_bind_group, &[]);
-				for mesh in game.chunk_grid.iter_chunk_meshes() {
-					render_pass
-						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
-				}
-
-				if game.enable_display_phys_box {
-					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
-					render_pass.set_vertex_buffer(0, player_box_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(player_box_mesh.vertices.len() as u32), 0..1);
-				}
-
-				if let Some(targeted_block_box_mesh) = &targeted_block_box_mesh_opt {
-					if game.enable_display_interface {
-						render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-						render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
-						render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
-						render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
-					}
-				}
-
-				for chunk_box_mesh in chunk_box_meshes.iter() {
-					render_pass.set_pipeline(&game.rendering.simple_line_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_bind_group, &[]);
-					render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
-				}
-			}
-
-			// Render pass to render the skybox to the screen.
-			{
-				let window_texture_view =
-					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass to render the skybox"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &window_texture_view,
-						resolve_target: None,
-						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
-					})],
-					depth_stencil_attachment: None,
-					timestamp_writes: None,
-					occlusion_query_set: None,
-				});
-
-				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
-					let w = game.sun_cameras[0].width * scale;
-					let h = game.sun_cameras[0].height * scale;
-					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
-					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
-					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
-				}
-
-				render_pass.set_pipeline(&game.rendering.skybox_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.skybox_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, skybox_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(skybox_mesh.vertices.len() as u32), 0..1);
-			}
-
-			// Render pass to draw the interface.
-			{
-				let window_texture_view =
-					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass to render the interface"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &window_texture_view,
-						resolve_target: None,
-						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
-					})],
-					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-						view: &game.z_buffer_view,
-						depth_ops: Some(wgpu::Operations {
-							load: wgpu::LoadOp::Clear(1.0),
-							store: wgpu::StoreOp::Store,
-						}),
-						stencil_ops: None,
-					}),
-					timestamp_writes: None,
-					occlusion_query_set: None,
-				});
-
-				if game.enable_display_interface
-					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
-					&& !game.typing_in_command_line
-				{
-					render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
-					render_pass.set_vertex_buffer(0, game.cursor_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(game.cursor_mesh.vertices.len() as u32), 0..1);
-				}
-
-				if game.enable_display_interface
-					&& !matches!(game.selected_camera, WhichCameraToUse::Sun)
-				{
-					render_pass.set_pipeline(&game.rendering.simple_texture_2d_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_texture_2d_bind_group, &[]);
-					let mesh = &interface_simple_texture_mesh;
-					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
-
-					render_pass.set_pipeline(&game.rendering.simple_line_2d_render_pipeline);
-					render_pass.set_bind_group(0, &game.rendering.simple_line_2d_bind_group, &[]);
-					let mesh = &interface_simple_line_mesh;
-					render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
-				}
-			}
-
-			game.queue.submit(std::iter::once(encoder.finish()));
-
-			window_texture.present();
+			let data_for_rendering = rendering::DataForRendering {
+				device: &game.device,
+				queue: &game.queue,
+				window_surface: &game.window_surface,
+				window_surface_config: &game.window_surface_config,
+				rendering: &game.rendering,
+				sun_cameras: &game.sun_cameras,
+				sun_camera_matrices_thingy: &game.sun_camera_matrices_thingy,
+				sun_camera_single_matrix_thingy: &game.sun_camera_single_matrix_thingy,
+				shadow_map_cascade_view_thingies: &game.shadow_map_cascade_view_thingies,
+				chunk_grid: &game.chunk_grid,
+				z_buffer_view: &game.z_buffer_view,
+				selected_camera: game.selected_camera,
+				enable_display_phys_box: game.enable_display_phys_box,
+				player_box_mesh: &player_box_mesh,
+				targeted_block_box_mesh_opt: &targeted_block_box_mesh_opt,
+				enable_display_interface: game.enable_display_interface,
+				chunk_box_meshes: &chunk_box_meshes,
+				skybox_mesh: &skybox_mesh,
+				typing_in_command_line: game.typing_in_command_line,
+				cursor_mesh: &game.cursor_mesh,
+				interface_simple_texture_mesh: &interface_simple_texture_mesh,
+				interface_simple_line_mesh: &interface_simple_line_mesh,
+			};
+			data_for_rendering.render();
 
 			if game.close_after_one_frame {
 				println!("Closing after one frame, as asked via command line arguments");
