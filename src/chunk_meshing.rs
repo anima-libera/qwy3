@@ -562,7 +562,7 @@ impl ChunkGrid {
 		default_to_opaque: bool,
 		block_type_table: Arc<BlockTypeTable>,
 	) -> OpaquenessLayerAroundChunk {
-		let surrounded_chunk_coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+		let surrounded_chunk_coords_span = ChunkCoordsSpan { cd: self.cd(), chunk_coords };
 		let mut layer = OpaquenessLayerAroundChunk::new(surrounded_chunk_coords_span);
 
 		let inf = surrounded_chunk_coords_span.block_coords_inf() - cgmath::vec3(1, 1, 1);

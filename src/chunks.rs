@@ -155,9 +155,9 @@ impl ChunkCullingInfo {
 }
 
 pub(crate) struct ChunkGrid {
-	pub(crate) cd: ChunkDimensions,
+	cd: ChunkDimensions,
 	blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
-	pub(crate) culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
+	culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	remeshing_required_set: FxHashSet<ChunkCoords>,
 }
@@ -171,6 +171,10 @@ impl ChunkGrid {
 			mesh_map: HashMap::default(),
 			remeshing_required_set: HashSet::default(),
 		}
+	}
+
+	pub(crate) fn cd(&self) -> ChunkDimensions {
+		self.cd
 	}
 
 	pub(crate) fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
