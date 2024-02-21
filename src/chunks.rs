@@ -76,7 +76,7 @@ pub(crate) struct ChunkCullingInfo {
 impl ChunkCullingInfo {
 	pub(crate) fn compute_from_blocks(
 		blocks: &ChunkBlocks,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkCullingInfo {
 		if !blocks.may_contain_non_air() {
 			return ChunkCullingInfo {
@@ -104,14 +104,14 @@ impl ChunkCullingInfo {
 
 		let mut all_opaque_faces = vec![];
 		for face in OrientedAxis::all_the_six_possible_directions() {
-			if ChunkCullingInfo::face_is_all_opaque(face, blocks, &block_type_table) {
+			if ChunkCullingInfo::face_is_all_opaque(face, blocks, block_type_table) {
 				all_opaque_faces.push(face);
 			}
 		}
 
 		let mut all_air_faces = vec![];
 		for face in OrientedAxis::all_the_six_possible_directions() {
-			if ChunkCullingInfo::face_is_all_air(face, blocks, &block_type_table) {
+			if ChunkCullingInfo::face_is_all_air(face, blocks, block_type_table) {
 				all_air_faces.push(face);
 			}
 		}

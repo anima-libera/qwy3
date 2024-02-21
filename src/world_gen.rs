@@ -18,7 +18,7 @@ pub(crate) trait WorldGenerator {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks;
 }
 
@@ -126,7 +126,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -200,7 +200,7 @@ impl WorldGenerator for FlatWorldGenerator {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -221,7 +221,7 @@ impl WorldGenerator for EmptyWorldGenerator {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
 		for coords in chunk_blocks.coords_span.iter_coords() {
@@ -245,7 +245,7 @@ impl WorldGenerator for WorldGeneratorLines01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -321,7 +321,7 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -357,7 +357,7 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -402,7 +402,7 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -471,7 +471,7 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -524,7 +524,7 @@ impl WorldGenerator for WorldGeneratorLinksX {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -592,7 +592,7 @@ impl WorldGenerator for WorldGeneratorLinks {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -670,7 +670,7 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -754,7 +754,7 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -835,7 +835,7 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -939,7 +939,7 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -1059,7 +1059,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
@@ -1154,7 +1154,7 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
@@ -1204,7 +1204,7 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1247,7 +1247,7 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1297,7 +1297,7 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1344,7 +1344,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1391,7 +1391,7 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1437,7 +1437,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_m = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 2]);
@@ -1481,7 +1481,7 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -1532,7 +1532,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		fn interpolate(
 			smoothing: &dyn Fn(f32) -> f32,
@@ -1629,7 +1629,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		fn interpolate(
 			smoothing: &dyn Fn(f32) -> f32,
@@ -1720,7 +1720,7 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -1757,7 +1757,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -1928,7 +1928,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -2205,7 +2205,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -2404,7 +2404,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -2629,7 +2629,7 @@ impl WorldGenerator for WorldGeneratorLines02 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -2708,7 +2708,7 @@ impl WorldGenerator for WorldGeneratorLines03 {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
@@ -2793,7 +2793,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -3286,7 +3286,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -3297,7 +3297,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		let block_type_table_for_terrain = Arc::clone(&block_type_table);
+		let block_type_table_for_terrain = Arc::clone(block_type_table);
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -3433,7 +3433,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 				origin,
 				chunk_blocks: &mut chunk_blocks,
 				_origin_generator: &structure_origin_generator,
-				block_type_table: &block_type_table,
+				block_type_table,
 				terrain_generator: &coords_to_terrain,
 			};
 			structure_types[origin.type_id.index](context);
@@ -3451,7 +3451,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 	fn generate_chunk_blocks(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		block_type_table: Arc<BlockTypeTable>,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
@@ -3462,7 +3462,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		let block_type_table_for_terrain = Arc::clone(&block_type_table);
+		let block_type_table_for_terrain = Arc::clone(block_type_table);
 		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
 			if ground {
@@ -3547,7 +3547,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 				origin,
 				chunk_blocks: &mut chunk_blocks,
 				_origin_generator: &structure_origin_generator,
-				block_type_table: &block_type_table,
+				block_type_table,
 				terrain_generator: &coords_to_terrain,
 			};
 			structure_types[origin.type_id.index](context);

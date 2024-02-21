@@ -3,6 +3,7 @@
 mod atlas;
 mod block_types;
 mod camera;
+mod chunk_loading;
 mod chunk_meshing;
 mod chunks;
 mod cmdline;
@@ -29,6 +30,7 @@ use std::{
 };
 
 use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
+use chunk_loading::LoadingManager;
 use chunk_meshing::{ChunkMesh, DataForChunkMeshing};
 use rand::Rng;
 use skybox::SkyboxFaces;
@@ -134,6 +136,34 @@ impl CurrentWorkerTasks {
 	fn is_being_meshed(&self, chunk_coords: ChunkCoords) -> bool {
 		self.tasks.iter().any(|worker_task| match worker_task {
 			WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
+			_ => false,
+		})
+	}
+
+	fn run_chunk_generating_task(
+		&mut self,
+		pool: &mut ThreadPool,
+		chunk_coords: ChunkCoords,
+		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
+		block_type_table: &Arc<BlockTypeTable>,
+		cd: ChunkDimensions,
+	) {
+		let (sender, receiver) = std::sync::mpsc::channel();
+		self.tasks.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
+		let chunk_generator = Arc::clone(world_generator);
+		let coords_span = ChunkCoordsSpan { cd, chunk_coords };
+		let block_type_table = Arc::clone(block_type_table);
+		pool.enqueue_task(Box::new(move || {
+			let chunk_blocks = chunk_generator.generate_chunk_blocks(coords_span, &block_type_table);
+			let chunk_culling_info =
+				ChunkCullingInfo::compute_from_blocks(&chunk_blocks, &block_type_table);
+			let _ = sender.send((chunk_blocks, chunk_culling_info));
+		}));
+	}
+
+	fn is_being_generated(&self, chunk_coords: ChunkCoords) -> bool {
+		self.tasks.iter().any(|worker_task| match worker_task {
+			WorkerTask::GenerateChunkBlocks(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
 			_ => false,
 		})
 	}
@@ -262,12 +292,7 @@ struct Game {
 	player_phys: AlignedPhysBox,
 	cd: ChunkDimensions,
 	chunk_grid: ChunkGrid,
-	/// Chunk to consider regarding generation.
-	chunk_generation_front: Vec<ChunkCoords>,
-	/// Would be in `chunk_generation_front` if it was not outside the loading radius.
-	chunk_generation_front_too_far: Vec<ChunkCoords>,
-	/// Like `chunk_generation_front` but these are not the priority and can take their time.
-	chunk_generation_front_not_priority: Vec<ChunkCoords>,
+	loading_manager: LoadingManager,
 	controls_to_trigger: Vec<ControlEvent>,
 	control_bindings: HashMap<Control, Action>,
 	block_type_table: Arc<BlockTypeTable>,
@@ -281,8 +306,6 @@ struct Game {
 	last_command_line_interaction: Option<std::time::Instant>,
 	command_confirmed: bool,
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
-	loading_distance: f32,
-	margin_before_unloading: f32,
 	widget_tree_root: Widget,
 	enable_interface_draw_debug_boxes: bool,
 	skybox_cubemap_texture: wgpu::Texture,
@@ -576,17 +599,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let cd = ChunkDimensions::from(chunk_edge as i32);
 	let chunk_grid = ChunkGrid::new(cd);
 
-	let mut chunk_generation_front = vec![];
-	{
-		let player_block_coords = (player_phys.aligned_box.pos
-			- cgmath::Vector3::<f32>::unit_z() * (player_phys.aligned_box.dims.z / 2.0 + 0.1))
-			.map(|x| x.round() as i32);
-		let player_chunk_coords = cd.world_coords_to_containing_chunk_coords(player_block_coords);
-
-		chunk_generation_front.push(player_chunk_coords);
-	}
-	let chunk_generation_front_too_far = vec![];
-	let chunk_generation_front_not_priority = vec![];
+	let margin_before_unloading = 60.0;
+	let loading_manager = LoadingManager::new(loading_distance, margin_before_unloading);
 
 	let enable_world_generation = true;
 
@@ -664,8 +678,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
 
-	let margin_before_unloading = 60.0;
-
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 
 	let widget_tree_root = Widget::new_margins(
@@ -732,9 +744,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		player_phys,
 		cd,
 		chunk_grid,
-		chunk_generation_front,
-		chunk_generation_front_too_far,
-		chunk_generation_front_not_priority,
+		loading_manager,
 		controls_to_trigger,
 		control_bindings,
 		block_type_table,
@@ -748,8 +758,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		last_command_line_interaction,
 		command_confirmed,
 		world_generator,
-		loading_distance,
-		margin_before_unloading,
 		widget_tree_root,
 		enable_interface_draw_debug_boxes,
 		skybox_cubemap_texture,
@@ -779,6 +787,15 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_fullscreen,
 	};
 	(game, event_loop)
+}
+
+impl Game {
+	fn player_chunk(&self) -> ChunkCoords {
+		let player_block_coords = (self.player_phys.aligned_box.pos
+			- cgmath::Vector3::<f32>::unit_z() * (self.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+			.map(|x| x.round() as i32);
+		self.cd.world_coords_to_containing_chunk_coords(player_block_coords)
+	}
 }
 
 pub fn run() {
@@ -890,6 +907,8 @@ pub fn run() {
 		},
 
 		Event::AboutToWait => {
+			// Here shall begin the body of the gameloop.
+
 			let _time_since_beginning = game.time_beginning.elapsed();
 			let now = std::time::Instant::now();
 			let dt = now - game.time_from_last_iteration;
@@ -1213,30 +1232,12 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							game.chunk_grid.add_chunk_generation_results(
+							game.loading_manager.handle_chunk_generation_results(
 								chunk_coords,
 								chunk_blocks,
-								chunk_culling_info.clone(),
+								chunk_culling_info,
+								&mut game.chunk_grid,
 							);
-
-							for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-								game.chunk_grid.require_remeshing(neighbor_chunk_coords);
-							}
-
-							for straight_direction in OrientedAxis::all_the_six_possible_directions() {
-								if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
-									let delta = straight_direction.delta();
-									let adjacent_chunk_coords = chunk_coords + delta;
-									let is_priority =
-										!chunk_culling_info.all_air_faces.contains(&straight_direction);
-									(if is_priority {
-										&mut game.chunk_generation_front
-									} else {
-										&mut game.chunk_generation_front_not_priority
-									})
-									.push(adjacent_chunk_coords);
-								}
-							}
 						}
 						is_not_done_yet
 					},
@@ -1277,7 +1278,7 @@ pub fn run() {
 			// Current fog fix,
 			// works fine when the loading of chunks is finished or almost finished.
 			let sqrt_3 = 3.0_f32.sqrt();
-			let distance = game.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
+			let distance = game.loading_manager.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
 			game.fog_inf_sup_radiuses.1 = distance.max(game.fog_margin);
 			game.fog_inf_sup_radiuses.0 = game.fog_inf_sup_radiuses.1 - game.fog_margin;
 			if game.enable_fog {
@@ -1291,149 +1292,22 @@ pub fn run() {
 			}
 
 			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
-			if game.enable_world_generation {
-				let workers_dedicated_to_meshing = 1;
-				let available_workers_to_generate = (game.pool.number_of_workers()
-					- workers_dedicated_to_meshing)
-					.saturating_sub(game.worker_tasks.tasks.len());
-
-				if available_workers_to_generate >= 1 {
-					let player_block_coords = (game.player_phys.aligned_box.pos
-						- cgmath::Vector3::<f32>::unit_z()
-							* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
-						.map(|x| x.round() as i32);
-					let player_chunk_coords =
-						game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
-
-					let generation_distance_in_chunks = game.loading_distance / game.cd.edge as f32;
-					let unloading_distance_in_chunks =
-						(game.loading_distance + game.margin_before_unloading) / game.cd.edge as f32;
-
-					if game.chunk_generation_front.is_empty() {
-						game.chunk_generation_front.append(&mut game.chunk_generation_front_not_priority);
-					} else if let Some(front_chunk_coords) =
-						game.chunk_generation_front_not_priority.pop()
-					{
-						game.chunk_generation_front.push(front_chunk_coords);
-					}
-
-					game.chunk_generation_front.retain(|front_chunk_coords| {
-						let too_far = front_chunk_coords
-							.map(|x| x as f32)
-							.distance(player_chunk_coords.map(|x| x as f32))
-							> generation_distance_in_chunks;
-						if too_far {
-							game.chunk_generation_front_too_far.push(*front_chunk_coords);
-						}
-						!too_far
-					});
-
-					game.chunk_generation_front_too_far.retain(|front_chunk_coords| {
-						let way_too_far = front_chunk_coords
-							.map(|x| x as f32)
-							.distance(player_chunk_coords.map(|x| x as f32))
-							> unloading_distance_in_chunks;
-						!way_too_far
-					});
-
-					if !game.chunk_generation_front_too_far.is_empty() {
-						for _ in 0..3 {
-							// Just checking a few per frame at random should be enough.
-							if game.chunk_generation_front_too_far.is_empty() {
-								break;
-							}
-							let index =
-								rand::thread_rng().gen_range(0..game.chunk_generation_front_too_far.len());
-							let front_chunk_coords = game.chunk_generation_front_too_far[index];
-							let still_too_far = front_chunk_coords
-								.map(|x| x as f32)
-								.distance(player_chunk_coords.map(|x| x as f32))
-								> generation_distance_in_chunks;
-							if !still_too_far {
-								game.chunk_generation_front_too_far.remove(index);
-								game.chunk_generation_front.push(front_chunk_coords);
-							}
-						}
-					}
-
-					game.chunk_generation_front.push(player_chunk_coords);
-					for direction in OrientedAxis::all_the_six_possible_directions() {
-						game.chunk_generation_front.push(player_chunk_coords + direction.delta());
-					}
-
-					game.chunk_generation_front.retain(|front_chunk_coords| {
-						let blocks_was_generated = game.chunk_grid.is_loaded(*front_chunk_coords);
-						let blocks_is_being_generated =
-							game.worker_tasks.tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									chunk_coords == front_chunk_coords
-								},
-								_ => false,
-							});
-						(!blocks_was_generated) && (!blocks_is_being_generated)
-					});
-
-					// Sort to put closer chunks at the end.
-					game.chunk_generation_front.sort_unstable_by_key(|chunk_coords| {
-						-(chunk_coords.map(|x| x as f32).distance2(player_chunk_coords.map(|x| x as f32))
-							* 10.0) as i64
-					});
-
-					let mut slot_count = available_workers_to_generate;
-					while slot_count >= 1 {
-						let considered_chunk_coords = game.chunk_generation_front.pop();
-						let considered_chunk_coords = match considered_chunk_coords {
-							Some(chunk_coords) => chunk_coords,
-							None => break,
-						};
-
-						let blocks_was_generated = game.chunk_grid.is_loaded(considered_chunk_coords);
-						let blocks_is_being_generated =
-							game.worker_tasks.tasks.iter().any(|worker_task| match worker_task {
-								WorkerTask::GenerateChunkBlocks(chunk_coords, ..) => {
-									*chunk_coords == considered_chunk_coords
-								},
-								_ => false,
-							});
-
-						if (!blocks_was_generated) && (!blocks_is_being_generated) {
-							slot_count -= 1;
-
-							// Asking a worker for the generation of chunk blocks.
-							let chunk_coords = considered_chunk_coords;
-							let (sender, receiver) = std::sync::mpsc::channel();
-							game
-								.worker_tasks
-								.tasks
-								.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
-							let chunk_generator = Arc::clone(&game.world_generator);
-							let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
-							let block_type_table = Arc::clone(&game.block_type_table);
-							game.pool.enqueue_task(Box::new(move || {
-								let chunk_blocks = chunk_generator
-									.generate_chunk_blocks(coords_span, Arc::clone(&block_type_table));
-								let chunk_culling_info =
-									ChunkCullingInfo::compute_from_blocks(&chunk_blocks, block_type_table);
-								let _ = sender.send((chunk_blocks, chunk_culling_info));
-							}));
-						}
-					}
-				}
-			}
+			let player_chunk = game.player_chunk();
+			game.loading_manager.handle_loading(
+				&mut game.chunk_grid,
+				&mut game.worker_tasks,
+				&mut game.pool,
+				player_chunk,
+				&game.world_generator,
+				&game.block_type_table,
+			);
 
 			// Unload chunks that are a bit too far.
-			{
-				let player_block_coords = (game.player_phys.aligned_box.pos
-					- cgmath::Vector3::<f32>::unit_z()
-						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
-					.map(|x| x.round() as i32);
-				let player_chunk_coords =
-					game.cd.world_coords_to_containing_chunk_coords(player_block_coords);
+			let unloading_distance =
+				game.loading_manager.loading_distance + game.loading_manager.margin_before_unloading;
+			game.chunk_grid.unload_chunks_too_far(game.player_chunk(), unloading_distance);
 
-				let unloading_distance = game.loading_distance + game.margin_before_unloading;
-				game.chunk_grid.unload_chunks_too_far(player_chunk_coords, unloading_distance);
-			}
-
+			// Walking.
 			let walking_vector = {
 				let walking_factor = if game.enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
 				let walking_forward_factor = if game.walking_forward { 1 } else { 0 }
@@ -1579,8 +1453,8 @@ pub fn run() {
 							camera_position -= camera_direction_vector * 200.0;
 						},
 						WhichCameraToUse::ThirdPersonTooFar => {
-							camera_position -=
-								camera_direction_vector * (game.loading_distance + 250.0).max(300.0);
+							camera_position -= camera_direction_vector
+								* (game.loading_manager.loading_distance + 250.0).max(300.0);
 						},
 					}
 					let camera_up_vector =

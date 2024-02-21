@@ -26,6 +26,7 @@
 - Sun. It could look like a 4-branch star in the style of star effects in Kill la Kill.
 - God rays effect when looking at sun. I recall it can be done by rendering just the sun in white and all the world in black and doing some motion blur on the result, maybe?
 - Glow effect.
+- If there is a way (simple enough to be worth it) to get shadows to be semi-transparent as the casters fade in the fog, then do it, but note that naive solutions do not work as there is a problem: a semi-transparent caster block A casts on an opaque block B that casts on an other block C, the shadow from A to B should be semi-transparent and the shadow from B to C should be full but a single shadow map per cascade does not support multiple casters per texel, and both the shadow from A to B and the shadow from B to C must be preserved as the player could see both so we cannot discard one of these.
 
 ## UI
 
