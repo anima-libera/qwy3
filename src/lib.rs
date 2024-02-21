@@ -13,7 +13,7 @@ mod lang;
 mod line_meshes;
 mod noise;
 mod physics;
-mod rendering;
+mod rendering_init;
 mod shaders;
 mod skybox;
 mod texture_gen;
@@ -40,7 +40,7 @@ use chunks::*;
 use coords::*;
 use line_meshes::*;
 use physics::AlignedPhysBox;
-use rendering::*;
+use rendering_init::*;
 use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
@@ -609,7 +609,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		face_counter
 	};
 
-	let rendering = rendering::init_rendering_stuff(
+	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
 			aspect_ratio_thingy: &aspect_ratio_thingy,

@@ -124,7 +124,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		depth_stencil: Some(wgpu::DepthStencilState {
 			format: z_buffer_format,
 			depth_write_enabled: true,
-			depth_compare: wgpu::CompareFunction::Less,
+			depth_compare: wgpu::CompareFunction::LessEqual,
 			stencil: wgpu::StencilState::default(),
 			bias: wgpu::DepthBiasState::default(),
 		}),
