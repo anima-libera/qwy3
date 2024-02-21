@@ -1048,7 +1048,7 @@ pub fn run() {
 				let fps = 1.0 / dt.as_secs_f32();
 				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
 				let block_count = chunk_count * game.cd.number_of_blocks();
-				let chunk_meshed_count = game.chunk_grid.mesh_map.len();
+				let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
 				let player_block_coords = (game.player_phys.aligned_box.pos
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
@@ -1213,7 +1213,7 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							game.chunk_grid.insert_freshly_generated_chunk(
+							game.chunk_grid.add_chunk_generation_results(
 								chunk_coords,
 								chunk_blocks,
 								chunk_culling_info.clone(),
@@ -1245,12 +1245,7 @@ pub fn run() {
 							receiver.try_recv().ok().map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 						if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
-							if game.chunk_grid.is_loaded(chunk_coords) {
-								game.chunk_grid.mesh_map.insert(chunk_coords, chunk_mesh);
-							} else {
-								// The chunk have been unloaded since the meshing was ordered.
-								// It really can happen, for example when the player travels very fast.
-							}
+							game.chunk_grid.add_chunk_meshing_results(chunk_coords, chunk_mesh);
 						}
 						is_not_done_yet
 					},
@@ -1521,7 +1516,7 @@ pub fn run() {
 
 			let mut chunk_box_meshes = vec![];
 			if game.enable_display_not_surrounded_chunks_as_boxes {
-				for chunk_coords in game.chunk_grid.iterate_over_loaded() {
+				for chunk_coords in game.chunk_grid.iter_loaded_chunk_coords() {
 					let is_surrounded = 'is_surrounded: {
 						for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 							let blocks_was_generated = game.chunk_grid.is_loaded(neighbor_chunk_coords);
@@ -1657,7 +1652,7 @@ pub fn run() {
 
 				render_pass.set_pipeline(&game.rendering.block_shadow_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.block_shadow_bind_group, &[]);
-				for mesh in game.chunk_grid.mesh_map.values() {
+				for mesh in game.chunk_grid.iter_chunk_meshes() {
 					render_pass
 						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
 					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
@@ -1733,7 +1728,7 @@ pub fn run() {
 
 				render_pass.set_pipeline(&game.rendering.block_render_pipeline);
 				render_pass.set_bind_group(0, &game.rendering.block_bind_group, &[]);
-				for mesh in game.chunk_grid.mesh_map.values() {
+				for mesh in game.chunk_grid.iter_chunk_meshes() {
 					render_pass
 						.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
 					render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);

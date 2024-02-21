@@ -158,7 +158,7 @@ pub(crate) struct ChunkGrid {
 	pub(crate) cd: ChunkDimensions,
 	blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
 	pub(crate) culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
-	pub(crate) mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
+	mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	remeshing_required_set: FxHashSet<ChunkCoords>,
 }
 
@@ -177,7 +177,7 @@ impl ChunkGrid {
 		self.blocks_map.contains_key(&chunk_coords)
 	}
 
-	pub(crate) fn iterate_over_loaded(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
+	pub(crate) fn iter_loaded_chunk_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
 		self.blocks_map.keys().copied()
 	}
 
@@ -235,6 +235,27 @@ impl ChunkGrid {
 		}
 	}
 
+	pub(crate) fn count_chunks_that_have_meshes(&self) -> usize {
+		self.mesh_map.len()
+	}
+
+	pub(crate) fn iter_chunk_meshes(&self) -> impl Iterator<Item = &ChunkMesh> + '_ {
+		self.mesh_map.values()
+	}
+
+	pub(crate) fn add_chunk_meshing_results(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		chunk_mesh: ChunkMesh,
+	) {
+		if self.is_loaded(chunk_coords) {
+			self.mesh_map.insert(chunk_coords, chunk_mesh);
+		} else {
+			// The chunk have been unloaded since the meshing was ordered.
+			// It really can happen, for example when the player travels very fast.
+		}
+	}
+
 	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		if !self.is_loaded(chunk_coords) {
@@ -280,7 +301,7 @@ impl ChunkGrid {
 		self.blocks_map.len()
 	}
 
-	pub(crate) fn insert_freshly_generated_chunk(
+	pub(crate) fn add_chunk_generation_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
 		chunk_blocks: ChunkBlocks,
