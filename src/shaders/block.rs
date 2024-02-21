@@ -103,7 +103,12 @@ pub(crate) fn render_pipeline_and_bind_group(
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
-				blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+				// The blocks can get trasparent when far away to create a fog transparency effect
+				// that blends in the skybox. It sould only blend in the skybox though, not with blocks
+				// behind them, so here we do not do any alpha blending so that blocks do not blend
+				// with other blocks, and then the skybox will do the blending in reverse to draw
+				// itself behind the blocks.
+				blend: Some(wgpu::BlendState::REPLACE),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
 		}),

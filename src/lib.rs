@@ -480,7 +480,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		0,
 		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
 	);
-	let fog_margin = 45.0;
+	let fog_margin = 55.0;
 	let fog_inf_sup_radiuses = (0.0, fog_margin);
 	queue.write_buffer(
 		&fog_inf_sup_radiuses_thingy.resource,
@@ -1659,42 +1659,8 @@ pub fn run() {
 				}
 			}
 
-			// Render pass to render the skybox to the screen.
-			let window_texture = game.window_surface.get_current_texture().unwrap();
-			{
-				let window_texture_view =
-					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
-				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-					label: Some("Render Pass to render the skybox"),
-					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-						view: &window_texture_view,
-						resolve_target: None,
-						ops: wgpu::Operations {
-							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 1.0 }),
-							store: wgpu::StoreOp::Store,
-						},
-					})],
-					depth_stencil_attachment: None,
-					timestamp_writes: None,
-					occlusion_query_set: None,
-				});
-
-				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
-					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
-					let w = game.sun_cameras[0].width * scale;
-					let h = game.sun_cameras[0].height * scale;
-					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
-					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
-					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
-				}
-
-				render_pass.set_pipeline(&game.rendering.skybox_render_pipeline);
-				render_pass.set_bind_group(0, &game.rendering.skybox_bind_group, &[]);
-				render_pass.set_vertex_buffer(0, skybox_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(skybox_mesh.vertices.len() as u32), 0..1);
-			}
-
 			// Render pass to render the world to the screen.
+			let window_texture = game.window_surface.get_current_texture().unwrap();
 			{
 				let window_texture_view =
 					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -1703,7 +1669,10 @@ pub fn run() {
 					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
 						view: &window_texture_view,
 						resolve_target: None,
-						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+						ops: wgpu::Operations {
+							load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 0.7, b: 1.0, a: 0.0 }),
+							store: wgpu::StoreOp::Store,
+						},
 					})],
 					depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
 						view: &game.z_buffer_view,
@@ -1756,6 +1725,37 @@ pub fn run() {
 					render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
 					render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
 				}
+			}
+
+			// Render pass to render the skybox to the screen.
+			{
+				let window_texture_view =
+					window_texture.texture.create_view(&wgpu::TextureViewDescriptor::default());
+				let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+					label: Some("Render Pass to render the skybox"),
+					color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+						view: &window_texture_view,
+						resolve_target: None,
+						ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+					})],
+					depth_stencil_attachment: None,
+					timestamp_writes: None,
+					occlusion_query_set: None,
+				});
+
+				if matches!(game.selected_camera, WhichCameraToUse::Sun) {
+					let scale = game.window_surface_config.height as f32 / game.sun_cameras[0].height;
+					let w = game.sun_cameras[0].width * scale;
+					let h = game.sun_cameras[0].height * scale;
+					let x = game.window_surface_config.width as f32 / 2.0 - w / 2.0;
+					let y = game.window_surface_config.height as f32 / 2.0 - h / 2.0;
+					render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
+				}
+
+				render_pass.set_pipeline(&game.rendering.skybox_render_pipeline);
+				render_pass.set_bind_group(0, &game.rendering.skybox_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, skybox_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(skybox_mesh.vertices.len() as u32), 0..1);
 			}
 
 			// Render pass to draw the interface.

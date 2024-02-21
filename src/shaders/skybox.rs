@@ -83,7 +83,23 @@ pub(crate) fn render_pipeline_and_bind_group(
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
-				blend: Some(wgpu::BlendState::REPLACE),
+				// Like `BlendState::ALPHA_BLENDING` but reversed so that what was already rendered
+				// is alpha-blent over the skybox that is drawn here after.
+				// This is done because the skybox is drawn after the world, so that the
+				// fog transparency effect on blocks can blend with the skybox but not with other
+				// blocks, see the blocks render pipeline.
+				blend: Some(wgpu::BlendState {
+					color: wgpu::BlendComponent {
+						src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+						dst_factor: wgpu::BlendFactor::DstAlpha,
+						operation: wgpu::BlendOperation::Add,
+					},
+					alpha: wgpu::BlendComponent {
+						src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+						dst_factor: wgpu::BlendFactor::One,
+						operation: wgpu::BlendOperation::Add,
+					},
+				}),
 				write_mask: wgpu::ColorWrites::ALL,
 			})],
 		}),
