@@ -1346,6 +1346,11 @@ pub fn run() {
 			let player_box_mesh =
 				SimpleLineMesh::from_aligned_box(&game.device, &game.player_phys.aligned_box);
 
+			let player_blocks_box_mesh = SimpleLineMesh::from_aligned_box(
+				&game.device,
+				&game.player_phys.aligned_box.overlapping_block_coords_span().to_aligned_box(),
+			);
+
 			let first_person_camera_position = game.player_phys.aligned_box.pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, game.player_phys.aligned_box.dims.z / 2.0))
 					* 0.7;
@@ -1510,6 +1515,7 @@ pub fn run() {
 				selected_camera: game.selected_camera,
 				enable_display_phys_box: game.enable_display_phys_box,
 				player_box_mesh: &player_box_mesh,
+				player_blocks_box_mesh: &player_blocks_box_mesh,
 				targeted_block_box_mesh_opt: &targeted_block_box_mesh_opt,
 				enable_display_interface: game.enable_display_interface,
 				chunk_box_meshes: &chunk_box_meshes,

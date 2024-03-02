@@ -22,6 +22,7 @@ pub(crate) struct DataForRendering<'a> {
 	pub(crate) selected_camera: WhichCameraToUse,
 	pub(crate) enable_display_phys_box: bool,
 	pub(crate) player_box_mesh: &'a SimpleLineMesh,
+	pub(crate) player_blocks_box_mesh: &'a SimpleLineMesh,
 	pub(crate) targeted_block_box_mesh_opt: &'a Option<SimpleLineMesh>,
 	pub(crate) enable_display_interface: bool,
 	pub(crate) chunk_box_meshes: &'a [SimpleLineMesh],
@@ -119,6 +120,8 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, self.player_box_mesh.vertex_buffer.slice(..));
 				render_pass.draw(0..(self.player_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.set_vertex_buffer(0, self.player_blocks_box_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(self.player_blocks_box_mesh.vertices.len() as u32), 0..1);
 			}
 
 			if let Some(targeted_block_box_mesh) = &self.targeted_block_box_mesh_opt {

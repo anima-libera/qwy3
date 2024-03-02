@@ -8,6 +8,8 @@
 
 use std::f32::consts::TAU;
 
+use cgmath::EuclideanSpace;
+
 /// Coordinates of a block in the world.
 pub(crate) type BlockCoords = cgmath::Point3<i32>;
 
@@ -157,8 +159,14 @@ impl CubicCoordsSpan {
 		)
 	}
 
+	pub(crate) fn to_aligned_box(self) -> AlignedBox {
+		let pos = self.inf.map(|x| x as f32).midpoint(self.sup_included().map(|x| x as f32));
+		let dims = self.sup_excluded.map(|x| x as f32) - self.inf.map(|x| x as f32);
+		AlignedBox { pos, dims }
+	}
+
 	pub(crate) fn sup_included(&self) -> BlockCoords {
-		self.sup_excluded + cgmath::vec3(1, 1, 1)
+		self.sup_excluded - cgmath::vec3(1, 1, 1)
 	}
 
 	pub(crate) fn add_margins(&mut self, margin_to_add: i32) {
@@ -180,7 +188,7 @@ impl CubicCoordsSpan {
 			&& (self.inf.z <= coords.z && coords.z < self.sup_excluded.z)
 	}
 
-	pub(crate) fn iter(&self) -> impl Iterator<Item = cgmath::Point3<i32>> {
+	pub(crate) fn iter(self) -> impl Iterator<Item = cgmath::Point3<i32>> {
 		iter_3d_rect_inf_sup_excluded(self.inf, self.sup_excluded)
 	}
 
@@ -515,9 +523,23 @@ impl BitCube3 {
 
 /// Just a 3D rectangular axis-aligned box.
 /// It cannot rotate as it stays aligned on the axes.
+#[derive(Clone)]
 pub(crate) struct AlignedBox {
 	/// Position of the center of the box.
 	pub(crate) pos: cgmath::Point3<f32>,
 	/// Width of the box along each axis.
 	pub(crate) dims: cgmath::Vector3<f32>,
+}
+
+impl AlignedBox {
+	pub(crate) fn overlapping_block_coords_span(&self) -> CubicCoordsSpan {
+		let inf = (self.pos - self.dims / 2.0).map(|x| x.round() as i32);
+		let sup_included = (self.pos + self.dims / 2.0).map(|x| x.round() as i32);
+		CubicCoordsSpan::with_inf_sup_but_sup_is_included(inf, sup_included)
+	}
+
+	pub(crate) fn added_margins(mut self, margins: cgmath::Vector3<f32>) -> AlignedBox {
+		self.dims += margins * 2.0;
+		self
+	}
 }
