@@ -67,7 +67,6 @@
 
 ## Mechanics and Gameplay
 
-- Collision physics. The player box should not be able to overlap with non-pass-through blocks, but should be able to slide on walls and walk on the floor and stuff. Beware, this is way more difficult to implement in a sane way than it looks.
 - Entities!!
   - Particles, like when breaking blocks.
   - Falling blocks.
@@ -114,3 +113,4 @@
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
+- Better collision resolution code. At the time of writing it works but is more of a pile of patches that happened to work by chance rather than actual physics collision resolution with a clear explanation behind every part.

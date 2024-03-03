@@ -208,6 +208,16 @@ impl CubicCoordsSpan {
 			)
 		})
 	}
+
+	pub(crate) fn side(mut self, oriented_axis: OrientedAxis) -> CubicCoordsSpan {
+		let axis = oriented_axis.axis.index();
+		if oriented_axis.orientation == AxisOrientation::Positivewards {
+			self.inf[axis] = self.sup_excluded[axis] - 1;
+		} else {
+			self.sup_excluded[axis] = self.inf[axis] + 1;
+		}
+		self
+	}
 }
 
 /// Iterates over the 3D rectangle area `inf..sup_excluded` (`sup_excluded` not included).
@@ -536,10 +546,5 @@ impl AlignedBox {
 		let inf = (self.pos - self.dims / 2.0).map(|x| x.round() as i32);
 		let sup_included = (self.pos + self.dims / 2.0).map(|x| x.round() as i32);
 		CubicCoordsSpan::with_inf_sup_but_sup_is_included(inf, sup_included)
-	}
-
-	pub(crate) fn added_margins(mut self, margins: cgmath::Vector3<f32>) -> AlignedBox {
-		self.dims += margins * 2.0;
-		self
 	}
 }

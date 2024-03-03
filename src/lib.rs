@@ -546,11 +546,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let walking_leftward = false;
 	let walking_rightward = false;
 
-	let player_phys = AlignedPhysBox {
-		aligned_box: AlignedBox { pos: (0.0, 0.0, 2.0).into(), dims: (0.8, 0.8, 1.8).into() },
-		motion: (0.0, 0.0, 0.0).into(),
-		gravity_factor: 1.0,
-	};
+	let player_phys =
+		AlignedPhysBox::new(AlignedBox { pos: (0.0, 0.0, 2.0).into(), dims: (0.8, 0.8, 1.8).into() });
 	let enable_physics = true;
 	let enable_display_phys_box = false;
 
@@ -791,8 +788,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 impl Game {
 	fn player_chunk(&self) -> ChunkCoords {
-		let player_block_coords = (self.player_phys.aligned_box.pos
-			- cgmath::Vector3::<f32>::unit_z() * (self.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+		let player_block_coords = (self.player_phys.aligned_box().pos
+			- cgmath::Vector3::<f32>::unit_z() * (self.player_phys.aligned_box().dims.z / 2.0 + 0.1))
 			.map(|x| x.round() as i32);
 		self.cd.world_coords_to_containing_chunk_coords(player_block_coords)
 	}
@@ -901,9 +898,10 @@ pub fn run() {
 			let sensitivity = 0.01;
 			let direction_left_or_right =
 				game.camera_direction.to_horizontal().add_to_horizontal_angle(TAU / 4.0 * dx.signum());
-			game.player_phys.aligned_box.pos.z -= dy * sensitivity;
-			game.player_phys.aligned_box.pos +=
-				direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
+			let mut pos = game.player_phys.aligned_box().pos;
+			pos.z -= dy * sensitivity;
+			pos += direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
+			game.player_phys.impose_new_pos(pos);
 		},
 
 		Event::AboutToWait => {
@@ -932,7 +930,7 @@ pub fn run() {
 							game.walking_rightward = pressed;
 						},
 						(Action::Jump, true) => {
-							game.player_phys.motion.z = 0.1;
+							game.player_phys.jump();
 						},
 						(Action::TogglePhysics, true) => {
 							game.enable_physics = !game.enable_physics;
@@ -973,19 +971,19 @@ pub fn run() {
 							}
 						},
 						(Action::PrintCoords, true) => {
-							dbg!(game.player_phys.aligned_box.pos);
-							let player_bottom = game.player_phys.aligned_box.pos
+							dbg!(game.player_phys.aligned_box().pos);
+							let player_bottom = game.player_phys.aligned_box().pos
 								- cgmath::Vector3::<f32>::from((
 									0.0,
 									0.0,
-									game.player_phys.aligned_box.dims.z / 2.0,
+									game.player_phys.aligned_box().dims.z / 2.0,
 								));
 							dbg!(player_bottom);
 						},
 						(Action::PlaceOrRemoveBlockUnderPlayer, true) => {
-							let player_bottom = game.player_phys.aligned_box.pos
+							let player_bottom = game.player_phys.aligned_box().pos
 								- cgmath::Vector3::<f32>::unit_z()
-									* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1);
+									* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1);
 							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 							let player_bottom_block_opt =
 								game.chunk_grid.get_block(player_bottom_block_coords);
@@ -1068,9 +1066,9 @@ pub fn run() {
 				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
 				let block_count = chunk_count * game.cd.number_of_blocks();
 				let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
-				let player_block_coords = (game.player_phys.aligned_box.pos
+				let player_block_coords = (game.player_phys.aligned_box().pos
 					- cgmath::Vector3::<f32>::unit_z()
-						* (game.player_phys.aligned_box.dims.z / 2.0 + 0.1))
+						* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1))
 					.map(|x| x.round() as i32);
 				let player_block_coords_str = {
 					let cgmath::Point3 { x, y, z } = player_block_coords;
@@ -1326,33 +1324,30 @@ pub fn run() {
 					walking_vector_direction.normalize()
 				} * walking_factor)
 			};
-			game.player_phys.aligned_box.pos += walking_vector;
+			game.player_phys.walk(walking_vector, !game.enable_physics);
 
 			if game.enable_physics {
-				physics::apply_on_physics_step(
-					&mut game.player_phys,
-					&game.chunk_grid,
-					&game.block_type_table,
-					dt,
-				);
+				game.player_phys.apply_on_physics_step(&game.chunk_grid, &game.block_type_table, dt);
 			}
 
 			game.queue.write_buffer(
 				&game.fog_center_position_thingy.resource,
 				0,
-				bytemuck::cast_slice(&[Vector3Pod { values: game.player_phys.aligned_box.pos.into() }]),
+				bytemuck::cast_slice(&[Vector3Pod {
+					values: game.player_phys.aligned_box().pos.into(),
+				}]),
 			);
 
 			let player_box_mesh =
-				SimpleLineMesh::from_aligned_box(&game.device, &game.player_phys.aligned_box);
+				SimpleLineMesh::from_aligned_box(&game.device, game.player_phys.aligned_box());
 
 			let player_blocks_box_mesh = SimpleLineMesh::from_aligned_box(
 				&game.device,
-				&game.player_phys.aligned_box.overlapping_block_coords_span().to_aligned_box(),
+				&game.player_phys.aligned_box().overlapping_block_coords_span().to_aligned_box(),
 			);
 
-			let first_person_camera_position = game.player_phys.aligned_box.pos
-				+ cgmath::Vector3::<f32>::from((0.0, 0.0, game.player_phys.aligned_box.dims.z / 2.0))
+			let first_person_camera_position = game.player_phys.aligned_box().pos
+				+ cgmath::Vector3::<f32>::from((0.0, 0.0, game.player_phys.aligned_box().dims.z / 2.0))
 					* 0.7;
 
 			// Targeted block coords update.
