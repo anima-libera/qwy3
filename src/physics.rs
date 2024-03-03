@@ -51,16 +51,27 @@ impl AlignedPhysBox {
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: Duration,
 	) {
-		self.new_box_pos += self.motion;
-		self.motion.z -= self.gravity_factor * 0.3 * dt.as_secs_f32();
-		// TODO: There has to be a missing `dt` here, but what would be the correct expression?
-		self.motion *= 0.998;
-
 		let is_opaque = |coords: BlockCoords| -> bool {
 			chunk_grid
 				.get_block(coords)
 				.is_some_and(|block_id| block_type_table.get(block_id).unwrap().is_opaque())
 		};
+
+		// Bubble up through solid matter if the hit box happens to already be inside matter.
+		let bottom_block = (self.aligned_box.pos
+			+ cgmath::vec3(0.0, 0.0, -self.aligned_box.dims.z / 2.0 + 0.3))
+		.map(|x| x.round() as i32);
+		if is_opaque(bottom_block) {
+			self.aligned_box.pos.z += 100.0 * dt.as_secs_f32();
+			self.new_box_pos = self.aligned_box.pos;
+			self.motion = cgmath::vec3(0.0, 0.0, 0.0);
+			return;
+		}
+
+		self.new_box_pos += self.motion;
+		self.motion.z -= self.gravity_factor * 0.3 * dt.as_secs_f32();
+		// TODO: There has to be a missing `dt` here, but what would be the correct expression?
+		self.motion *= 0.998;
 
 		// Inspired from Minecraft's algorithm described at https://www.mcpk.wiki/wiki/Collisions
 

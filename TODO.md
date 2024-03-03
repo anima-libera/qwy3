@@ -113,4 +113,3 @@
 - Reduce the length of `lib.rs` and the `run` function!
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
-- Better collision resolution code. At the time of writing it works but is more of a pile of patches that happened to work by chance rather than actual physics collision resolution with a clear explanation behind every part.
