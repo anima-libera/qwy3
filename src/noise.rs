@@ -10,6 +10,10 @@
 //! we then interpolate the nodes' noise values with `raw_noise`.
 //! Then we can do the usual stuff and add octaves with `octaves_noise`.
 
+use std::hash::Hasher;
+
+use rustc_hash::FxHasher;
+
 fn positive_fract(x: f32) -> f32 {
 	x - f32::floor(x)
 }
@@ -64,6 +68,21 @@ enum CoordOrChannel {
 }
 
 fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
+	let mut hasher = FxHasher::default();
+	for x in xs.iter().copied() {
+		match x {
+			CoordOrChannel::Channel(x) => hasher.write_i32(x),
+			CoordOrChannel::Coord(_) => {
+				// TODO: Maybe we could use `unreachable_unchecked` here?
+				// This is a very hot path after all.
+				unreachable!()
+			},
+		}
+	}
+	positive_fract(f32::cos(hasher.finish() as f32))
+}
+
+fn _worst_raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 	let mut a = 0;
 	let mut b = 0;
 	for (i, x) in xs.iter().copied().enumerate() {
@@ -89,7 +108,7 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 	}
 }
 
-fn _worst_raw_noise_node(xs: &[i32]) -> f32 {
+fn _other_worst_raw_noise_node(xs: &[i32]) -> f32 {
 	// This raw noise is not used due to not covering the full [0.0, 1.0] interval
 	// as much as possible.
 	// For example, stuff like `if noise_value < 0.0001` will never trigger, which is bad.
