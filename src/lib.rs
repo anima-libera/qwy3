@@ -361,6 +361,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		fullscreen,
 		no_vsync,
 		no_fog,
+		fog_margin,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -503,7 +504,6 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		0,
 		bytemuck::cast_slice(&[Vector3Pod { values: [0.0, 0.0, 0.0] }]),
 	);
-	let fog_margin = 55.0;
 	let fog_inf_sup_radiuses = (0.0, fog_margin);
 	queue.write_buffer(
 		&fog_inf_sup_radiuses_thingy.resource,

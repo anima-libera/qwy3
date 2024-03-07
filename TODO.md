@@ -6,7 +6,6 @@
 - Generate textures in an other thread (share the atlas) because it takes too long at the beginning and it is noticeable and annoying.
 - Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up).
   - Minimize iterations over large numbers of chunks at every frame.
-  - Have (fast) sets of chunk coords that indicate if it has a mesh, contains entities, etc. Only render the chunks with meshes.
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
 - Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.

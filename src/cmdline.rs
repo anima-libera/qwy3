@@ -65,6 +65,10 @@ pub(crate) struct CommandLineSettings {
 	#[arg(long)]
 	pub(crate) no_fog: bool,
 
+	/// Thickness of the foggy area.
+	#[arg(long)]
+	pub(crate) fog_margin: f32,
+
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]
 	pub(crate) test_lang: Option<u32>,
