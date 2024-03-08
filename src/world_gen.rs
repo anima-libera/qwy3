@@ -59,6 +59,7 @@ pub(crate) enum WhichWorldGenerator {
 	StructuresLinksSmooth,
 	StructuresEnginePoc,
 	StructuresGeneratedBlocks,
+	WierdTerrain03,
 }
 
 impl WhichWorldGenerator {
@@ -114,6 +115,7 @@ impl WhichWorldGenerator {
 			WhichWorldGenerator::StructuresGeneratedBlocks => {
 				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed })
 			},
+			WhichWorldGenerator::WierdTerrain03 => Arc::new(WorldGeneratorWierdTerrain03 { seed }),
 		}
 	}
 }
@@ -3553,6 +3555,51 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			structure_types[origin.type_id.index](context);
 		}
 
+		chunk_blocks
+	}
+}
+
+struct WorldGeneratorWierdTerrain03 {
+	pub(crate) seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorWierdTerrain03 {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
+		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
+		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_2d = cgmath::point2(coordsf.x, coordsf.y);
+			let scale_m = 100.0;
+			let scale_a = 100.0 * noise_a.sample_2d_1d(coordsf_2d / scale_m, &[]);
+			let b = noise_b.sample_3d_1d(coordsf / scale_a, &[]);
+			let angle = b * TAU;
+			let scale_c = 300.0;
+			let c = 10.0 * noise_c.sample_2d_1d(coordsf_2d / scale_c, &[]);
+			let p = cgmath::vec2(angle.cos(), angle.sin()) * c;
+			let value = p.distance(cgmath::vec2(-10.0, 0.0));
+			value > 0.5 * coordsf.z
+		};
+		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span.iter_coords() {
+			let ground = coords_to_ground(coords);
+			let block = if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table.ground_id()
+				} else {
+					block_type_table.kinda_grass_id()
+				}
+			} else {
+				block_type_table.air_id()
+			};
+			chunk_blocks.set(coords, block);
+		}
 		chunk_blocks
 	}
 }
