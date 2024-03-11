@@ -3,7 +3,6 @@
 
 ## Performance
 
-- Generate textures in an other thread (share the atlas) because it takes too long at the beginning and it is noticeable and annoying.
 - Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up).
   - Minimize iterations over large numbers of chunks at every frame.
 - Ray casting by player to target a block is neither correct nor performant, do it right.

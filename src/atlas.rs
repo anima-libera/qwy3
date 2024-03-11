@@ -11,14 +11,36 @@ pub(crate) struct Atlas {
 }
 
 impl Atlas {
-	pub(crate) fn new(world_gen_seed: i32) -> Atlas {
+	pub(crate) fn new_fast_incomplete() -> Atlas {
 		let mut image: image::RgbaImage =
 			image::ImageBuffer::new(ATLAS_DIMS.0 as u32, ATLAS_DIMS.1 as u32);
+
+		let default_color = image::Rgba::from([255, 255, 255, 255]);
+		image.pixels_mut().for_each(|pixel| *pixel = default_color);
+
+		// Font
+		let mut font_image =
+			image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
+		font_image.as_mut_rgba8().unwrap().pixels_mut().for_each(|pixel| {
+			// We keep black as white (to multiply with colors) and discard everything else.
+			*pixel = if pixel.0 == [0, 0, 0, 255] {
+				image::Rgba::from([255, 255, 255, 255])
+			} else {
+				image::Rgba::from([0, 0, 0, 0])
+			}
+		});
+		image.copy_from(&font_image, 0, 32).unwrap();
+
+		Atlas { image }
+	}
+
+	pub(crate) fn new_slow_complete(world_gen_seed: i32) -> Atlas {
+		let mut atlas = Atlas::new_fast_incomplete();
 
 		// Test blocks
 		'texture_gen: for y in 4..(ATLAS_DIMS.1 / 16) {
 			for x in 0..(ATLAS_DIMS.0 / 16) {
-				let view = image.sub_image(x as u32 * 16, y as u32 * 16, 16, 16);
+				let view = atlas.image.sub_image(x as u32 * 16, y as u32 * 16, 16, 16);
 				let index = (y as i32 - 4) * (ATLAS_DIMS.0 / 16) as i32 + x as i32;
 				texture_gen::generate_texture(view, world_gen_seed, index);
 				if index > 100 {
@@ -29,13 +51,13 @@ impl Atlas {
 
 		// Rock block
 		{
-			let view = image.sub_image(0, 0, 16, 16);
+			let view = atlas.image.sub_image(0, 0, 16, 16);
 			texture_gen::default_ground(view, world_gen_seed, 1);
 		}
 
 		// Grass block
 		{
-			let mut view = image.sub_image(16, 0, 16, 16);
+			let mut view = atlas.image.sub_image(16, 0, 16, 16);
 			for y in 0..16 {
 				for x in 0..16 {
 					let r = rand::thread_rng().gen_range(80..100);
@@ -48,7 +70,7 @@ impl Atlas {
 
 		// Grass bush-like thingy
 		{
-			let mut view = image.sub_image(32, 0, 16, 16);
+			let mut view = atlas.image.sub_image(32, 0, 16, 16);
 			for y in 0..16 {
 				for x in 0..16 {
 					let tp = cgmath::vec2(x as f32, y as f32 / 2.0);
@@ -70,7 +92,7 @@ impl Atlas {
 
 		// Wood block
 		{
-			let mut view = image.sub_image(48, 0, 16, 16);
+			let mut view = atlas.image.sub_image(48, 0, 16, 16);
 			for y in 0..16 {
 				for x in 0..16 {
 					let brown = rand::thread_rng().gen_range(100..200);
@@ -95,7 +117,7 @@ impl Atlas {
 
 		// Leaf block
 		{
-			let mut view = image.sub_image(64, 0, 16, 16);
+			let mut view = atlas.image.sub_image(64, 0, 16, 16);
 			for y in 0..16 {
 				for x in 0..16 {
 					let r = 0;
@@ -132,19 +154,6 @@ impl Atlas {
 			}
 		}
 
-		// Font
-		let mut font_image =
-			image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
-		font_image.as_mut_rgba8().unwrap().pixels_mut().for_each(|pixel| {
-			// We keep black as white (to multiply with colors) and discard everything else.
-			*pixel = if pixel.0 == [0, 0, 0, 255] {
-				image::Rgba::from([255, 255, 255, 255])
-			} else {
-				image::Rgba::from([0, 0, 0, 0])
-			}
-		});
-		image.copy_from(&font_image, 0, 32).unwrap();
-
-		Atlas { image }
+		atlas
 	}
 }

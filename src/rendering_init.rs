@@ -419,6 +419,7 @@ use crate::atlas::ATLAS_DIMS;
 pub(crate) struct AtlasStuff {
 	pub(crate) atlas_texture_view_thingy: BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: BindingThingy<wgpu::Sampler>,
+	pub(crate) atlas_texture: wgpu::Texture,
 }
 pub(crate) fn init_atlas_stuff(
 	device: Arc<wgpu::Device>,
@@ -488,7 +489,38 @@ pub(crate) fn init_atlas_stuff(
 		resource: atlas_texture_sampler,
 	};
 
-	AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy }
+	AtlasStuff {
+		atlas_texture_view_thingy,
+		atlas_texture_sampler_thingy,
+		atlas_texture,
+	}
+}
+
+pub(crate) type AtlasData<'a> = &'a [u8];
+pub(crate) fn update_atlas_texture(
+	queue: &wgpu::Queue,
+	atlas_texture: &wgpu::Texture,
+	atlas_data: &AtlasData,
+) {
+	queue.write_texture(
+		wgpu::ImageCopyTexture {
+			texture: atlas_texture,
+			mip_level: 0,
+			origin: wgpu::Origin3d::ZERO,
+			aspect: wgpu::TextureAspect::All,
+		},
+		atlas_data,
+		wgpu::ImageDataLayout {
+			offset: 0,
+			bytes_per_row: Some(4 * ATLAS_DIMS.0 as u32),
+			rows_per_image: Some(ATLAS_DIMS.1 as u32),
+		},
+		wgpu::Extent3d {
+			width: ATLAS_DIMS.0 as u32,
+			height: ATLAS_DIMS.1 as u32,
+			depth_or_array_layers: 1,
+		},
+	);
 }
 
 use crate::skybox::SKYBOX_SIDE_DIMS;

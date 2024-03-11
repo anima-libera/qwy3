@@ -110,6 +110,7 @@ enum WorkerTask {
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
 	/// The counter at the end is the number of faces already finished.
 	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
+	GenerateAtlas(std::sync::mpsc::Receiver<Atlas>),
 }
 
 struct CurrentWorkerTasks {
@@ -313,6 +314,8 @@ struct Game {
 	fog_inf_sup_radiuses_thingy: BindingThingy<wgpu::Buffer>,
 	fog_inf_sup_radiuses: (f32, f32),
 	fog_margin: f32,
+	output_atlas_when_generated: bool,
+	atlas_texture: wgpu::Texture,
 
 	worker_tasks: CurrentWorkerTasks,
 	pool: threadpool::ThreadPool,
@@ -474,14 +477,13 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
-	let atlas = Atlas::new(world_gen_seed);
-	if output_atlas {
-		let path = "atlas.png";
-		println!("Outputting atlas to \"{path}\"");
-		atlas.image.save_with_format(path, image::ImageFormat::Png).unwrap();
-	}
-	let AtlasStuff { atlas_texture_view_thingy, atlas_texture_sampler_thingy } =
-		init_atlas_stuff(Arc::clone(&device), &queue, atlas.image.as_ref());
+	let atlas = Atlas::new_fast_incomplete();
+	let AtlasStuff {
+		atlas_texture_view_thingy,
+		atlas_texture_sampler_thingy,
+		atlas_texture,
+	} = init_atlas_stuff(Arc::clone(&device), &queue, atlas.image.as_ref());
+	let output_atlas_when_generated = output_atlas;
 
 	let font = font::Font::font_01();
 
@@ -603,6 +605,15 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let mut worker_tasks = CurrentWorkerTasks { tasks: vec![] };
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
+
+	{
+		let (sender, receiver) = std::sync::mpsc::channel();
+		worker_tasks.tasks.push(WorkerTask::GenerateAtlas(receiver));
+		pool.enqueue_task(Box::new(move || {
+			let atlas = Atlas::new_slow_complete(world_gen_seed);
+			let _ = sender.send(atlas);
+		}));
+	}
 
 	let face_counter = {
 		let (sender, receiver) = std::sync::mpsc::channel();
@@ -762,6 +773,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		fog_inf_sup_radiuses_thingy,
 		fog_inf_sup_radiuses,
 		fog_margin,
+		output_atlas_when_generated,
+		atlas_texture,
 
 		worker_tasks,
 		pool,
@@ -1256,6 +1269,26 @@ pub fn run() {
 								&game.queue,
 								&game.skybox_cubemap_texture,
 								&skybox_faces.data(),
+							);
+						}
+						is_not_done_yet
+					},
+					WorkerTask::GenerateAtlas(receiver) => {
+						let result_opt = receiver.try_recv().ok();
+						let is_not_done_yet = result_opt.is_none();
+						if let Some(completed_atlas) = result_opt {
+							if game.output_atlas_when_generated {
+								let path = "atlas.png";
+								println!("Outputting atlas to \"{path}\"");
+								completed_atlas
+									.image
+									.save_with_format(path, image::ImageFormat::Png)
+									.unwrap();
+							}
+							update_atlas_texture(
+								&game.queue,
+								&game.atlas_texture,
+								&completed_atlas.image.as_ref(),
 							);
 						}
 						is_not_done_yet
