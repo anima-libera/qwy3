@@ -15,7 +15,7 @@ impl Atlas {
 		let mut image: image::RgbaImage =
 			image::ImageBuffer::new(ATLAS_DIMS.0 as u32, ATLAS_DIMS.1 as u32);
 
-		let default_color = image::Rgba::from([255, 255, 255, 255]);
+		let default_color = image::Rgba::from([255, 100, 100, 255]);
 		image.pixels_mut().for_each(|pixel| *pixel = default_color);
 
 		// Font
