@@ -2,8 +2,14 @@ use crate::atlas::ATLAS_DIMS;
 
 pub(crate) enum BlockType {
 	Air,
-	Solid { texture_coords_on_atlas: cgmath::Point2<i32> },
-	XShaped { texture_coords_on_atlas: cgmath::Point2<i32> },
+	Solid {
+		texture_coords_on_atlas: cgmath::Point2<i32>,
+	},
+	XShaped {
+		texture_coords_on_atlas: cgmath::Point2<i32>,
+	},
+	/// Test, WIP!
+	Text,
 }
 
 impl BlockType {
@@ -29,6 +35,7 @@ impl BlockTypeTable {
 			BlockType::XShaped { texture_coords_on_atlas: (32, 0).into() },
 			BlockType::Solid { texture_coords_on_atlas: (48, 0).into() },
 			BlockType::Solid { texture_coords_on_atlas: (64, 0).into() },
+			BlockType::Text,
 		];
 
 		for y in 4..(ATLAS_DIMS.1 / 16) {
@@ -73,13 +80,17 @@ impl BlockTypeTable {
 		BlockTypeId::new(5)
 	}
 
+	pub(crate) fn text_id(&self) -> BlockTypeId {
+		BlockTypeId::new(6)
+	}
+
 	pub(crate) fn generated_test_id(&self, index: usize) -> BlockTypeId {
-		let id: i16 = (index + 6).try_into().unwrap();
+		let id: i16 = (index + 7).try_into().unwrap();
 		BlockTypeId::new(id)
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct BlockTypeId {
 	/// Positive values are indices in the table of block types.
 	/// Negative values will be used as ids in a table of blocks that have data, maybe?

@@ -190,7 +190,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 					block_type_table.air_id()
 				}
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -211,7 +211,7 @@ impl WorldGenerator for FlatWorldGenerator {
 				Ordering::Equal => block_type_table.kinda_grass_id(),
 				Ordering::Greater => block_type_table.air_id(),
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -233,7 +233,7 @@ impl WorldGenerator for EmptyWorldGenerator {
 				} else {
 					block_type_table.air_id()
 				};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -309,7 +309,7 @@ impl WorldGenerator for WorldGeneratorLines01 {
 					block_type_table.air_id()
 				}
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -345,7 +345,7 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -390,7 +390,7 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -444,7 +444,7 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -512,7 +512,7 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -580,7 +580,7 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -658,7 +658,7 @@ impl WorldGenerator for WorldGeneratorLinks {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -742,7 +742,7 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -823,7 +823,7 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -927,7 +927,7 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1047,7 +1047,7 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1142,7 +1142,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 					block_type_table.air_id()
 				}
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1192,7 +1192,7 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1235,7 +1235,7 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1285,7 +1285,7 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1332,7 +1332,7 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1379,7 +1379,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1425,7 +1425,7 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1469,7 +1469,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1520,7 +1520,7 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1617,7 +1617,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1708,7 +1708,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1745,7 +1745,7 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -1822,7 +1822,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 		let structure_place_block = |block_coords: BlockCoords,
 		                             block_type_to_place: BlockTypeId,
 		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set(block_coords, block_type_to_place);
+			chunk_blocks.set_simple(block_coords, block_type_to_place);
 		};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
@@ -1863,7 +1863,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -1986,7 +1986,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 		let structure_place_block = |block_coords: BlockCoords,
 		                             block_type_to_place: BlockTypeId,
 		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set(block_coords, block_type_to_place);
+			chunk_blocks.set_simple(block_coords, block_type_to_place);
 		};
 		let _structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
@@ -2129,7 +2129,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -2252,7 +2252,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 		let structure_place_block = |block_coords: BlockCoords,
 		                             block_type_to_place: BlockTypeId,
 		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set(block_coords, block_type_to_place);
+			chunk_blocks.set_simple(block_coords, block_type_to_place);
 		};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
@@ -2313,7 +2313,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -2436,7 +2436,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 		let structure_place_block = |block_coords: BlockCoords,
 		                             block_type_to_place: BlockTypeId,
 		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set(block_coords, block_type_to_place);
+			chunk_blocks.set_simple(block_coords, block_type_to_place);
 		};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
@@ -2523,7 +2523,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -2648,7 +2648,7 @@ impl WorldGenerator for WorldGeneratorLines02 {
 					block_type_table.air_id()
 				}
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -2733,7 +2733,7 @@ impl WorldGenerator for WorldGeneratorLines03 {
 					block_type_table.air_id()
 				}
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}
@@ -2810,7 +2810,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 		let structure_place_block = |block_coords: BlockCoords,
 		                             block_type_to_place: BlockTypeId,
 		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set(block_coords, block_type_to_place);
+			chunk_blocks.set_simple(block_coords, block_type_to_place);
 		};
 		let _structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
@@ -2971,7 +2971,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -3188,9 +3188,9 @@ mod structure_gen {
 				|| self
 					.chunk_blocks
 					.get(coords)
-					.is_some_and(|block_type| self.block_type_table.get(block_type).unwrap().is_air());
+					.is_some_and(|block| self.block_type_table.get(block.type_id).unwrap().is_air());
 			if shall_place_block {
-				self.chunk_blocks.set(coords, block_placing.block_type_to_place);
+				self.chunk_blocks.set_simple(coords, block_placing.block_type_to_place);
 			}
 		}
 
@@ -3364,7 +3364,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -3478,7 +3478,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span.iter_coords() {
-			chunk_blocks.set(coords, coords_to_terrain(coords));
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
 		// Generate the structures that can overlap with the chunk.
@@ -3539,7 +3539,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain03 {
 			} else {
 				block_type_table.air_id()
 			};
-			chunk_blocks.set(coords, block);
+			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks
 	}

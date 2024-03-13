@@ -15,9 +15,37 @@ pub(crate) use crate::{
 	shaders::block::BlockVertexPod,
 };
 use crate::{
-	chunk_meshing::ChunkMesh, iter_3d_rect_inf_sup_included, threadpool::ThreadPool,
+	chunk_meshing::ChunkMesh, font::Font, iter_3d_rect_inf_sup_included, threadpool::ThreadPool,
 	CubicCoordsSpan, CurrentWorkerTasks,
 };
+
+#[derive(Clone)]
+pub(crate) enum BlockData {
+	Text(String),
+}
+
+#[derive(Clone)]
+pub(crate) struct Block {
+	pub(crate) type_id: BlockTypeId,
+	pub(crate) data: Option<BlockData>,
+}
+
+impl From<BlockTypeId> for Block {
+	fn from(type_id: BlockTypeId) -> Block {
+		Block { type_id, data: None }
+	}
+}
+
+impl Block {
+	fn as_view(&self) -> BlockView<'_> {
+		BlockView { type_id: self.type_id, data: self.data.as_ref() }
+	}
+}
+
+pub(crate) struct BlockView<'a> {
+	pub(crate) type_id: BlockTypeId,
+	pub(crate) data: Option<&'a BlockData>,
+}
 
 /// The blocks of a chunk.
 ///
@@ -26,41 +54,65 @@ use crate::{
 pub(crate) struct ChunkBlocks {
 	pub(crate) coords_span: ChunkCoordsSpan,
 	/// If the length is zero then it means the chunk is full of air.
-	blocks: Vec<BlockTypeId>,
+	block_ids: Vec<BlockTypeId>,
+	/// Negative block ids are keys to this table.
+	blocks_with_data: FxHashMap<BlockTypeId, Block>,
+	next_id_for_block_with_data: i16,
 }
 
 impl ChunkBlocks {
 	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
-		ChunkBlocks { coords_span, blocks: vec![] }
+		ChunkBlocks {
+			coords_span,
+			block_ids: vec![],
+			blocks_with_data: HashMap::default(),
+			next_id_for_block_with_data: -1,
+		}
 	}
 
-	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockTypeId> {
+	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
-		Some(if self.blocks.is_empty() {
-			BlockTypeId { value: 0 }
+		Some(if self.block_ids.is_empty() {
+			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
 		} else {
-			self.blocks[internal_index]
+			let block_id = self.block_ids[internal_index];
+			if block_id.value >= 0 {
+				BlockView { type_id: block_id, data: None }
+			} else {
+				self.blocks_with_data.get(&block_id).unwrap().as_view()
+			}
 		})
 	}
 
-	pub(crate) fn set(&mut self, coords: BlockCoords, block: BlockTypeId) {
+	pub(crate) fn set_simple(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
 		if let Some(internal_index) = self.coords_span.internal_index(coords) {
-			if self.blocks.is_empty() && block.value == 0 {
+			if self.block_ids.is_empty() && block_id.value == 0 {
 				// Setting a block to air, but we are already empty, there is no need to allocate.
 			} else {
-				if self.blocks.is_empty() && block.value != 0 {
-					self.blocks = Vec::from_iter(
+				if self.block_ids.is_empty() && block_id.value != 0 {
+					self.block_ids = Vec::from_iter(
 						std::iter::repeat(BlockTypeId { value: 0 })
 							.take(self.coords_span.cd.number_of_blocks()),
 					);
 				}
-				self.blocks[internal_index] = block;
+				self.block_ids[internal_index] = block_id;
 			}
 		}
 	}
 
+	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
+		if block.data.is_some() {
+			let new_id = BlockTypeId { value: self.next_id_for_block_with_data };
+			self.next_id_for_block_with_data -= 1;
+			self.blocks_with_data.insert(new_id, block);
+			self.set_simple(coords, new_id);
+		} else {
+			self.set_simple(coords, block.type_id);
+		}
+	}
+
 	fn may_contain_non_air(&self) -> bool {
-		!self.blocks.is_empty()
+		!self.block_ids.is_empty()
 	}
 }
 
@@ -89,7 +141,7 @@ impl ChunkCullingInfo {
 
 		let mut all_air = true;
 		let mut all_opaque = true;
-		for block_type_id in blocks.blocks.iter().copied() {
+		for block_type_id in blocks.block_ids.iter().copied() {
 			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_air() {
 				all_air = false;
@@ -126,7 +178,7 @@ impl ChunkCullingInfo {
 	) -> bool {
 		let mut all_opaque = true;
 		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
-			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type_id = blocks.get(block_coords).unwrap().type_id;
 			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_opaque() {
 				all_opaque = false;
@@ -143,7 +195,7 @@ impl ChunkCullingInfo {
 	) -> bool {
 		let mut all_air = true;
 		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
-			let block_type_id = blocks.get(block_coords).unwrap();
+			let block_type_id = blocks.get(block_coords).unwrap().type_id;
 			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_air() {
 				all_air = false;
@@ -200,6 +252,7 @@ impl ChunkGrid {
 		worker_tasks: &mut CurrentWorkerTasks,
 		pool: &mut ThreadPool,
 		block_type_table: &Arc<BlockTypeTable>,
+		font: &Arc<Font>,
 		device: &Arc<wgpu::Device>,
 	) {
 		let mut remeshing_tasked = vec![];
@@ -224,8 +277,13 @@ impl ChunkGrid {
 			} else {
 				// Asking a worker for the meshing or remeshing of the chunk.
 				remeshing_tasked.push(chunk_coords);
-				let data_for_chunk_meshing =
-					self.get_data_for_chunk_meshing(chunk_coords, Arc::clone(block_type_table)).unwrap();
+				let data_for_chunk_meshing = self
+					.get_data_for_chunk_meshing(
+						chunk_coords,
+						Arc::clone(block_type_table),
+						Arc::clone(font),
+					)
+					.unwrap();
 				worker_tasks.run_chunk_meshing_task(
 					pool,
 					chunk_coords,
@@ -260,7 +318,7 @@ impl ChunkGrid {
 		}
 	}
 
-	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: BlockTypeId) {
+	fn set_block_but_do_not_update_meshes(&mut self, coords: BlockCoords, block: Block) {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		if !self.is_loaded(chunk_coords) {
 			// TODO: Handle this case by storing the fact that a block
@@ -280,7 +338,7 @@ impl ChunkGrid {
 	pub(crate) fn set_block_and_request_updates_to_meshes(
 		&mut self,
 		coords: BlockCoords,
-		block: BlockTypeId,
+		block: Block,
 	) {
 		self.set_block_but_do_not_update_meshes(coords, block);
 
@@ -295,7 +353,7 @@ impl ChunkGrid {
 		}
 	}
 
-	pub(crate) fn get_block(&self, coords: BlockCoords) -> Option<BlockTypeId> {
+	pub(crate) fn get_block(&self, coords: BlockCoords) -> Option<BlockView> {
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
 		let chunk_blocks = self.blocks_map.get(&chunk_coords)?;
 		Some(chunk_blocks.get(coords).unwrap())

@@ -50,6 +50,7 @@ use world_gen::WorldGenerator;
 
 use crate::{
 	atlas::Atlas,
+	font::Font,
 	lang::LogItem,
 	shaders::Vector2Pod,
 	skybox::{
@@ -233,16 +234,6 @@ impl SimpleTextureMesh {
 			color_factor,
 		});
 		vertices.push(SimpleTextureVertexPod {
-			position: b.into(),
-			coords_in_atlas: atlas_b.into(),
-			color_factor,
-		});
-		vertices.push(SimpleTextureVertexPod {
-			position: c.into(),
-			coords_in_atlas: atlas_c.into(),
-			color_factor,
-		});
-		vertices.push(SimpleTextureVertexPod {
 			position: c.into(),
 			coords_in_atlas: atlas_c.into(),
 			color_factor,
@@ -250,11 +241,21 @@ impl SimpleTextureMesh {
 		vertices.push(SimpleTextureVertexPod {
 			position: b.into(),
 			coords_in_atlas: atlas_b.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: c.into(),
+			coords_in_atlas: atlas_c.into(),
 			color_factor,
 		});
 		vertices.push(SimpleTextureVertexPod {
 			position: d.into(),
 			coords_in_atlas: atlas_d.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: b.into(),
+			coords_in_atlas: atlas_b.into(),
 			color_factor,
 		});
 
@@ -301,7 +302,7 @@ struct Game {
 	close_after_one_frame: bool,
 	cursor_mesh: SimpleLineMesh,
 	random_message: &'static str,
-	font: font::Font,
+	font: Arc<font::Font>,
 	command_line_content: String,
 	typing_in_command_line: bool,
 	last_command_line_interaction: Option<std::time::Instant>,
@@ -485,7 +486,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	} = init_atlas_stuff(Arc::clone(&device), &queue, atlas.image.as_ref());
 	let output_atlas_when_generated = output_atlas;
 
-	let font = font::Font::font_01();
+	let font = Arc::new(Font::font_01());
 
 	let skybox_faces = generate_skybox_cubemap_faces_images(&default_skybox_painter, None);
 	let SkyboxStuff {
@@ -1000,13 +1001,13 @@ pub fn run() {
 							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
 							let player_bottom_block_opt =
 								game.chunk_grid.get_block(player_bottom_block_coords);
-							if let Some(block_id) = player_bottom_block_opt {
+							if let Some(block) = player_bottom_block_opt {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									player_bottom_block_coords,
-									if game.block_type_table.get(block_id).unwrap().is_opaque() {
-										game.block_type_table.air_id()
+									if game.block_type_table.get(block.type_id).unwrap().is_opaque() {
+										game.block_type_table.air_id().into()
 									} else {
-										game.block_type_table.ground_id()
+										game.block_type_table.ground_id().into()
 									},
 								);
 							}
@@ -1015,7 +1016,11 @@ pub fn run() {
 							if let Some((_, coords)) = game.targeted_block_coords {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									coords,
-									game.block_type_table.ground_id(),
+									//game.block_type_table.ground_id().into(),
+									Block {
+										type_id: game.block_type_table.text_id(),
+										data: Some(BlockData::Text("Jaaj".to_string())),
+									},
 								);
 							}
 						},
@@ -1023,7 +1028,7 @@ pub fn run() {
 							if let Some((coords, _)) = game.targeted_block_coords {
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									coords,
-									game.block_type_table.air_id(),
+									game.block_type_table.air_id().into(),
 								);
 							}
 						},
@@ -1302,6 +1307,7 @@ pub fn run() {
 				&mut game.worker_tasks,
 				&mut game.pool,
 				&game.block_type_table,
+				&game.font,
 				&game.device,
 			);
 
@@ -1395,7 +1401,7 @@ pub fn run() {
 				if game
 					.chunk_grid
 					.get_block(position_int)
-					.is_some_and(|block_id| !game.block_type_table.get(block_id).unwrap().is_air())
+					.is_some_and(|block| !game.block_type_table.get(block.type_id).unwrap().is_air())
 				{
 					if let Some(last_position_int) = last_position_int {
 						break Some((position_int, last_position_int));

@@ -54,7 +54,7 @@ impl AlignedPhysBox {
 		let is_opaque = |coords: BlockCoords| -> bool {
 			chunk_grid
 				.get_block(coords)
-				.is_some_and(|block_id| block_type_table.get(block_id).unwrap().is_opaque())
+				.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
 		};
 
 		// Bubble up through solid matter if the hit box happens to already be inside matter.

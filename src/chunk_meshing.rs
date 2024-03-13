@@ -4,9 +4,10 @@ use cgmath::{EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 
 use crate::{
-	iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords, BlockType,
-	BlockTypeTable, BlockVertexPod, ChunkBlocks, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
-	ChunkGrid, NonOrientedAxis, OrientedAxis,
+	font::{self, Font},
+	iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords, BlockData,
+	BlockType, BlockTypeTable, BlockVertexPod, ChunkBlocks, ChunkCoords, ChunkCoordsSpan,
+	ChunkDimensions, ChunkGrid, NonOrientedAxis, OrientedAxis,
 };
 
 /// All the data that is needed to generate the mesh of a chunk.
@@ -15,13 +16,14 @@ pub(crate) struct DataForChunkMeshing {
 	opaqueness_layer_for_face_culling: OpaquenessLayerAroundChunk,
 	opaqueness_layer_for_ambiant_occlusion: OpaquenessLayerAroundChunk,
 	block_type_table: Arc<BlockTypeTable>,
+	font: Arc<Font>,
 }
 
 impl DataForChunkMeshing {
 	pub(crate) fn generate_mesh(self) -> ChunkMesh {
 		let is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
-			if let Some(block_id) = self.chunk_blocks.get(coords) {
-				self.block_type_table.get(block_id).unwrap().is_opaque()
+			if let Some(block) = self.chunk_blocks.get(coords) {
+				self.block_type_table.get(block.type_id).unwrap().is_opaque()
 			} else if for_ambiant_occlusion {
 				self.opaqueness_layer_for_ambiant_occlusion.get(coords).unwrap()
 			} else {
@@ -31,8 +33,8 @@ impl DataForChunkMeshing {
 
 		let mut block_vertices = Vec::new();
 		for coords in self.chunk_blocks.coords_span.iter_coords() {
-			let block_id = self.chunk_blocks.get(coords).unwrap();
-			match self.block_type_table.get(block_id).unwrap() {
+			let block = self.chunk_blocks.get(coords).unwrap();
+			match self.block_type_table.get(block.type_id).unwrap() {
 				BlockType::Air => {},
 				BlockType::Solid { texture_coords_on_atlas } => {
 					let opacity_bit_cube_3_for_ambiant_occlusion = {
@@ -81,6 +83,40 @@ impl DataForChunkMeshing {
 							vertices_offets_xy,
 							*texture_coords_on_atlas,
 						);
+					}
+				},
+				BlockType::Text => {
+					let text = match block.data {
+						Some(BlockData::Text(text)) => text,
+						_ => panic!(),
+					};
+					let settings = font::TextRenderingSettings::with_scale(4.0);
+					let pseudo_window_width = 100.0;
+					let dims = self.font.dimensions_of_text(pseudo_window_width, settings.clone(), text);
+					let simple_texture_vertices = self.font.simple_texture_vertices_from_text(
+						pseudo_window_width,
+						cgmath::point3(0.0, 0.0, 0.0),
+						settings,
+						text,
+					);
+					for dy in [-1.0, 1.0] {
+						for simple_texture_vertex in simple_texture_vertices.iter() {
+							let mut pos = simple_texture_vertex.position;
+							pos[0] += dy * dims.x / 2.0;
+							pos[1] += dims.y / 2.0;
+							if dy > 0.0 {
+								pos[0] = dims.x - pos[0];
+							}
+							pos.swap(1, 2);
+							pos[1] += dy * 0.01;
+							pos = (coords.map(|x| x as f32) + cgmath::vec3(pos[0], pos[1], pos[2])).into();
+							block_vertices.push(BlockVertexPod {
+								position: pos,
+								coords_in_atlas: simple_texture_vertex.coords_in_atlas,
+								normal: cgmath::vec3(0.0, dy, 0.0).into(),
+								ambiant_occlusion: 1.0,
+							})
+						}
 					}
 				},
 			}
@@ -580,9 +616,7 @@ impl ChunkGrid {
 						{
 							let opaque = self
 								.get_block(coords)
-								.map(|block_type_id| {
-									block_type_table.get(block_type_id).unwrap().is_opaque()
-								})
+								.map(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
 								.unwrap_or(default_to_opaque);
 							layer.set(coords, opaque);
 						}
@@ -599,6 +633,7 @@ impl ChunkGrid {
 		&self,
 		chunk_coords: ChunkCoords,
 		block_type_table: Arc<BlockTypeTable>,
+		font: Arc<Font>,
 	) -> Option<DataForChunkMeshing> {
 		let chunk_blocks = Arc::clone(self.get_chunk_blocks(chunk_coords)?);
 		let opaqueness_layer_for_face_culling =
@@ -610,6 +645,7 @@ impl ChunkGrid {
 			opaqueness_layer_for_face_culling,
 			opaqueness_layer_for_ambiant_occlusion,
 			block_type_table,
+			font,
 		})
 	}
 }
