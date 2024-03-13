@@ -1,6 +1,7 @@
 //! N-dimensional noise!
 //!
 //! This is a very "we have noise at home" implementation, slow and all.
+//! Though, maybe not as slow now as it once was.
 //!
 //! The idea is that we consider an N-dimensional grid of nodes
 //! where nodes are at every interger coordinates
@@ -75,6 +76,7 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 			CoordOrChannel::Coord(_) => {
 				// TODO: Maybe we could use `unreachable_unchecked` here?
 				// This is a very hot path after all.
+				// It would probably not be necessary though, the branch predictor gets our back.
 				unreachable!()
 			},
 		}
@@ -82,52 +84,12 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 	positive_fract(f32::cos(hasher.finish() as f32))
 }
 
-fn _worst_raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
-	let mut a = 0;
-	let mut b = 0;
-	for (i, x) in xs.iter().copied().enumerate() {
-		let x = match x {
-			CoordOrChannel::Channel(x) => x,
-			CoordOrChannel::Coord(_) => unreachable!(),
-		};
-		a ^= x;
-		b ^= 17i32.wrapping_mul(((i as i32).wrapping_add(11)).wrapping_add(x));
-		std::mem::swap(&mut a, &mut b);
-		a ^= a << ((i + 7) % (((b % 11) as usize).saturating_add(5)));
-	}
-	if true {
-		// Uh `cos` is actually slow.
-		positive_fract(f32::cos(a as f32 + b as f32))
-	} else {
-		// Faster (? probably) than a `cos`.
-		// TODO: Does it allows for values arbitrarly close to any arbitrary value
-		// in the range `0.0..=1.0`? It is actually important, the `cos` allows that,
-		// does this allow it to.
-		let uwu = 2.84929;
-		((a as f32 + b as f32) % uwu).abs() / uwu
-	}
-}
-
-fn _other_worst_raw_noise_node(xs: &[i32]) -> f32 {
-	// This raw noise is not used due to not covering the full [0.0, 1.0] interval
-	// as much as possible.
-	// For example, stuff like `if noise_value < 0.0001` will never trigger, which is bad.
-	let mut v = 0.0;
-	for (i, x) in xs.iter().copied().enumerate() {
-		let pool = [
-			0.31, 0.41, 0.71, 0.214354, 0.12, 0.82, 0.211, 0.218, 0.04, 0.94,
-		];
-		v += pool[(i as i32 * 3 + x).rem_euclid(pool.len() as i32) as usize];
-		v += x as f32 / 11.0 + (x + 3 + i as i32) as f32 / 13.0 + x as f32 / 2.71;
-	}
-	positive_fract(v)
-}
-
-fn raw_noise(xs: &mut [CoordOrChannel]) -> f32 {
-	let coord_index_and_value_opt = xs.iter().enumerate().find_map(|(i, x)| match x {
-		CoordOrChannel::Coord(value) => Some((i, *value)),
-		_ => None,
-	});
+fn raw_noise_rec(xs: &mut [CoordOrChannel], min_coord_index: usize) -> f32 {
+	let coord_index_and_value_opt =
+		xs[min_coord_index..].iter().enumerate().find_map(|(i, x)| match x {
+			CoordOrChannel::Coord(value) => Some((min_coord_index + i, *value)),
+			_ => None,
+		});
 	if let Some((coord_index, coord_value)) = coord_index_and_value_opt {
 		// For every continuous coordinate, we interpolate between
 		// the two closest discreet node values on that axis.
@@ -138,17 +100,22 @@ fn raw_noise(xs: &mut [CoordOrChannel]) -> f32 {
 		// And we can do that by calling this recursively
 		// with N and N+1 as additional channel parameters.
 		let channel_inf = f32::floor(coord_value) as i32;
-		let channel_sup = f32::floor(coord_value) as i32 + 1;
 		xs[coord_index] = CoordOrChannel::Channel(channel_inf);
-		let sub_noise_inf = raw_noise(xs);
+		let sub_noise_inf = raw_noise_rec(xs, coord_index + 1);
+		let channel_sup = channel_inf + 1;
 		xs[coord_index] = CoordOrChannel::Channel(channel_sup);
-		let sub_noise_sup = raw_noise(xs);
+		let sub_noise_sup = raw_noise_rec(xs, coord_index + 1);
 		xs[coord_index] = CoordOrChannel::Coord(coord_value);
 		let x_fract = positive_fract(coord_value);
 		interpolate(&smoothcos, x_fract, 0.0, 1.0, sub_noise_inf, sub_noise_sup)
 	} else {
+		// No more continuous coordinates, we are on a node and can get its noise value.
 		raw_noise_node(xs)
 	}
+}
+
+fn raw_noise(xs: &mut [CoordOrChannel]) -> f32 {
+	raw_noise_rec(xs, 0)
 }
 
 fn octaves_noise(number_of_octaves: u32, xs: &mut [CoordOrChannel]) -> f32 {
@@ -178,30 +145,20 @@ impl OctavedNoise {
 		OctavedNoise { number_of_octaves, base_channels }
 	}
 
-	pub(crate) fn sample(
-		&self,
-		xs: &[f32],
-		additional_channels: &[i32],
-		xs_that_are_channels: &[i32],
-		one_more_channel: Option<i32>, // This is ridiculous >w<
-	) -> f32 {
+	pub(crate) fn sample(&self, xs: &[f32], additional_channels: &[&[i32]]) -> f32 {
 		let mut working_xs = smallvec::SmallVec::<[CoordOrChannel; 8]>::with_capacity(
 			xs.len() + self.base_channels.len() + additional_channels.len(),
 		);
+		for channel in self.base_channels.iter() {
+			working_xs.push(CoordOrChannel::Channel(*channel));
+		}
+		for channels in additional_channels {
+			for channel in *channels {
+				working_xs.push(CoordOrChannel::Channel(*channel));
+			}
+		}
 		for x in xs {
 			working_xs.push(CoordOrChannel::Coord(*x));
-		}
-		for channel in xs_that_are_channels {
-			working_xs.push(CoordOrChannel::Channel(*channel));
-		}
-		for channel in &self.base_channels {
-			working_xs.push(CoordOrChannel::Channel(*channel));
-		}
-		for channel in additional_channels {
-			working_xs.push(CoordOrChannel::Channel(*channel));
-		}
-		if let Some(channel) = one_more_channel {
-			working_xs.push(CoordOrChannel::Channel(channel));
 		}
 		octaves_noise(self.number_of_octaves, &mut working_xs)
 	}
@@ -212,7 +169,7 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> f32 {
 		let xs: [f32; 2] = coords.into();
-		self.sample(&xs, additional_channels, &[], None)
+		self.sample(&xs, &[additional_channels])
 	}
 	pub(crate) fn sample_3d_1d(
 		&self,
@@ -220,7 +177,7 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> f32 {
 		let xs: [f32; 3] = coords.into();
-		self.sample(&xs, additional_channels, &[], None)
+		self.sample(&xs, &[additional_channels])
 	}
 	pub(crate) fn _sample_3d_3d(
 		&self,
@@ -228,13 +185,13 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> cgmath::Point3<f32> {
 		let xs: [f32; 3] = coords.into();
-		let x = self.sample(&xs, additional_channels, &[], Some(1));
-		let y = self.sample(&xs, additional_channels, &[], Some(2));
-		let z = self.sample(&xs, additional_channels, &[], Some(3));
+		let x = self.sample(&xs, &[additional_channels, &[1]]);
+		let y = self.sample(&xs, &[additional_channels, &[2]]);
+		let z = self.sample(&xs, &[additional_channels, &[3]]);
 		cgmath::point3(x, y, z)
 	}
 	pub(crate) fn sample_i1d_1d(&self, coord: i32, additional_channels: &[i32]) -> f32 {
-		self.sample(&[], additional_channels, &[coord], None)
+		self.sample(&[], &[additional_channels, &[coord]])
 	}
 	pub(crate) fn sample_i1d_i1d(&self, coord: i32, additional_channels: &[i32]) -> i32 {
 		unit_to_i32(self.sample_i1d_1d(coord, additional_channels))
@@ -245,7 +202,7 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> f32 {
 		let xs: [i32; 2] = coords.into();
-		self.sample(&[], additional_channels, &xs, None)
+		self.sample(&[], &[additional_channels, &xs])
 	}
 	pub(crate) fn sample_i3d_1d(
 		&self,
@@ -253,7 +210,7 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> f32 {
 		let xs: [i32; 3] = coords.into();
-		self.sample(&[], additional_channels, &xs, None)
+		self.sample(&[], &[additional_channels, &xs])
 	}
 	pub(crate) fn sample_i3d_3d(
 		&self,
@@ -261,9 +218,9 @@ impl OctavedNoise {
 		additional_channels: &[i32],
 	) -> cgmath::Point3<f32> {
 		let xs: [i32; 3] = coords.into();
-		let x = self.sample(&[], additional_channels, &xs, Some(1));
-		let y = self.sample(&[], additional_channels, &xs, Some(2));
-		let z = self.sample(&[], additional_channels, &xs, Some(3));
+		let x = self.sample(&[], &[additional_channels, &xs, &[1]]);
+		let y = self.sample(&[], &[additional_channels, &xs, &[2]]);
+		let z = self.sample(&[], &[additional_channels, &xs, &[3]]);
 		cgmath::point3(x, y, z)
 	}
 }

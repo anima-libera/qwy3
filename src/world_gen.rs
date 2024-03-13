@@ -1791,12 +1791,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(
-				&[],
-				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
-				&[],
-				None,
-			);
+			let v = noise_cell_data.sample(&[], &[&[cell_coords.x, cell_coords.y, cell_coords.z, 1]]);
 			(v * 6.0 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -1806,15 +1801,13 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 					.map(|axis| {
 						noise_cell_data.sample(
 							&[],
-							&[
+							&[&[
 								cell_coords.x,
 								cell_coords.y,
 								cell_coords.z,
 								1 + axis,
 								origin_index as i32,
-							],
-							&[],
-							None,
+							]],
 						)
 					})
 					.collect();
@@ -1962,12 +1955,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(
-				&[],
-				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
-				&[],
-				None,
-			);
+			let v = noise_cell_data.sample(&[], &[&[cell_coords.x, cell_coords.y, cell_coords.z, 1]]);
 			(v * 6.0 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -1977,15 +1965,13 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 					.map(|axis| {
 						noise_cell_data.sample(
 							&[],
-							&[
+							&[&[
 								cell_coords.x,
 								cell_coords.y,
 								cell_coords.z,
 								1 + axis,
 								origin_index as i32,
-							],
-							&[],
-							None,
+							]],
 						)
 					})
 					.collect();
@@ -2076,29 +2062,25 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 						// that the other would get, so we can agree on something that way ^^.
 						let value_us_to_other = noise_a.sample(
 							&[],
-							&[
+							&[&[
 								origin_block_coords.x,
 								origin_block_coords.y,
 								origin_block_coords.z,
 								other_origin_coords.x,
 								other_origin_coords.y,
 								other_origin_coords.z,
-							],
-							&[],
-							None,
+							]],
 						);
 						let value_other_to_us = noise_a.sample(
 							&[],
-							&[
+							&[&[
 								other_origin_coords.x,
 								other_origin_coords.y,
 								other_origin_coords.z,
 								origin_block_coords.x,
 								origin_block_coords.y,
 								origin_block_coords.z,
-							],
-							&[],
-							None,
+							]],
 						);
 						// We only link to a few other structures because if we linked
 						// to everyone we could then it fills the world with links
@@ -2239,12 +2221,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(
-				&[],
-				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
-				&[],
-				None,
-			);
+			let v = noise_cell_data.sample(&[], &[&[cell_coords.x, cell_coords.y, cell_coords.z, 1]]);
 			((v * 6.0 - 2.0) * 3.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2254,15 +2231,13 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 					.map(|axis| {
 						noise_cell_data.sample(
 							&[],
-							&[
+							&[&[
 								cell_coords.x,
 								cell_coords.y,
 								cell_coords.z,
 								1 + axis,
 								origin_index as i32,
-							],
-							&[],
-							None,
+							]],
 						)
 					})
 					.collect();
@@ -2311,21 +2286,13 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			if !found_ground {
 				return;
 			}
-			let noise_value_a = noise_structure.sample(
-				&[],
-				&[placing_head.x, placing_head.y, placing_head.z, 1],
-				&[],
-				None,
-			);
+			let noise_value_a =
+				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
 			let height =
 				((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(11) as f32) as i32;
 			placing_head.z += height;
-			let noise_value_b = noise_structure.sample(
-				&[],
-				&[placing_head.x, placing_head.y, placing_head.z, 2],
-				&[],
-				None,
-			);
+			let noise_value_b =
+				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
 			let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
 			for coords in
 				crate::coords::iter_3d_cube_center_radius(placing_head, ball_radius.ceil() as i32)
@@ -2438,12 +2405,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(
-				&[],
-				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
-				&[],
-				None,
-			);
+			let v = noise_cell_data.sample(&[], &[&[cell_coords.x, cell_coords.y, cell_coords.z, 1]]);
 			(v * 3.5 - 2.0).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2453,15 +2415,13 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 					.map(|axis| {
 						noise_cell_data.sample(
 							&[],
-							&[
+							&[&[
 								cell_coords.x,
 								cell_coords.y,
 								cell_coords.z,
 								1 + axis,
 								origin_index as i32,
-							],
-							&[],
-							None,
+							]],
 						)
 					})
 					.collect();
@@ -2517,18 +2477,10 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			if !found_ground {
 				return;
 			}
-			let noise_value_a = noise_structure.sample(
-				&[],
-				&[placing_head.x, placing_head.y, placing_head.z, 1],
-				&[],
-				None,
-			);
-			let noise_value_b = noise_structure.sample(
-				&[],
-				&[placing_head.x, placing_head.y, placing_head.z, 2],
-				&[],
-				None,
-			);
+			let noise_value_a =
+				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
+			let noise_value_b =
+				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
 			let us = placing_head.map(|x| x as f32);
 			let spike_end = us
 				+ cgmath::vec3(
@@ -2827,12 +2779,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			block_coords.map(|x| x.div_euclid(cell_size))
 		};
 		let cell_coords_to_number_of_structure_origins = |cell_coords: cgmath::Point3<i32>| -> usize {
-			let v = noise_cell_data.sample(
-				&[],
-				&[cell_coords.x, cell_coords.y, cell_coords.z, 1],
-				&[],
-				None,
-			);
+			let v = noise_cell_data.sample(&[], &[&[cell_coords.x, cell_coords.y, cell_coords.z, 1]]);
 			(v * 20.0 - 17.5).max(0.0).floor() as usize
 		};
 		let cell_coords_and_structure_origin_index_to_origin_coords_in_world =
@@ -2842,15 +2789,13 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 					.map(|axis| {
 						noise_cell_data.sample(
 							&[],
-							&[
+							&[&[
 								cell_coords.x,
 								cell_coords.y,
 								cell_coords.z,
 								1 + axis,
 								origin_index as i32,
-							],
-							&[],
-							None,
+							]],
 						)
 					})
 					.collect();
@@ -2965,29 +2910,25 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 						// that the other would get, so we can agree on something that way ^^.
 						let value_us_to_other = noise_a.sample(
 							&[],
-							&[
+							&[&[
 								origin_block_coords.x,
 								origin_block_coords.y,
 								origin_block_coords.z,
 								other_origin_coords.x,
 								other_origin_coords.y,
 								other_origin_coords.z,
-							],
-							&[],
-							None,
+							]],
 						);
 						let value_other_to_us = noise_a.sample(
 							&[],
-							&[
+							&[&[
 								other_origin_coords.x,
 								other_origin_coords.y,
 								other_origin_coords.z,
 								origin_block_coords.x,
 								origin_block_coords.y,
 								origin_block_coords.z,
-							],
-							&[],
-							None,
+							]],
 						);
 						// We only link to a few other structures because if we linked
 						// to everyone we could then it fills the world with links

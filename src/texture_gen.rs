@@ -100,6 +100,7 @@ impl Initializer {
 	}
 }
 
+#[derive(Debug)]
 enum UnaryStep {
 	Noise01 { how_much: f32, seed: i32 },
 	Noise02 { how_much: f32, color_channel: usize, seed: i32 },
