@@ -2,13 +2,8 @@ use crate::atlas::ATLAS_DIMS;
 
 pub(crate) enum BlockType {
 	Air,
-	Solid {
-		texture_coords_on_atlas: cgmath::Point2<i32>,
-	},
-	XShaped {
-		texture_coords_on_atlas: cgmath::Point2<i32>,
-	},
-	/// Test, WIP!
+	Solid { texture_coords_on_atlas: cgmath::Point2<i32> },
+	XShaped { texture_coords_on_atlas: cgmath::Point2<i32> },
 	Text,
 }
 
@@ -92,8 +87,8 @@ impl BlockTypeTable {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct BlockTypeId {
-	/// Positive values are indices in the table of block types.
-	/// Negative values will be used as ids in a table of blocks that have data, maybe?
+	/// Positive values (and 0) are indices in the table of block types.
+	/// Negative values are keys in a block-with-data table in the `ChunkBlocks`.
 	pub(crate) value: i16,
 }
 
