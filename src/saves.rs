@@ -7,6 +7,7 @@ use crate::ChunkCoords;
 pub(crate) struct Save {
 	pub(crate) name: String,
 	pub(crate) main_directory: std::path::PathBuf,
+	pub(crate) state_file_path: std::path::PathBuf,
 	chunks_directory: std::path::PathBuf,
 }
 
@@ -20,13 +21,18 @@ impl Save {
 			std::fs::create_dir_all(&main_directory).unwrap();
 			main_directory
 		};
+		let state_file_path = {
+			let mut chunks_directory = main_directory.clone();
+			chunks_directory.push("state");
+			chunks_directory
+		};
 		let chunks_directory = {
 			let mut chunks_directory = main_directory.clone();
 			chunks_directory.push("chunks");
 			std::fs::create_dir_all(&chunks_directory).unwrap();
 			chunks_directory
 		};
-		Save { name, main_directory, chunks_directory }
+		Save { name, main_directory, state_file_path, chunks_directory }
 	}
 
 	pub(crate) fn chunk_file_path(&self, chunk_coords: ChunkCoords) -> std::path::PathBuf {

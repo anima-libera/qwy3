@@ -27,6 +27,7 @@ mod world_gen;
 use std::{
 	collections::HashMap,
 	f32::consts::TAU,
+	io::{Read, Write},
 	sync::{atomic::AtomicI32, Arc},
 };
 
@@ -35,6 +36,7 @@ use chunk_loading::LoadingManager;
 use chunk_meshing::{ChunkMesh, DataForChunkMeshing};
 use rand::Rng;
 use saves::Save;
+use serde::{Deserialize, Serialize};
 use skybox::SkyboxFaces;
 use threadpool::ThreadPool;
 use wgpu::util::DeviceExt;
@@ -279,6 +281,30 @@ struct RectInAtlas {
 	texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct StateSavable {
+	player_pos: [f32; 3],
+	player_angular_direction: [f32; 2],
+}
+
+fn save_savable_state(game: &Game) {
+	let mut state_file =
+		std::fs::File::create(&game.save.as_ref().unwrap().state_file_path).unwrap();
+	let player_pos = game.player_phys.aligned_box().pos.into();
+	let player_angular_direction = game.camera_direction.into();
+	let savable = StateSavable { player_pos, player_angular_direction };
+	let data = rmp_serde::encode::to_vec(&savable).unwrap();
+	state_file.write_all(&data).unwrap();
+}
+
+fn load_savable_state_from_save(save: &Arc<Save>) -> Option<StateSavable> {
+	let mut state_file = std::fs::File::open(&save.state_file_path).ok()?;
+	let mut data = vec![];
+	state_file.read_to_end(&mut data).unwrap();
+	let savable: StateSavable = rmp_serde::decode::from_slice(&data).unwrap();
+	Some(savable)
+}
+
 struct Game {
 	/// The window is in an Arc because the window_surface wants a reference to it.
 	window: Arc<winit::window::Window>,
@@ -488,6 +514,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let aspect_ratio_thingy = init_aspect_ratio_thingy(Arc::clone(&device));
 
 	let save = Some(Arc::new(Save::create("testies".to_string())));
+	let saved_state = save.as_ref().and_then(load_savable_state_from_save);
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
@@ -542,7 +569,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	};
 	let camera_matrix_thingy = init_camera_matrix_thingy(Arc::clone(&device));
 
-	let camera_direction = AngularDirection::from_angle_horizontal(0.0);
+	let camera_direction: AngularDirection = saved_state
+		.as_ref()
+		.map(|state| (&state.player_angular_direction).into())
+		.unwrap_or(AngularDirection::from_angle_horizontal(0.0));
 
 	let selected_camera = WhichCameraToUse::FirstPerson;
 
@@ -562,8 +592,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let walking_leftward = false;
 	let walking_rightward = false;
 
+	let player_pos: cgmath::Point3<f32> =
+		(*saved_state.as_ref().map(|state| &state.player_pos).unwrap_or(&[0.0, 0.0, 2.0])).into();
 	let player_phys =
-		AlignedPhysBox::new(AlignedBox { pos: (0.0, 0.0, 2.0).into(), dims: (0.8, 0.8, 1.8).into() });
+		AlignedPhysBox::new(AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() });
 	let enable_physics = true;
 	let enable_display_phys_box = false;
 
@@ -1591,6 +1623,7 @@ pub fn run() {
 				let save_name = &save.name;
 				let save_path = &save.main_directory.display();
 				println!("Saving to save \"{save_name}\" at \"{save_path}\".");
+				save_savable_state(&game);
 				game.chunk_grid.unload_all_chunks(game.save.as_ref());
 			}
 		},

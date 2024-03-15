@@ -453,6 +453,20 @@ impl AngularDirection {
 	}
 }
 
+impl From<&[f32; 2]> for AngularDirection {
+	fn from(angles: &[f32; 2]) -> AngularDirection {
+		AngularDirection::from_angles(angles[0], angles[1])
+	}
+}
+impl From<AngularDirection> for [f32; 2] {
+	fn from(angular_direction: AngularDirection) -> [f32; 2] {
+		[
+			angular_direction.angle_horizontal,
+			angular_direction.angle_vertical,
+		]
+	}
+}
+
 /// An array of 27 boolean values stored in a `u32`.
 #[derive(Debug, Clone, Copy)]
 struct BitArray27 {
