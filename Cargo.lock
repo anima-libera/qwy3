@@ -1523,6 +1523,7 @@ dependencies = [
  "clap",
  "enum-iterator",
  "env_logger",
+ "flate2",
  "futures",
  "image",
  "log",

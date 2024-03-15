@@ -126,8 +126,16 @@ impl ChunkBlocks {
 	fn save(&self, save: &Arc<Save>) {
 		let chunk_file_path = save.chunk_file_path(self.coords_span.chunk_coords);
 		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
-		let data = rmp_serde::encode::to_vec(&self.savable).unwrap();
-		chunk_file.write_all(&data).unwrap();
+		let uncompressed_data = rmp_serde::encode::to_vec(&self.savable).unwrap();
+		let mut compressed_data = vec![];
+		{
+			let mut encoder = flate2::write::DeflateEncoder::new(
+				&mut compressed_data,
+				flate2::Compression::default(),
+			);
+			encoder.write_all(&uncompressed_data).unwrap();
+		}
+		chunk_file.write_all(&compressed_data).unwrap();
 	}
 
 	pub(crate) fn load_from_save(
@@ -136,9 +144,14 @@ impl ChunkBlocks {
 	) -> Option<ChunkBlocks> {
 		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords);
 		let mut chunk_file = std::fs::File::open(chunk_file_path).ok()?;
-		let mut data = vec![];
-		chunk_file.read_to_end(&mut data).unwrap();
-		let savable: ChunkBlocksSavable = rmp_serde::decode::from_slice(&data).unwrap();
+		let mut compressed_data = vec![];
+		chunk_file.read_to_end(&mut compressed_data).unwrap();
+		let mut uncompressed_data = vec![];
+		{
+			let mut decoder = flate2::bufread::DeflateDecoder::new(compressed_data.as_slice());
+			decoder.read_to_end(&mut uncompressed_data).unwrap();
+		}
+		let savable: ChunkBlocksSavable = rmp_serde::decode::from_slice(&uncompressed_data).unwrap();
 		Some(ChunkBlocks { coords_span, savable })
 	}
 }

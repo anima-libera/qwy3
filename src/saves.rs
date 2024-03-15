@@ -1,5 +1,9 @@
+//! Managing saves, their directory structures and all.
+
 use crate::ChunkCoords;
 
+/// Represents a save, the directories and files that make a Qwy3 world persistent
+/// by keeping its state saved on the disk.
 pub(crate) struct Save {
 	pub(crate) name: String,
 	pub(crate) main_directory: std::path::PathBuf,
@@ -9,13 +13,19 @@ pub(crate) struct Save {
 impl Save {
 	pub(crate) fn create(name: String) -> Save {
 		assert!(name.chars().all(|c| c.is_ascii_alphanumeric()));
-		let mut main_directory = std::path::PathBuf::new();
-		main_directory.push("saves");
-		main_directory.push(&name);
-		std::fs::create_dir_all(&main_directory).unwrap();
-		let mut chunks_directory = main_directory.clone();
-		chunks_directory.push("chunks");
-		std::fs::create_dir_all(&chunks_directory).unwrap();
+		let main_directory = {
+			let mut main_directory = std::path::PathBuf::new();
+			main_directory.push("saves");
+			main_directory.push(&name);
+			std::fs::create_dir_all(&main_directory).unwrap();
+			main_directory
+		};
+		let chunks_directory = {
+			let mut chunks_directory = main_directory.clone();
+			chunks_directory.push("chunks");
+			std::fs::create_dir_all(&chunks_directory).unwrap();
+			chunks_directory
+		};
 		Save { name, main_directory, chunks_directory }
 	}
 
