@@ -734,7 +734,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 
-	let widget_tree_root = Widget::new_margins(
+	let mut widget_tree_root = Widget::new_margins(
 		(5.0, 5.0, 0.0, 0.0),
 		Box::new(Widget::new_list(
 			vec![
@@ -769,6 +769,24 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			5.0,
 		)),
 	);
+
+	if let Some(save) = save.as_ref() {
+		if let Some(Widget::List { sub_widgets, .. }) =
+			widget_tree_root.find_label_content(WidgetLabel::LogLineList)
+		{
+			let settings = font::TextRenderingSettings::with_scale(2.0);
+			let save_name = &save.name;
+			let save_path = save.main_directory.display();
+			sub_widgets.push(Widget::new_simple_text(
+				format!("Save \"{save_name}\""),
+				settings.clone(),
+			));
+			sub_widgets.push(Widget::new_simple_text(
+				format!("Save path \"{save_path}\""),
+				settings,
+			));
+		}
+	}
 
 	let enable_interface_draw_debug_boxes = false;
 
@@ -1619,10 +1637,7 @@ pub fn run() {
 		},
 
 		Event::LoopExiting => {
-			if let Some(save) = &game.save {
-				let save_name = &save.name;
-				let save_path = &save.main_directory.display();
-				println!("Saving to save \"{save_name}\" at \"{save_path}\".");
+			if game.save.is_some() {
 				save_savable_state(&game);
 				game.chunk_grid.unload_all_chunks(game.save.as_ref());
 			}
