@@ -124,6 +124,7 @@ impl ChunkBlocks {
 	}
 
 	fn save(&self, save: &Arc<Save>) {
+		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
 		let chunk_file_path = save.chunk_file_path(self.coords_span.chunk_coords);
 		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
 		let uncompressed_data = rmp_serde::encode::to_vec(&self.savable).unwrap();
@@ -142,6 +143,7 @@ impl ChunkBlocks {
 		coords_span: ChunkCoordsSpan,
 		save: &Arc<Save>,
 	) -> Option<ChunkBlocks> {
+		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
 		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords);
 		let mut chunk_file = std::fs::File::open(chunk_file_path).ok()?;
 		let mut compressed_data = vec![];

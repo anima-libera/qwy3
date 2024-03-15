@@ -93,10 +93,6 @@
 
 - Have saves. Launching the game on a new save or launching the game on a pre-existing save should not be the same.
   - Saves should at least be named and contain parameters and stuff like chunk side length.
-- Save chunk data to disk when unloading.
-  - And load chunk data from disk when loading.
-- Save the skybox faces to the disk and load it.
-- Save the texture atlas faces to the disk and load it.
 
 ## Multiplayer
 

@@ -283,6 +283,7 @@ struct RectInAtlas {
 
 #[derive(Serialize, Deserialize)]
 struct StateSavable {
+	chunk_dimensions_edge: i32,
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
 }
@@ -290,9 +291,11 @@ struct StateSavable {
 fn save_savable_state(game: &Game) {
 	let mut state_file =
 		std::fs::File::create(&game.save.as_ref().unwrap().state_file_path).unwrap();
-	let player_pos = game.player_phys.aligned_box().pos.into();
-	let player_angular_direction = game.camera_direction.into();
-	let savable = StateSavable { player_pos, player_angular_direction };
+	let savable = StateSavable {
+		chunk_dimensions_edge: game.cd.edge,
+		player_pos: game.player_phys.aligned_box().pos.into(),
+		player_angular_direction: game.camera_direction.into(),
+	};
 	let data = rmp_serde::encode::to_vec(&savable).unwrap();
 	state_file.write_all(&data).unwrap();
 }
@@ -648,6 +651,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let control_bindings = commands::parse_control_binding_file();
 	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
+	let chunk_edge =
+		saved_state.map(|state| state.chunk_dimensions_edge).unwrap_or(chunk_edge as i32);
 	let cd = ChunkDimensions::from(chunk_edge as i32);
 	let chunk_grid = ChunkGrid::new(cd);
 
