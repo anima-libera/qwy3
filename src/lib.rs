@@ -519,8 +519,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
 	let atlas_loaded_from_save = save.as_ref().and_then(Atlas::load_from_save);
-
 	let need_generation_of_the_complete_atlas = atlas_loaded_from_save.is_none();
+
 	let atlas = atlas_loaded_from_save.unwrap_or_else(Atlas::new_fast_incomplete);
 	let AtlasStuff {
 		atlas_texture_view_thingy,
@@ -531,7 +531,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let font = Arc::new(Font::font_01());
 
-	let skybox_faces = generate_skybox_cubemap_faces_images(&default_skybox_painter, None);
+	let skybox_faces_loaded_from_save = save.as_ref().and_then(SkyboxFaces::load_from_save);
+	let need_generation_of_the_better_skybox = skybox_faces_loaded_from_save.is_none();
+	let skybox_faces = skybox_faces_loaded_from_save
+		.unwrap_or_else(|| generate_skybox_cubemap_faces_images(&default_skybox_painter, None));
+
 	let SkyboxStuff {
 		skybox_cubemap_texture_view_thingy,
 		skybox_cubemap_texture_sampler_thingy,
@@ -664,7 +668,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		}));
 	}
 
-	let face_counter = {
+	let face_counter = need_generation_of_the_better_skybox.then(|| {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		let face_counter = Arc::new(AtomicI32::new(0));
 		worker_tasks.tasks.push(WorkerTask::PaintNewSkybox(
@@ -678,7 +682,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			let _ = sender.send(skybox_faces);
 		}));
 		face_counter
-	};
+	});
 
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
@@ -753,16 +757,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				),
 				Widget::new_label(
 					WidgetLabel::LogLineList,
-					Box::new(Widget::new_list(
-						vec![Widget::new_disappear_when_complete(
-							std::time::Duration::from_secs_f32(2.0),
-							Box::new(Widget::new_face_counter(
-								font::TextRenderingSettings::with_scale(3.0),
-								face_counter,
-							)),
-						)],
-						5.0,
-					)),
+					Box::new(Widget::new_list(vec![], 5.0)),
 				),
 				Widget::new_simple_text(
 					"test (stays below log)".to_string(),
@@ -772,6 +767,20 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			5.0,
 		)),
 	);
+
+	if let Some(face_counter) = face_counter {
+		if let Some(Widget::List { sub_widgets, .. }) =
+			widget_tree_root.find_label_content(WidgetLabel::LogLineList)
+		{
+			sub_widgets.push(Widget::new_disappear_when_complete(
+				std::time::Duration::from_secs_f32(2.0),
+				Box::new(Widget::new_face_counter(
+					font::TextRenderingSettings::with_scale(3.0),
+					face_counter,
+				)),
+			));
+		}
+	}
 
 	if let Some(save) = save.as_ref() {
 		if let Some(Widget::List { sub_widgets, .. }) =
@@ -1337,6 +1346,9 @@ pub fn run() {
 						let result_opt = receiver.try_recv().ok();
 						let is_not_done_yet = result_opt.is_none();
 						if let Some(skybox_faces) = result_opt {
+							if let Some(save) = game.save.as_ref() {
+								skybox_faces.save(save);
+							}
 							update_skybox_texture(
 								&game.queue,
 								&game.skybox_cubemap_texture,

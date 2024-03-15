@@ -1,6 +1,6 @@
 //! Managing saves, their directory structures and all.
 
-use crate::ChunkCoords;
+use crate::{ChunkCoords, OrientedAxis};
 
 /// Represents a save, the directories and files that make a Qwy3 world persistent
 /// by keeping its state saved on the disk.
@@ -59,6 +59,17 @@ impl Save {
 		let mut path = self.chunks_directory.clone();
 		let cgmath::Point3 { x, y, z } = chunk_coords;
 		path.push(format!("{x},{y},{z}"));
+		path
+	}
+
+	pub(crate) fn skybox_face_texture_file_path(
+		&self,
+		face_direction: OrientedAxis,
+	) -> std::path::PathBuf {
+		let mut path = self.textures_directory.clone();
+		let sign = face_direction.orientation.as_char();
+		let axis = face_direction.axis.as_char();
+		path.push(format!("{sign}{axis}.png"));
 		path
 	}
 }

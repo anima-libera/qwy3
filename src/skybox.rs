@@ -16,7 +16,9 @@ use cgmath::{point3, vec3, EuclideanSpace, InnerSpace, Point3, Vector3};
 use image::Rgba;
 use wgpu::util::DeviceExt;
 
-use crate::{noise::OctavedNoise, shaders::skybox::SkyboxVertexPod, OrientedAxis, SkyboxData};
+use crate::{
+	noise::OctavedNoise, saves::Save, shaders::skybox::SkyboxVertexPod, OrientedAxis, SkyboxData,
+};
 
 pub(crate) const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);
 
@@ -231,26 +233,21 @@ pub(crate) fn generate_skybox_cubemap_faces_images(
 	face_counter: Option<Arc<AtomicI32>>,
 ) -> SkyboxFaces {
 	let mut faces = vec![];
-	let mut face_directions = vec![];
 	for face_direction in OrientedAxis::all_the_six_possible_directions() {
 		faces.push(generate_a_skybox_cubemap_face_image(
 			face_direction,
 			skybox_painter,
 		));
-		face_directions.push(face_direction);
 		if let Some(ref face_counter) = face_counter {
 			face_counter.fetch_add(1, atomic::Ordering::Relaxed);
 		}
 	}
-	SkyboxFaces {
-		faces: faces.try_into().unwrap(),
-		_face_directions: face_directions.try_into().unwrap(),
-	}
+	SkyboxFaces { faces: faces.try_into().unwrap() }
 }
 
 pub(crate) struct SkyboxFaces {
+	/// In the order of `OrientedAxis::all_the_six_possible_directions`.
 	pub(crate) faces: [image::RgbaImage; 6],
-	pub(crate) _face_directions: [OrientedAxis; 6],
 }
 
 impl SkyboxFaces {
@@ -263,5 +260,24 @@ impl SkyboxFaces {
 			self.faces[4].as_ref(),
 			self.faces[5].as_ref(),
 		]
+	}
+
+	pub(crate) fn load_from_save(save: &Arc<Save>) -> Option<SkyboxFaces> {
+		let mut faces = vec![];
+		for face_direction in OrientedAxis::all_the_six_possible_directions() {
+			let atlas_texture_file_path = save.skybox_face_texture_file_path(face_direction);
+			let atlas_texture = image::open(atlas_texture_file_path).ok()?;
+			let image = atlas_texture.to_rgba8();
+			faces.push(image);
+		}
+		Some(SkyboxFaces { faces: faces.try_into().unwrap() })
+	}
+
+	pub(crate) fn save(&self, save: &Arc<Save>) {
+		for (i, face_direction) in OrientedAxis::all_the_six_possible_directions().enumerate() {
+			let face = &self.faces[i];
+			let face_texture_file_path = save.skybox_face_texture_file_path(face_direction);
+			face.save_with_format(face_texture_file_path, image::ImageFormat::Png).unwrap();
+		}
 	}
 }

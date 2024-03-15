@@ -320,6 +320,14 @@ impl NonOrientedAxis {
 			NonOrientedAxis::Z => 2,
 		}
 	}
+
+	pub(crate) fn as_char(self) -> char {
+		match self {
+			NonOrientedAxis::X => 'x',
+			NonOrientedAxis::Y => 'y',
+			NonOrientedAxis::Z => 'z',
+		}
+	}
 }
 
 /// For a given `NonOrientedAxis`, this allows to represent
@@ -351,6 +359,13 @@ impl AxisOrientation {
 		match self {
 			AxisOrientation::Positivewards => 1,
 			AxisOrientation::Negativewards => -1,
+		}
+	}
+
+	pub(crate) fn as_char(self) -> char {
+		match self {
+			AxisOrientation::Positivewards => '+',
+			AxisOrientation::Negativewards => '-',
 		}
 	}
 }
