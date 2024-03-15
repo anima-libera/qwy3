@@ -9,6 +9,8 @@ pub(crate) struct Save {
 	pub(crate) main_directory: std::path::PathBuf,
 	pub(crate) state_file_path: std::path::PathBuf,
 	chunks_directory: std::path::PathBuf,
+	pub(crate) textures_directory: std::path::PathBuf,
+	pub(crate) atlas_texture_file_path: std::path::PathBuf,
 }
 
 impl Save {
@@ -32,7 +34,25 @@ impl Save {
 			std::fs::create_dir_all(&chunks_directory).unwrap();
 			chunks_directory
 		};
-		Save { name, main_directory, state_file_path, chunks_directory }
+		let textures_directory = {
+			let mut chunks_directory = main_directory.clone();
+			chunks_directory.push("textures");
+			std::fs::create_dir_all(&chunks_directory).unwrap();
+			chunks_directory
+		};
+		let texture_atlas_file_path = {
+			let mut chunks_directory = textures_directory.clone();
+			chunks_directory.push("atlas.png");
+			chunks_directory
+		};
+		Save {
+			name,
+			main_directory,
+			state_file_path,
+			chunks_directory,
+			textures_directory,
+			atlas_texture_file_path: texture_atlas_file_path,
+		}
 	}
 
 	pub(crate) fn chunk_file_path(&self, chunk_coords: ChunkCoords) -> std::path::PathBuf {

@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use cgmath::MetricSpace;
 use image::{GenericImage, GenericImageView};
 use rand::Rng;
 
-use crate::texture_gen;
+use crate::{saves::Save, texture_gen};
 
 pub(crate) const ATLAS_DIMS: (usize, usize) = (512, 512);
 
@@ -155,5 +157,17 @@ impl Atlas {
 		}
 
 		atlas
+	}
+
+	pub(crate) fn load_from_save(save: &Arc<Save>) -> Option<Atlas> {
+		let atlas_texture_file_path = &save.atlas_texture_file_path;
+		let atlas_texture = image::open(atlas_texture_file_path).ok()?;
+		let image = atlas_texture.to_rgba8();
+		Some(Atlas { image })
+	}
+
+	pub(crate) fn save(&self, save: &Arc<Save>) {
+		let atlas_texture_file_path = &save.atlas_texture_file_path;
+		self.image.save_with_format(atlas_texture_file_path, image::ImageFormat::Png).unwrap();
 	}
 }

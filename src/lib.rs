@@ -518,7 +518,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
-	let atlas = Atlas::new_fast_incomplete();
+	let atlas_loaded_from_save = save.as_ref().and_then(Atlas::load_from_save);
+
+	let need_generation_of_the_complete_atlas = atlas_loaded_from_save.is_none();
+	let atlas = atlas_loaded_from_save.unwrap_or_else(Atlas::new_fast_incomplete);
 	let AtlasStuff {
 		atlas_texture_view_thingy,
 		atlas_texture_sampler_thingy,
@@ -652,7 +655,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let mut worker_tasks = CurrentWorkerTasks { tasks: vec![] };
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
-	{
+	if need_generation_of_the_complete_atlas {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		worker_tasks.tasks.push(WorkerTask::GenerateAtlas(receiver));
 		pool.enqueue_task(Box::new(move || {
@@ -1353,6 +1356,9 @@ pub fn run() {
 									.image
 									.save_with_format(path, image::ImageFormat::Png)
 									.unwrap();
+							}
+							if let Some(save) = game.save.as_ref() {
+								completed_atlas.save(save);
 							}
 							update_atlas_texture(
 								&game.queue,
