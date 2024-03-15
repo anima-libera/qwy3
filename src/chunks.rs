@@ -1,10 +1,12 @@
 use std::{
 	collections::{HashMap, HashSet},
+	io::{Read, Write},
 	sync::Arc,
 };
 
 use cgmath::MetricSpace;
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::{Deserialize, Serialize};
 
 pub(crate) use crate::{
 	block_types::{BlockType, BlockTypeId, BlockTypeTable},
@@ -15,16 +17,16 @@ pub(crate) use crate::{
 	shaders::block::BlockVertexPod,
 };
 use crate::{
-	chunk_meshing::ChunkMesh, font::Font, iter_3d_rect_inf_sup_included, threadpool::ThreadPool,
-	CubicCoordsSpan, CurrentWorkerTasks,
+	chunk_meshing::ChunkMesh, font::Font, iter_3d_rect_inf_sup_included, saves::Save,
+	threadpool::ThreadPool, CubicCoordsSpan, CurrentWorkerTasks,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) enum BlockData {
 	Text(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Block {
 	pub(crate) type_id: BlockTypeId,
 	pub(crate) data: Option<BlockData>,
@@ -53,6 +55,10 @@ pub(crate) struct BlockView<'a> {
 #[derive(Clone)]
 pub(crate) struct ChunkBlocks {
 	pub(crate) coords_span: ChunkCoordsSpan,
+	savable: ChunkBlocksSavable,
+}
+#[derive(Clone, Serialize, Deserialize)]
+struct ChunkBlocksSavable {
 	/// If the length is zero then it means the chunk is full of air.
 	block_ids: Vec<BlockTypeId>,
 	/// Negative block ids are keys to this table.
@@ -64,47 +70,49 @@ impl ChunkBlocks {
 	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
-			block_ids: vec![],
-			blocks_with_data: HashMap::default(),
-			next_id_for_block_with_data: -1,
+			savable: ChunkBlocksSavable {
+				block_ids: vec![],
+				blocks_with_data: HashMap::default(),
+				next_id_for_block_with_data: -1,
+			},
 		}
 	}
 
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
-		Some(if self.block_ids.is_empty() {
+		Some(if self.savable.block_ids.is_empty() {
 			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
 		} else {
-			let block_id = self.block_ids[internal_index];
+			let block_id = self.savable.block_ids[internal_index];
 			if block_id.value >= 0 {
 				BlockView { type_id: block_id, data: None }
 			} else {
-				self.blocks_with_data.get(&block_id).unwrap().as_view()
+				self.savable.blocks_with_data.get(&block_id).unwrap().as_view()
 			}
 		})
 	}
 
 	pub(crate) fn set_simple(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
 		if let Some(internal_index) = self.coords_span.internal_index(coords) {
-			if self.block_ids.is_empty() && block_id.value == 0 {
+			if self.savable.block_ids.is_empty() && block_id.value == 0 {
 				// Setting a block to air, but we are already empty, there is no need to allocate.
 			} else {
-				if self.block_ids.is_empty() && block_id.value != 0 {
-					self.block_ids = Vec::from_iter(
+				if self.savable.block_ids.is_empty() && block_id.value != 0 {
+					self.savable.block_ids = Vec::from_iter(
 						std::iter::repeat(BlockTypeId { value: 0 })
 							.take(self.coords_span.cd.number_of_blocks()),
 					);
 				}
-				self.block_ids[internal_index] = block_id;
+				self.savable.block_ids[internal_index] = block_id;
 			}
 		}
 	}
 
 	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
 		if block.data.is_some() {
-			let new_id = BlockTypeId { value: self.next_id_for_block_with_data };
-			self.next_id_for_block_with_data -= 1;
-			self.blocks_with_data.insert(new_id, block);
+			let new_id = BlockTypeId { value: self.savable.next_id_for_block_with_data };
+			self.savable.next_id_for_block_with_data -= 1;
+			self.savable.blocks_with_data.insert(new_id, block);
 			self.set_simple(coords, new_id);
 		} else {
 			self.set_simple(coords, block.type_id);
@@ -112,7 +120,26 @@ impl ChunkBlocks {
 	}
 
 	fn may_contain_non_air(&self) -> bool {
-		!self.block_ids.is_empty()
+		!self.savable.block_ids.is_empty()
+	}
+
+	fn save(&self, save: &Arc<Save>) {
+		let chunk_file_path = save.chunk_file_path(self.coords_span.chunk_coords);
+		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
+		let data = rmp_serde::encode::to_vec(&self.savable).unwrap();
+		chunk_file.write_all(&data).unwrap();
+	}
+
+	pub(crate) fn load_from_save(
+		coords_span: ChunkCoordsSpan,
+		save: &Arc<Save>,
+	) -> Option<ChunkBlocks> {
+		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords);
+		let mut chunk_file = std::fs::File::open(chunk_file_path).ok()?;
+		let mut data = vec![];
+		chunk_file.read_to_end(&mut data).unwrap();
+		let savable: ChunkBlocksSavable = rmp_serde::decode::from_slice(&data).unwrap();
+		Some(ChunkBlocks { coords_span, savable })
 	}
 }
 
@@ -141,7 +168,7 @@ impl ChunkCullingInfo {
 
 		let mut all_air = true;
 		let mut all_opaque = true;
-		for block_type_id in blocks.block_ids.iter().copied() {
+		for block_type_id in blocks.savable.block_ids.iter().copied() {
 			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_air() {
 				all_air = false;
@@ -363,7 +390,7 @@ impl ChunkGrid {
 		self.blocks_map.len()
 	}
 
-	pub(crate) fn add_chunk_generation_results(
+	pub(crate) fn add_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
 		chunk_blocks: ChunkBlocks,
@@ -373,10 +400,14 @@ impl ChunkGrid {
 		self.culling_info_map.insert(chunk_coords, chunk_culling_info);
 	}
 
-	fn unload_chunk(&mut self, chunk_coords: ChunkCoords) {
-		// TODO: Save blocks to database on disk or something.
+	fn unload_chunk(&mut self, chunk_coords: ChunkCoords, save: Option<&Arc<Save>>) {
+		let chunk_blocks = self.blocks_map.remove(&chunk_coords);
+		if let Some(chunk_blocks) = chunk_blocks {
+			if let Some(save) = save {
+				chunk_blocks.save(save);
+			}
+		}
 		self.culling_info_map.remove(&chunk_coords);
-		self.blocks_map.remove(&chunk_coords);
 		self.mesh_map.remove(&chunk_coords);
 		self.remeshing_required_set.remove(&chunk_coords);
 	}
@@ -385,6 +416,7 @@ impl ChunkGrid {
 		&mut self,
 		player_chunk_coords: ChunkCoords,
 		unloading_distance_in_blocks: f32,
+		save: Option<&Arc<Save>>,
 	) {
 		let unloading_distance_in_chunks = unloading_distance_in_blocks / self.cd.edge as f32;
 		// TODO: Avoid copying all the keys in a vector and iterating over all the chunks every frame.
@@ -393,8 +425,15 @@ impl ChunkGrid {
 			let dist_in_chunks =
 				chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
 			if dist_in_chunks > unloading_distance_in_chunks {
-				self.unload_chunk(chunk_coords);
+				self.unload_chunk(chunk_coords, save);
 			}
+		}
+	}
+
+	pub(crate) fn unload_all_chunks(&mut self, save: Option<&Arc<Save>>) {
+		let chunk_coords_list: Vec<_> = self.blocks_map.keys().copied().collect();
+		for chunk_coords in chunk_coords_list.into_iter() {
+			self.unload_chunk(chunk_coords, save);
 		}
 	}
 }

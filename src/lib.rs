@@ -16,6 +16,7 @@ mod noise;
 mod physics;
 mod rendering;
 mod rendering_init;
+mod saves;
 mod shaders;
 mod skybox;
 mod texture_gen;
@@ -33,6 +34,7 @@ use cgmath::{point3, ElementWise, InnerSpace, MetricSpace};
 use chunk_loading::LoadingManager;
 use chunk_meshing::{ChunkMesh, DataForChunkMeshing};
 use rand::Rng;
+use saves::Save;
 use skybox::SkyboxFaces;
 use threadpool::ThreadPool;
 use wgpu::util::DeviceExt;
@@ -104,7 +106,7 @@ enum Action {
 
 /// The main-thread reciever for the results of a task that was given to a worker thread.
 enum WorkerTask {
-	GenerateChunkBlocks(
+	LoadChunkBlocks(
 		ChunkCoords,
 		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo)>,
 	),
@@ -142,30 +144,38 @@ impl CurrentWorkerTasks {
 		})
 	}
 
-	fn run_chunk_generating_task(
+	fn run_chunk_loading_task(
 		&mut self,
 		pool: &mut ThreadPool,
 		chunk_coords: ChunkCoords,
 		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
 		block_type_table: &Arc<BlockTypeTable>,
+		save: Option<&Arc<Save>>,
 		cd: ChunkDimensions,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		self.tasks.push(WorkerTask::GenerateChunkBlocks(chunk_coords, receiver));
+		self.tasks.push(WorkerTask::LoadChunkBlocks(chunk_coords, receiver));
 		let chunk_generator = Arc::clone(world_generator);
 		let coords_span = ChunkCoordsSpan { cd, chunk_coords };
 		let block_type_table = Arc::clone(block_type_table);
+		let save = save.map(Arc::clone);
 		pool.enqueue_task(Box::new(move || {
-			let chunk_blocks = chunk_generator.generate_chunk_blocks(coords_span, &block_type_table);
+			// Loading a chunk means either loading from save (disk)
+			// if there is a save and the chunk was already generated and saved in the past,
+			// or else generating it.
+			let chunk_blocks =
+				save.and_then(|save| ChunkBlocks::load_from_save(coords_span, &save)).unwrap_or_else(
+					|| chunk_generator.generate_chunk_blocks(coords_span, &block_type_table),
+				);
 			let chunk_culling_info =
 				ChunkCullingInfo::compute_from_blocks(&chunk_blocks, &block_type_table);
 			let _ = sender.send((chunk_blocks, chunk_culling_info));
 		}));
 	}
 
-	fn is_being_generated(&self, chunk_coords: ChunkCoords) -> bool {
+	fn is_being_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.tasks.iter().any(|worker_task| match worker_task {
-			WorkerTask::GenerateChunkBlocks(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
+			WorkerTask::LoadChunkBlocks(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
 			_ => false,
 		})
 	}
@@ -317,6 +327,7 @@ struct Game {
 	fog_margin: f32,
 	output_atlas_when_generated: bool,
 	atlas_texture: wgpu::Texture,
+	save: Option<Arc<Save>>,
 
 	worker_tasks: CurrentWorkerTasks,
 	pool: threadpool::ThreadPool,
@@ -475,6 +486,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	window_surface.configure(&device, &window_surface_config);
 
 	let aspect_ratio_thingy = init_aspect_ratio_thingy(Arc::clone(&device));
+
+	let save = Some(Arc::new(Save::create("testies".to_string())));
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
@@ -776,6 +789,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		fog_margin,
 		output_atlas_when_generated,
 		atlas_texture,
+		save,
 
 		worker_tasks,
 		pool,
@@ -1239,7 +1253,7 @@ pub fn run() {
 			// Recieve task results from workers.
 			game.worker_tasks.tasks.retain_mut(|worker_task| {
 				let is_not_done_yet = match worker_task {
-					WorkerTask::GenerateChunkBlocks(chunk_coords, receiver) => {
+					WorkerTask::LoadChunkBlocks(chunk_coords, receiver) => {
 						let chunk_coords_and_result_opt =
 							receiver.try_recv().ok().map(|(chunk_blocks, chunk_culling_info)| {
 								(*chunk_coords, chunk_blocks, chunk_culling_info)
@@ -1248,7 +1262,7 @@ pub fn run() {
 						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
 							chunk_coords_and_result_opt
 						{
-							game.loading_manager.handle_chunk_generation_results(
+							game.loading_manager.handle_chunk_loading_results(
 								chunk_coords,
 								chunk_blocks,
 								chunk_culling_info,
@@ -1337,12 +1351,17 @@ pub fn run() {
 				player_chunk,
 				&game.world_generator,
 				&game.block_type_table,
+				game.save.as_ref(),
 			);
 
 			// Unload chunks that are a bit too far.
 			let unloading_distance =
 				game.loading_manager.loading_distance + game.loading_manager.margin_before_unloading;
-			game.chunk_grid.unload_chunks_too_far(game.player_chunk(), unloading_distance);
+			game.chunk_grid.unload_chunks_too_far(
+				game.player_chunk(),
+				unloading_distance,
+				game.save.as_ref(),
+			);
 
 			// Walking.
 			let walking_vector = {
@@ -1566,6 +1585,16 @@ pub fn run() {
 				elwt.exit();
 			}
 		},
+
+		Event::LoopExiting => {
+			if let Some(save) = &game.save {
+				let save_name = &save.name;
+				let save_path = &save.main_directory.display();
+				println!("Saving to save \"{save_name}\" at \"{save_path}\".");
+				game.chunk_grid.unload_all_chunks(game.save.as_ref());
+			}
+		},
+
 		_ => {},
 	});
 	res.unwrap();

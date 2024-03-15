@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::atlas::ATLAS_DIMS;
 
 pub(crate) enum BlockType {
@@ -85,7 +87,7 @@ impl BlockTypeTable {
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) struct BlockTypeId {
 	/// Positive values (and 0) are indices in the table of block types.
 	/// Negative values are keys in a block-with-data table in the `ChunkBlocks`.

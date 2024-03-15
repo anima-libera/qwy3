@@ -4,8 +4,9 @@ use cgmath::MetricSpace;
 use rand::Rng;
 
 use crate::{
-	iter_3d_cube_center_radius, threadpool::ThreadPool, world_gen::WorldGenerator, BlockTypeTable,
-	ChunkBlocks, ChunkCoords, ChunkCullingInfo, ChunkGrid, CurrentWorkerTasks, OrientedAxis,
+	iter_3d_cube_center_radius, saves::Save, threadpool::ThreadPool, world_gen::WorldGenerator,
+	BlockTypeTable, ChunkBlocks, ChunkCoords, ChunkCullingInfo, ChunkGrid, CurrentWorkerTasks,
+	OrientedAxis,
 };
 
 /// Manages the loading of chunks, loading well-chosen ones in a well-chosen order.
@@ -17,7 +18,7 @@ pub(crate) struct LoadingManager {
 	/// When added to `loading_distance` it gives the radius of the spherical area around the player
 	/// outside of which the world is to not be loaded.
 	pub(crate) margin_before_unloading: f32,
-	/// Chunks to consider for laoding.
+	/// Chunks to consider for loading.
 	pub(crate) front_high_priority: Vec<ChunkCoords>,
 	/// Chunks that have to be loaded but are probably not intresting so thay are made to wait for now.
 	pub(crate) front_low_priority: Vec<ChunkCoords>,
@@ -37,6 +38,7 @@ impl LoadingManager {
 		}
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn handle_loading(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
@@ -45,19 +47,20 @@ impl LoadingManager {
 		player_chunk_coords: ChunkCoords,
 		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
 		block_type_table: &Arc<BlockTypeTable>,
+		save: Option<&Arc<Save>>,
 	) {
 		if !self.loading_enabled {
 			return;
 		}
 
 		let workers_dedicated_to_meshing = 1;
-		let available_workers_to_generate = (pool.number_of_workers() - workers_dedicated_to_meshing)
+		let available_workers_to_load = (pool.number_of_workers() - workers_dedicated_to_meshing)
 			.saturating_sub(worker_tasks.tasks.len());
-		if available_workers_to_generate == 0 {
+		if available_workers_to_load == 0 {
 			return;
 		}
 
-		let generation_distance_in_chunks = self.loading_distance / chunk_grid.cd().edge as f32;
+		let loading_distance_in_chunks = self.loading_distance / chunk_grid.cd().edge as f32;
 		let unloading_distance_in_chunks = {
 			let unloading_distance = self.loading_distance + self.margin_before_unloading;
 			unloading_distance / chunk_grid.cd().edge as f32
@@ -72,7 +75,7 @@ impl LoadingManager {
 		self.front_high_priority.retain(|front_chunk_coords| {
 			let too_far =
 				front_chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32))
-					> generation_distance_in_chunks;
+					> loading_distance_in_chunks;
 			if too_far {
 				self.front_too_far.push(*front_chunk_coords);
 			}
@@ -96,7 +99,7 @@ impl LoadingManager {
 				let front_chunk_coords = self.front_too_far[index];
 				let still_too_far =
 					front_chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32))
-						> generation_distance_in_chunks;
+						> loading_distance_in_chunks;
 				if !still_too_far {
 					self.front_too_far.remove(index);
 					self.front_high_priority.push(front_chunk_coords);
@@ -110,9 +113,9 @@ impl LoadingManager {
 		}
 
 		self.front_high_priority.retain(|&chunk_coords| {
-			let blocks_was_generated = chunk_grid.is_loaded(chunk_coords);
-			let blocks_is_being_generated = worker_tasks.is_being_generated(chunk_coords);
-			(!blocks_was_generated) && (!blocks_is_being_generated)
+			let blocks_was_loaded = chunk_grid.is_loaded(chunk_coords);
+			let blocks_is_being_loaded = worker_tasks.is_being_loaded(chunk_coords);
+			(!blocks_was_loaded) && (!blocks_is_being_loaded)
 		});
 
 		// Sort to put closer chunks at the end.
@@ -121,7 +124,7 @@ impl LoadingManager {
 				as i64
 		});
 
-		let mut slot_count = available_workers_to_generate;
+		let mut slot_count = available_workers_to_load;
 		while slot_count >= 1 {
 			let chunk_coords = self.front_high_priority.pop();
 			let chunk_coords = match chunk_coords {
@@ -129,35 +132,32 @@ impl LoadingManager {
 				None => break,
 			};
 
-			let blocks_was_generated = chunk_grid.is_loaded(chunk_coords);
-			let blocks_is_being_generated = worker_tasks.is_being_generated(chunk_coords);
+			let blocks_was_loaded = chunk_grid.is_loaded(chunk_coords);
+			let blocks_is_being_loaded = worker_tasks.is_being_loaded(chunk_coords);
 
-			if (!blocks_was_generated) && (!blocks_is_being_generated) {
+			if (!blocks_was_loaded) && (!blocks_is_being_loaded) {
 				// Asking a worker for the generation of chunk blocks.
 				slot_count -= 1;
-				worker_tasks.run_chunk_generating_task(
+				worker_tasks.run_chunk_loading_task(
 					pool,
 					chunk_coords,
 					world_generator,
 					block_type_table,
+					save,
 					chunk_grid.cd(),
 				);
 			}
 		}
 	}
 
-	pub(crate) fn handle_chunk_generation_results(
+	pub(crate) fn handle_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
 		chunk_blocks: ChunkBlocks,
 		chunk_culling_info: ChunkCullingInfo,
 		chunk_grid: &mut ChunkGrid,
 	) {
-		chunk_grid.add_chunk_generation_results(
-			chunk_coords,
-			chunk_blocks,
-			chunk_culling_info.clone(),
-		);
+		chunk_grid.add_chunk_loading_results(chunk_coords, chunk_blocks, chunk_culling_info.clone());
 
 		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 			chunk_grid.require_remeshing(neighbor_chunk_coords);
