@@ -526,6 +526,11 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let save = save_name.map(|name| Arc::new(Save::create(name)));
 	let saved_state = save.as_ref().and_then(load_savable_state_from_save);
 
+	if saved_state.is_none() {
+		println!("Warning: No save specified, nothing will persist.");
+		println!("A save name can be specified using `-s <NAME>` or `--save <NAME>`.");
+	}
+
 	let world_gen_seed =
 		saved_state.as_ref().map(|state| state.world_gen_seed).unwrap_or(world_gen_seed);
 
@@ -817,6 +822,15 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				settings,
 			));
 		}
+	} else if let Some(Widget::List { sub_widgets, .. }) =
+		widget_tree_root.find_label_content(WidgetLabel::LogLineList)
+	{
+		let mut settings = font::TextRenderingSettings::with_scale(3.0);
+		settings.color = [0.4, 0.0, 0.0];
+		sub_widgets.push(Widget::new_simple_text(
+			"No save, nothing will persist".to_string(),
+			settings.clone(),
+		));
 	}
 
 	let enable_interface_draw_debug_boxes = false;
