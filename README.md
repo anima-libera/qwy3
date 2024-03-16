@@ -33,6 +33,7 @@ Advice:
 - Chunks, loading and unloading so that an area around the player is loaded.
 - Infinite-ish world, in all directions including up and down.
 - Removing and placing blocks.
+- Saving/loading to/from disk, named saves.
 - AABB vs voxels collision resolution.
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.

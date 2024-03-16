@@ -89,11 +89,6 @@
   - Divine blessings come at some cost that depends on the god too, like some bosses that are summoned later to challenge you.
   - Can pray to multiple gods, the effects can stack.
 
-## Saves
-
-- Have saves. Launching the game on a new save or launching the game on a pre-existing save should not be the same.
-  - Saves should at least be named and contain parameters and stuff like chunk side length.
-
 ## Multiplayer
 
 - Multiplayer. Allow the game to become a client or a server.
