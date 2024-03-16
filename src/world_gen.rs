@@ -2,6 +2,7 @@ use std::{cmp::Ordering, f32::consts::TAU, sync::Arc};
 
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace};
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use crate::{
@@ -22,7 +23,7 @@ pub(crate) trait WorldGenerator {
 	) -> ChunkBlocks;
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, ValueEnum, Serialize, Deserialize)]
 pub(crate) enum WhichWorldGenerator {
 	Default,
 	Flat,

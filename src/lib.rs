@@ -50,7 +50,7 @@ use rendering_init::*;
 use shaders::{simple_texture_2d::SimpleTextureVertexPod, Vector3Pod};
 use widgets::{InterfaceMeshesVertices, Widget, WidgetLabel};
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
-use world_gen::WorldGenerator;
+use world_gen::{WhichWorldGenerator, WorldGenerator};
 
 use crate::{
 	atlas::Atlas,
@@ -284,6 +284,8 @@ struct RectInAtlas {
 #[derive(Serialize, Deserialize)]
 struct StateSavable {
 	chunk_dimensions_edge: i32,
+	world_gen_seed: i32,
+	which_world_generator: WhichWorldGenerator,
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
 }
@@ -293,6 +295,8 @@ fn save_savable_state(game: &Game) {
 		std::fs::File::create(&game.save.as_ref().unwrap().state_file_path).unwrap();
 	let savable = StateSavable {
 		chunk_dimensions_edge: game.cd.edge,
+		world_gen_seed: game.world_gen_seed,
+		which_world_generator: game.which_world_generator,
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
 	};
@@ -347,6 +351,8 @@ struct Game {
 	last_command_line_interaction: Option<std::time::Instant>,
 	command_confirmed: bool,
 	world_generator: Arc<dyn WorldGenerator + Sync + Send>,
+	which_world_generator: WhichWorldGenerator,
+	world_gen_seed: i32,
 	widget_tree_root: Widget,
 	enable_interface_draw_debug_boxes: bool,
 	skybox_cubemap_texture: wgpu::Texture,
@@ -519,6 +525,9 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let save = Some(Arc::new(Save::create("testies".to_string())));
 	let saved_state = save.as_ref().and_then(load_savable_state_from_save);
 
+	let world_gen_seed =
+		saved_state.as_ref().map(|state| state.world_gen_seed).unwrap_or(world_gen_seed);
+
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
 	let atlas_loaded_from_save = save.as_ref().and_then(Atlas::load_from_save);
@@ -652,7 +661,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let controls_to_trigger: Vec<ControlEvent> = vec![];
 
 	let chunk_edge =
-		saved_state.map(|state| state.chunk_dimensions_edge).unwrap_or(chunk_edge as i32);
+		saved_state.as_ref().map(|state| state.chunk_dimensions_edge).unwrap_or(chunk_edge as i32);
 	let cd = ChunkDimensions::from(chunk_edge as i32);
 	let chunk_grid = ChunkGrid::new(cd);
 
@@ -742,6 +751,10 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let last_command_line_interaction = None;
 	let command_confirmed = false;
 
+	let which_world_generator = saved_state
+		.as_ref()
+		.map(|state| state.which_world_generator)
+		.unwrap_or(which_world_generator);
 	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
 
 	let enable_display_not_surrounded_chunks_as_boxes = false;
@@ -847,6 +860,8 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		last_command_line_interaction,
 		command_confirmed,
 		world_generator,
+		which_world_generator,
+		world_gen_seed,
 		widget_tree_root,
 		enable_interface_draw_debug_boxes,
 		skybox_cubemap_texture,
