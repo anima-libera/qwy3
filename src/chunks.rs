@@ -183,8 +183,9 @@ impl ChunkCullingInfo {
 
 		let mut all_air = true;
 		let mut all_opaque = true;
-		for block_type_id in blocks.savable.block_ids.iter().copied() {
-			let block_type = block_type_table.get(block_type_id).unwrap();
+		for coords in blocks.coords_span.iter_coords() {
+			let block = blocks.get(coords).unwrap();
+			let block_type = block_type_table.get(block.type_id).unwrap();
 			if !block_type.is_air() {
 				all_air = false;
 			}

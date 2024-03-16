@@ -412,6 +412,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		no_vsync,
 		no_fog,
 		fog_margin,
+		save_name,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -522,7 +523,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let aspect_ratio_thingy = init_aspect_ratio_thingy(Arc::clone(&device));
 
-	let save = Some(Arc::new(Save::create("testies".to_string())));
+	let save = save_name.map(|name| Arc::new(Save::create(name)));
 	let saved_state = save.as_ref().and_then(load_savable_state_from_save);
 
 	let world_gen_seed =

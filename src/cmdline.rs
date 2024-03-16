@@ -22,7 +22,7 @@ pub(crate) struct CommandLineSettings {
 	pub(crate) output_atlas: bool,
 
 	/// World generation seed.
-	#[arg(long = "seed", short = 's', default_value_t = 0, value_name = "SEED")]
+	#[arg(long = "seed", default_value_t = 0, value_name = "SEED")]
 	pub(crate) world_gen_seed: i32,
 
 	/// Selection of one world generator.
@@ -68,6 +68,10 @@ pub(crate) struct CommandLineSettings {
 	/// Thickness of the foggy area.
 	#[arg(long, default_value_t = 60.0, value_name = "LENGTH")]
 	pub(crate) fog_margin: f32,
+
+	/// Name by which the save is identified and retrieved/created.
+	#[arg(long = "save", short = 's', value_name = "NAME")]
+	pub(crate) save_name: Option<String>,
 
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]
