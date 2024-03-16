@@ -13,11 +13,19 @@ Wanna-be Minecraft-like in Rust using <a href="url">Wgpu</a>, very early stage.
 
 <p align="center"><img src="./pics/pic-01.png" width="95%" alt="Older screenshot"/></>
 
+### Build
+
+Install [Rust](https://www.rust-lang.org/tools/install) first (via `rustup`, Rust's official toolchain manager, which will also install tools such as `cargo` which manages Rust projects and dependencies). Then clone/download this repo and run one of the example `cargo` commands below (or just `cargo build --release` to build without running the project).
+
 ### Usage
 
 Examples:
 - `cargo run --release -- --threads 8 --gen-dist 210 --gen structures-links-smooth`
 - `cargo run --release -- --threads 4 --gen-dist 300 --gen default --seed 3 --chunk-edge 50`
+- `cargo run --release -- --threads 12 --gen structures-generated-blocks --save hello`
+
+Note:
+The `--save <SAVE_NAME>` or `-s <SAVE_NAME>` option creates or opens the save of the specified name and will save/load the game state (seed, player position, chunks, etc.) to/from the disk. Not specifying a save means that nothing will be saved and all that is unload is lost.
 
 Advice:
 - Up the number of `--threads` the game shall use to almost the number of virtual cores of the hardware.
