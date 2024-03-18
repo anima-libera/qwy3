@@ -56,3 +56,7 @@ Advice:
 Default controls make sense for QWERTY keyboards. Most controls are configurable by editing the  `controls.qwy3_controls` file (created by the game in the current directory when it doesn't exist yet).
 
 The syntax is intuitive, key names are letters, numbers, or `up`, `down`, `left`, `right`, `space`, `left_shift`, `right_shift`, `tab`, `return`/`enter`; mouse button names are `left`, `right`, `middle`, or numbers.
+
+### License
+
+All the code and assets is this repository are under the [Apache-2.0 license](https://www.apache.org/licenses/LICENSE-2.0) unless specified otherwise. It is a very permissive license similar to the MIT license but with more wordy words and lettery letters that sort-of say "dont't sue me with patents and stuff".
