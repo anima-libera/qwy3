@@ -5,12 +5,10 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
+use crate::block_types::{BlockTypeId, BlockTypeTable};
+use crate::coords::{iter_3d_rect_inf_sup_excluded, CubicCoordsSpan, NonOrientedAxis};
 use crate::{
-	chunks::BlockTypeId,
-	coords::{iter_3d_rect_inf_sup_excluded, CubicCoordsSpan, NonOrientedAxis},
-};
-pub(crate) use crate::{
-	chunks::{BlockTypeTable, ChunkBlocks},
+	chunks::ChunkBlocks,
 	coords::{BlockCoords, ChunkCoordsSpan},
 	noise,
 };
@@ -3030,7 +3028,8 @@ mod structure_gen {
 	use cgmath::{EuclideanSpace, MetricSpace};
 
 	use crate::{
-		chunks::{BlockTypeId, BlockTypeTable, ChunkBlocks},
+		block_types::{BlockTypeId, BlockTypeTable},
+		chunks::ChunkBlocks,
 		coords::{BlockCoords, CubicCoordsSpan},
 		noise::OctavedNoise,
 	};

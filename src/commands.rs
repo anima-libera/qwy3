@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Write};
 
-pub(crate) use crate::{Action, Control};
+use crate::{unsorted::Action, unsorted::Control};
 
 pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 	let mut control_bindings: HashMap<Control, Action> = HashMap::new();

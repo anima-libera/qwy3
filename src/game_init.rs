@@ -5,31 +5,44 @@ use std::{
 	sync::{atomic::AtomicI32, Arc},
 };
 
-use crate::rendering_init;
-use crate::widgets::{Widget, WidgetLabel};
-use crate::world_gen::{WhichWorldGenerator, WorldGenerator};
-use crate::Action;
 use crate::{
 	atlas::Atlas,
+	coords::{AlignedBox, ChunkCoords},
 	font::Font,
+	rendering_init::{
+		init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy, init_fog_stuff,
+		init_shadow_map_stuff, init_skybox_stuff, init_sun_camera_matrices_thingy,
+		init_sun_light_direction_thingy, make_z_buffer_texture_view, AllBindingThingies, AtlasStuff,
+		FogStuff, ShadowMapStuff, SkyboxStuff, SunCameraStuff,
+	},
 	shaders::Vector2Pod,
 	skybox::{
 		default_skybox_painter, default_skybox_painter_3, generate_skybox_cubemap_faces_images,
 	},
 };
+use crate::{block_types::BlockTypeTable, unsorted::Action};
 use crate::{
 	camera::{CameraOrthographicSettings, CameraPerspectiveSettings},
-	ControlEvent,
+	unsorted::ControlEvent,
 };
-use crate::{chunk_loading::LoadingManager, Control};
-use crate::{chunks::*, font};
-use crate::{cmdline, rendering_init::*};
+use crate::{chunk_loading::LoadingManager, unsorted::Control};
+use crate::{
+	chunks::ChunkGrid,
+	widgets::{Widget, WidgetLabel},
+};
+use crate::{cmdline, rendering_init::BindingThingy};
 use crate::{commands, shaders::Vector3Pod};
-use crate::{coords::*, CurrentWorkerTasks};
+use crate::{coords::AngularDirection, font};
+use crate::{coords::BlockCoords, rendering_init};
+use crate::{coords::ChunkDimensions, threadpool};
 use crate::{lang, saves::Save};
-use crate::{line_meshes::*, threadpool};
-use crate::{physics::AlignedPhysBox, WhichCameraToUse};
-use crate::{skybox::SkyboxFaces, WorkerTask};
+use crate::{line_meshes::SimpleLineMesh, unsorted::CurrentWorkerTasks};
+use crate::{physics::AlignedPhysBox, unsorted::WhichCameraToUse};
+use crate::{
+	rendering_init::RenderPipelinesAndBindGroups,
+	world_gen::{WhichWorldGenerator, WorldGenerator},
+};
+use crate::{skybox::SkyboxFaces, unsorted::WorkerTask};
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};

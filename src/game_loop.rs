@@ -1,20 +1,27 @@
 use std::f32::consts::TAU;
 
-use crate::coords::*;
+use crate::chunks::Block;
+use crate::chunks::BlockData;
+use crate::coords::iter_3d_cube_center_radius;
+use crate::coords::AlignedBox;
+use crate::coords::BlockCoords;
+use crate::coords::ChunkCoordsSpan;
+use crate::font;
 use crate::lang;
-use crate::line_meshes::*;
-use crate::rendering_init::*;
+use crate::line_meshes::SimpleLineMesh;
+use crate::rendering_init::make_z_buffer_texture_view;
+use crate::rendering_init::update_atlas_texture;
+use crate::rendering_init::update_skybox_texture;
 use crate::shaders::Vector3Pod;
-use crate::Action;
-use crate::Control;
-use crate::SimpleTextureMesh;
-use crate::WhichCameraToUse;
-use crate::WorkerTask;
+use crate::unsorted::Action;
+use crate::unsorted::Control;
+use crate::unsorted::SimpleTextureMesh;
+use crate::unsorted::WhichCameraToUse;
+use crate::unsorted::WorkerTask;
 use crate::{
 	camera::{aspect_ratio, CameraSettings},
-	ControlEvent,
+	unsorted::ControlEvent,
 };
-use crate::{chunks::*, font};
 use crate::{
 	game_init::init_game,
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
@@ -27,6 +34,7 @@ use cgmath::{point3, InnerSpace, MetricSpace};
 use rand::Rng;
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 
+/// Initializes the game and run the main game loop.
 pub fn run_game_loop() {
 	let (mut game, event_loop) = init_game();
 

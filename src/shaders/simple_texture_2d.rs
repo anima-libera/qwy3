@@ -1,6 +1,6 @@
 use wgpu::vertex_attr_array;
 
-pub(crate) use crate::BindingThingy;
+use crate::rendering_init::BindingThingy;
 
 /// Vertex type used in meshes for display of interface 2D textures.
 #[derive(Copy, Clone, Debug)]

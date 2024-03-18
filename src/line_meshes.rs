@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-pub(crate) use crate::{coords::AlignedBox, shaders::simple_line::SimpleLineVertexPod};
+use crate::{coords::AlignedBox, shaders::simple_line::SimpleLineVertexPod};
 
 /// Mesh of simple lines.
 ///

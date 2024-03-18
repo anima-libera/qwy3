@@ -1,7 +1,7 @@
 use crate::{
-	chunks::{BlockTypeTable, ChunkGrid},
-	coords::AlignedBox,
-	AxisOrientation, BlockCoords, NonOrientedAxis, OrientedAxis,
+	block_types::BlockTypeTable,
+	chunks::ChunkGrid,
+	coords::{AlignedBox, AxisOrientation, BlockCoords, NonOrientedAxis, OrientedAxis},
 };
 
 use std::{sync::Arc, time::Duration};

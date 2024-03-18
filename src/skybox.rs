@@ -17,7 +17,8 @@ use image::Rgba;
 use wgpu::util::DeviceExt;
 
 use crate::{
-	noise::OctavedNoise, saves::Save, shaders::skybox::SkyboxVertexPod, OrientedAxis, SkyboxData,
+	coords::OrientedAxis, noise::OctavedNoise, rendering_init::SkyboxData, saves::Save,
+	shaders::skybox::SkyboxVertexPod,
 };
 
 pub(crate) const SKYBOX_SIDE_DIMS: (usize, usize) = (512, 512);

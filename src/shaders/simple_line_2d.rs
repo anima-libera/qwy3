@@ -1,5 +1,5 @@
 use super::simple_line::SimpleLineVertexPod;
-pub(crate) use crate::BindingThingy;
+use crate::rendering_init::BindingThingy;
 
 pub(crate) struct BindingThingies<'a> {
 	pub(crate) aspect_ratio_thingy: &'a BindingThingy<wgpu::Buffer>,

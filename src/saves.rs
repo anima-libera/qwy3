@@ -1,6 +1,6 @@
 //! Managing saves, their directory structures and all.
 
-use crate::{ChunkCoords, OrientedAxis};
+use crate::coords::{ChunkCoords, OrientedAxis};
 
 /// Represents a save, the directories and files that make a Qwy3 world persistent
 /// by keeping its state saved on the disk.

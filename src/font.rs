@@ -2,7 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::{shaders::simple_texture_2d::SimpleTextureVertexPod, RectInAtlas, SimpleTextureMesh};
+use crate::{
+	shaders::simple_texture_2d::SimpleTextureVertexPod, unsorted::RectInAtlas,
+	unsorted::SimpleTextureMesh,
+};
 
 #[derive(Clone)]
 struct CharacterDetails {

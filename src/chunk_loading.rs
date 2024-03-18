@@ -4,9 +4,13 @@ use cgmath::MetricSpace;
 use rand::Rng;
 
 use crate::{
-	iter_3d_cube_center_radius, saves::Save, threadpool::ThreadPool, world_gen::WorldGenerator,
-	BlockTypeTable, ChunkBlocks, ChunkCoords, ChunkCullingInfo, ChunkGrid, CurrentWorkerTasks,
-	OrientedAxis,
+	block_types::BlockTypeTable,
+	chunks::{ChunkBlocks, ChunkCullingInfo, ChunkGrid},
+	coords::{iter_3d_cube_center_radius, ChunkCoords, OrientedAxis},
+	saves::Save,
+	threadpool::ThreadPool,
+	unsorted::CurrentWorkerTasks,
+	world_gen::WorldGenerator,
 };
 
 /// Manages the loading of chunks, loading well-chosen ones in a well-chosen order.

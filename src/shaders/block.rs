@@ -1,6 +1,6 @@
 use wgpu::vertex_attr_array;
 
-pub(crate) use crate::BindingThingy;
+use crate::rendering_init::BindingThingy;
 
 /// Vertex type used in chunk block meshes.
 #[derive(Copy, Clone, Debug)]

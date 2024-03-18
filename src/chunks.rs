@@ -8,17 +8,17 @@ use cgmath::MetricSpace;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
-pub(crate) use crate::{
-	block_types::{BlockType, BlockTypeId, BlockTypeTable},
-	coords::{
-		iter_3d_cube_center_radius, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
-		OrientedAxis,
-	},
-	shaders::block::BlockVertexPod,
+use crate::{
+	block_types::{BlockTypeId, BlockTypeTable},
+	coords::{BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions, OrientedAxis},
 };
 use crate::{
-	chunk_meshing::ChunkMesh, font::Font, iter_3d_rect_inf_sup_included, saves::Save,
-	threadpool::ThreadPool, CubicCoordsSpan, CurrentWorkerTasks,
+	chunk_meshing::ChunkMesh,
+	coords::{iter_3d_rect_inf_sup_included, CubicCoordsSpan},
+	font::Font,
+	saves::Save,
+	threadpool::ThreadPool,
+	unsorted::CurrentWorkerTasks,
 };
 
 #[derive(Clone, Serialize, Deserialize)]

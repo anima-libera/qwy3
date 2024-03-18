@@ -4,10 +4,14 @@ use cgmath::{EuclideanSpace, InnerSpace};
 use wgpu::util::DeviceExt;
 
 use crate::{
+	block_types::{BlockType, BlockTypeTable},
+	chunks::{BlockData, ChunkBlocks, ChunkGrid},
+	coords::{
+		iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords,
+		ChunkCoords, ChunkCoordsSpan, ChunkDimensions, NonOrientedAxis, OrientedAxis,
+	},
 	font::{self, Font},
-	iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords, BlockData,
-	BlockType, BlockTypeTable, BlockVertexPod, ChunkBlocks, ChunkCoords, ChunkCoordsSpan,
-	ChunkDimensions, ChunkGrid, NonOrientedAxis, OrientedAxis,
+	shaders::block::BlockVertexPod,
 };
 
 /// All the data that is needed to generate the mesh of a chunk.

@@ -2,9 +2,12 @@ use std::{mem::size_of, sync::Arc};
 
 use crate::{
 	camera::{CameraOrthographicSettings, Matrix4x4Pod},
+	chunks::ChunkGrid,
+	line_meshes::SimpleLineMesh,
+	rendering_init::{BindingThingy, RenderPipelinesAndBindGroups},
 	skybox::SkyboxMesh,
-	BindingThingy, ChunkGrid, RenderPipelinesAndBindGroups, SimpleLineMesh, SimpleTextureMesh,
-	WhichCameraToUse,
+	unsorted::SimpleTextureMesh,
+	unsorted::WhichCameraToUse,
 };
 
 pub(crate) struct DataForRendering<'a> {
