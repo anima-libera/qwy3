@@ -12,14 +12,14 @@ struct CharacterDetails {
 
 pub(crate) struct Font {
 	character_details_map: HashMap<char, CharacterDetails>,
-	/// Character details for the special character that is used to represent errors
-	/// in representing normal characters.
+	/// Character details for the special character that is used to represent
+	/// erroneous or unsupported characters.
 	error_character_detials: CharacterDetails,
 	max_character_height_in_pixels: i32,
 }
 
 impl Font {
-	pub(crate) fn font_01() -> Font {
+	pub(crate) fn _font_01() -> Font {
 		let mut character_details_map = HashMap::new();
 
 		let coords_asset_to_details = |x: i32, y: i32, w: i32, h: i32| -> CharacterDetails {
@@ -85,6 +85,122 @@ impl Font {
 		let error_character_detials = block_character_details;
 
 		let max_character_height_in_pixels = 5;
+
+		Font {
+			character_details_map,
+			error_character_detials,
+			max_character_height_in_pixels,
+		}
+	}
+
+	pub(crate) fn font_02() -> Font {
+		let mut character_details_map = HashMap::new();
+
+		let coords_asset_to_details = |x: i32, y: i32, w: i32, h: i32| -> CharacterDetails {
+			let y = y + 32; // The assert image is loaded into y=32+ area of the atlas.
+			CharacterDetails {
+				rect_in_atlas: RectInAtlas {
+					texture_rect_in_atlas_xy: cgmath::point2(x as f32, y as f32) * (1.0 / 512.0),
+					texture_rect_in_atlas_wh: cgmath::vec2(w as f32, h as f32) * (1.0 / 512.0),
+				},
+				dimensions_in_pixels: cgmath::vec2(w, h),
+			}
+		};
+
+		{
+			let upper_y = 0;
+			let lower_y = 8;
+			let mut x = 0;
+			for letter_lower in "abcdefghijklmnopqrstuvwxyz".chars() {
+				let letter_upper = letter_lower.to_ascii_uppercase();
+
+				let upper_w = match letter_upper {
+					'I' => 1,
+					'J' => 3,
+					'M' | 'T' | 'W' | 'X' => 5,
+					letter if letter.is_ascii_uppercase() => 4,
+					other => panic!("Only uppercase ascii letters are handled here, not '{other}'"),
+				};
+				let lower_w = match letter_lower {
+					'i' => 1,
+					'l' => 2,
+					'f' | 'j' | 'k' | 's' | 't' | 'z' => 3,
+					'm' | 'w' => 5,
+					letter if letter.is_ascii_lowercase() => 4,
+					other => panic!("Only lowercase ascii letters are handled here, not '{other}'"),
+				};
+
+				character_details_map.insert(
+					letter_upper,
+					coords_asset_to_details(x, upper_y, upper_w, 7),
+				);
+				character_details_map.insert(
+					letter_lower,
+					coords_asset_to_details(x, lower_y, lower_w, 7),
+				);
+
+				x += upper_w + 1;
+			}
+		}
+
+		{
+			let chars_and_widths = [
+				('0', 4),
+				('1', 3),
+				('2', 4),
+				('3', 4),
+				('4', 4),
+				('5', 4),
+				('6', 4),
+				('7', 4),
+				('8', 4),
+				('9', 4),
+				('.', 1),
+				(':', 1),
+				('!', 1),
+				('|', 1),
+				(',', 2),
+				(';', 2),
+				('`', 2),
+				('\'', 2),
+				('[', 2),
+				(']', 2),
+				('(', 2),
+				(')', 2),
+				('_', 4),
+				('/', 4),
+				('\\', 4),
+				('{', 3),
+				('}', 3),
+				('%', 4),
+				('#', 5),
+				('\"', 3),
+				('^', 3),
+				('?', 4),
+				('+', 3),
+				('-', 3),
+				('*', 3),
+				('=', 3),
+				('@', 4),
+				('<', 3),
+				('>', 3),
+				('¨', 3),
+				('~', 4),
+				('°', 3),
+				('█', 4),
+				('�', 4),
+			];
+			let y = 16;
+			let mut x = 0;
+			for (character, width) in chars_and_widths {
+				character_details_map.insert(character, coords_asset_to_details(x, y, width, 7));
+				x += width + 1;
+			}
+		}
+
+		let error_character_detials = character_details_map[&'�'].clone();
+
+		let max_character_height_in_pixels = 7;
 
 		Font {
 			character_details_map,

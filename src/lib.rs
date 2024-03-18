@@ -547,7 +547,7 @@ fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	} = init_atlas_stuff(Arc::clone(&device), &queue, atlas.image.as_ref());
 	let output_atlas_when_generated = output_atlas;
 
-	let font = Arc::new(Font::font_01());
+	let font = Arc::new(Font::font_02());
 
 	let skybox_faces_loaded_from_save = save.as_ref().and_then(SkyboxFaces::load_from_save);
 	let need_generation_of_the_better_skybox = skybox_faces_loaded_from_save.is_none();

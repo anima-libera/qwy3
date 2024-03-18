@@ -22,7 +22,7 @@ impl Atlas {
 
 		// Font
 		let mut font_image =
-			image::load_from_memory(include_bytes!("../assets/font-01.png")).unwrap();
+			image::load_from_memory(include_bytes!("../assets/font-02.png")).unwrap();
 		font_image.as_mut_rgba8().unwrap().pixels_mut().for_each(|pixel| {
 			// We keep black as white (to multiply with colors) and discard everything else.
 			*pixel = if pixel.0 == [0, 0, 0, 255] {
