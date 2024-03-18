@@ -99,6 +99,6 @@
 
 - Profile (maybe with https://github.com/killercup/cargo-flamegraph or something else).
 - Profile but with https://github.com/plasma-umass/coz maybe?
-- Reduce the length of `lib.rs` and the `run` function!
+- Reduce the length of `lib.rs` and the `run_game_loop` function.
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
