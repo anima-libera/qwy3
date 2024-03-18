@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
 	block_types::{BlockTypeId, BlockTypeTable},
-	coords::{BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions, OrientedAxis},
-};
-use crate::{
 	chunk_meshing::ChunkMesh,
-	coords::{iter_3d_rect_inf_sup_included, CubicCoordsSpan},
+	coords::{
+		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
+		CubicCoordsSpan, OrientedAxis,
+	},
 	font::Font,
 	saves::Save,
 	threadpool::ThreadPool,

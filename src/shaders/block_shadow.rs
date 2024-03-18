@@ -1,5 +1,5 @@
-use super::block::BlockVertexPod;
 use crate::rendering_init::BindingThingy;
+use crate::shaders::block::BlockVertexPod;
 
 pub(crate) struct BindingThingies<'a> {
 	pub(crate) sun_camera_single_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,

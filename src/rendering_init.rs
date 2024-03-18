@@ -4,8 +4,10 @@ use std::sync::Arc;
 use bytemuck::Zeroable;
 use wgpu::util::DeviceExt;
 
-use crate::shaders::{Vector2Pod, Vector3Pod};
-use crate::{camera::Matrix4x4Pod, shaders};
+use crate::{
+	camera::Matrix4x4Pod,
+	shaders::{self, Vector2Pod, Vector3Pod},
+};
 
 /// Type representation for the `ty` and `count` fields of a `wgpu::BindGroupLayoutEntry`.
 #[derive(Clone)]

@@ -30,24 +30,22 @@ pub use game_loop::run_game_loop;
 
 /// TODO: Move everything in here to more appropriate modules!
 pub(crate) mod unsorted {
-	use crate::block_types::BlockTypeTable;
-	use crate::chunks::{ChunkBlocks, ChunkCullingInfo};
-	use crate::coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions};
-	use crate::shaders;
-
-	use std::sync::{atomic::AtomicI32, Arc};
-
-	use crate::chunk_meshing::{ChunkMesh, DataForChunkMeshing};
-	use crate::saves::Save;
-	use crate::skybox::SkyboxFaces;
-	use crate::threadpool::ThreadPool;
 	use cgmath::ElementWise;
+	use std::sync::{atomic::AtomicI32, Arc};
 	use wgpu::util::DeviceExt;
 
-	use crate::shaders::simple_texture_2d::SimpleTextureVertexPod;
-	use crate::world_gen::WorldGenerator;
-
-	use crate::atlas::Atlas;
+	use crate::{
+		atlas::Atlas,
+		block_types::BlockTypeTable,
+		chunk_meshing::{ChunkMesh, DataForChunkMeshing},
+		chunks::{ChunkBlocks, ChunkCullingInfo},
+		coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+		saves::Save,
+		shaders::{self, simple_texture_2d::SimpleTextureVertexPod},
+		skybox::SkyboxFaces,
+		threadpool::ThreadPool,
+		world_gen::WorldGenerator,
+	};
 
 	#[derive(Clone, Copy)]
 	pub(crate) enum WhichCameraToUse {

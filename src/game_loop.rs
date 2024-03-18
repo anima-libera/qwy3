@@ -1,33 +1,19 @@
 use std::f32::consts::TAU;
 
-use crate::chunks::Block;
-use crate::chunks::BlockData;
-use crate::coords::iter_3d_cube_center_radius;
-use crate::coords::AlignedBox;
-use crate::coords::BlockCoords;
-use crate::coords::ChunkCoordsSpan;
-use crate::font;
-use crate::lang;
-use crate::line_meshes::SimpleLineMesh;
-use crate::rendering_init::make_z_buffer_texture_view;
-use crate::rendering_init::update_atlas_texture;
-use crate::rendering_init::update_skybox_texture;
-use crate::shaders::Vector3Pod;
-use crate::unsorted::Action;
-use crate::unsorted::Control;
-use crate::unsorted::SimpleTextureMesh;
-use crate::unsorted::WhichCameraToUse;
-use crate::unsorted::WorkerTask;
 use crate::{
 	camera::{aspect_ratio, CameraSettings},
-	unsorted::ControlEvent,
-};
-use crate::{
-	game_init::init_game,
+	chunks::{Block, BlockData},
+	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
+	font,
+	game_init::{init_game, save_savable_state},
+	lang::{self, LogItem},
+	line_meshes::SimpleLineMesh,
+	rendering,
+	rendering_init::{make_z_buffer_texture_view, update_atlas_texture, update_skybox_texture},
+	shaders::{Vector2Pod, Vector3Pod},
+	skybox::SkyboxMesh,
+	unsorted::{Action, Control, ControlEvent, SimpleTextureMesh, WhichCameraToUse, WorkerTask},
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
-};
-use crate::{
-	game_init::save_savable_state, lang::LogItem, rendering, shaders::Vector2Pod, skybox::SkyboxMesh,
 };
 
 use cgmath::{point3, InnerSpace, MetricSpace};

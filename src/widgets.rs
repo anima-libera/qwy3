@@ -3,9 +3,10 @@ use std::sync::Arc;
 
 use cgmath::EuclideanSpace;
 
-use crate::font;
-use crate::shaders::simple_line::SimpleLineVertexPod;
-use crate::shaders::simple_texture_2d::SimpleTextureVertexPod;
+use crate::{
+	font,
+	shaders::{simple_line::SimpleLineVertexPod, simple_texture_2d::SimpleTextureVertexPod},
+};
 
 fn simple_line_vertices_for_rect(
 	top_left: cgmath::Point3<f32>,
