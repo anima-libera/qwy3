@@ -160,17 +160,28 @@ impl WorldGenerator for DefaultWorldGenerator {
 			let scale = 75.0;
 			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
+		let coords_to_generated_block = |coords: BlockCoords| -> Option<BlockTypeId> {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			(noise_a.sample_3d_1d(coordsf / scale, &[]) > 0.75).then(|| {
+				let type_scale = 200.0;
+				let index = (noise_b.sample_3d_1d(coordsf / type_scale, &[]) * 10.0) as usize;
+				block_type_table.generated_test_id(index)
+			})
+		};
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
+				let ground_maybe_generated =
+					coords_to_generated_block(coords).unwrap_or(block_type_table.ground_id());
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
 				if ground_above {
-					block_type_table.ground_id()
+					ground_maybe_generated
 				} else {
 					let no_grass = coords_to_no_grass(coords);
 					if no_grass {
-						block_type_table.ground_id()
+						ground_maybe_generated
 					} else {
 						block_type_table.kinda_grass_id()
 					}
