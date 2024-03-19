@@ -565,6 +565,7 @@ pub fn run_game_loop() {
 				game.player_chunk(),
 				unloading_distance,
 				game.save.as_ref(),
+				game.only_save_modified_chunks,
 			);
 
 			// Walking.
@@ -793,7 +794,7 @@ pub fn run_game_loop() {
 		Event::LoopExiting => {
 			if game.save.is_some() {
 				save_savable_state(&game);
-				game.chunk_grid.unload_all_chunks(game.save.as_ref());
+				game.chunk_grid.unload_all_chunks(game.save.as_ref(), game.only_save_modified_chunks);
 			}
 		},
 

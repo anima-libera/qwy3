@@ -73,6 +73,10 @@ pub(crate) struct CommandLineSettings {
 	#[arg(long = "save", short = 's', value_name = "NAME")]
 	pub(crate) save_name: Option<String>,
 
+	/// Only save modified chunks (smaller save size, but no faster load time).
+	#[arg(long = "only-modified")]
+	pub(crate) only_save_modified_chunks: bool,
+
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]
 	pub(crate) test_lang: Option<u32>,

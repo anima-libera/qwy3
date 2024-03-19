@@ -57,27 +57,35 @@ pub(crate) struct ChunkBlocks {
 	pub(crate) coords_span: ChunkCoordsSpan,
 	savable: ChunkBlocksSavable,
 }
+/// Part of `ChunkBlocks` that can be saved/loaded to/from disk.
 #[derive(Clone, Serialize, Deserialize)]
 struct ChunkBlocksSavable {
 	/// If the length is zero then it means the chunk is full of air.
 	block_ids: Vec<BlockTypeId>,
 	/// Negative block ids are keys to this table.
 	blocks_with_data: FxHashMap<BlockTypeId, Block>,
+	/// Next available id number for blocks with data.
 	next_id_for_block_with_data: i16,
+	/// If the blocks ever underwent a change since the chunk generation, then it is flagged
+	/// as `modified`. If we want to reduce the size of the saved data then we can avoid saving
+	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
+	modified: bool,
 }
 
 impl ChunkBlocks {
-	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
+	fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
 			savable: ChunkBlocksSavable {
 				block_ids: vec![],
 				blocks_with_data: HashMap::default(),
 				next_id_for_block_with_data: -1,
+				modified: false,
 			},
 		}
 	}
 
+	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
 		Some(if self.savable.block_ids.is_empty() {
@@ -105,17 +113,21 @@ impl ChunkBlocks {
 				}
 				self.savable.block_ids[internal_index] = block_id;
 			}
+			self.savable.modified = true;
 		}
 	}
 
 	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
-		if block.data.is_some() {
-			let new_id = BlockTypeId { value: self.savable.next_id_for_block_with_data };
-			self.savable.next_id_for_block_with_data -= 1;
-			self.savable.blocks_with_data.insert(new_id, block);
-			self.set_simple(coords, new_id);
-		} else {
-			self.set_simple(coords, block.type_id);
+		if self.coords_span.contains(coords) {
+			if block.data.is_some() {
+				let new_id = BlockTypeId { value: self.savable.next_id_for_block_with_data };
+				self.savable.next_id_for_block_with_data -= 1;
+				self.savable.blocks_with_data.insert(new_id, block);
+				self.set_simple(coords, new_id);
+			} else {
+				self.set_simple(coords, block.type_id);
+			}
+			self.savable.modified = true;
 		}
 	}
 
@@ -155,6 +167,35 @@ impl ChunkBlocks {
 		}
 		let savable: ChunkBlocksSavable = rmp_serde::decode::from_slice(&uncompressed_data).unwrap();
 		Some(ChunkBlocks { coords_span, savable })
+	}
+}
+
+/// Wrapper around `ChunkBlocks` to be used for generating chunk blocks.
+/// It ensures that even after modifying the chunk blocks (in the process of generating it)
+/// the resulting `ChunkBlocks` will not be flagged as `modified`.
+pub(crate) struct ChunkBlocksBeingGenerated(ChunkBlocks);
+
+impl ChunkBlocksBeingGenerated {
+	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocksBeingGenerated {
+		ChunkBlocksBeingGenerated(ChunkBlocks::new_empty(coords_span))
+	}
+
+	pub(crate) fn coords_span(&self) -> ChunkCoordsSpan {
+		self.0.coords_span
+	}
+	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
+		self.0.get(coords)
+	}
+	pub(crate) fn set_simple(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
+		self.0.set_simple(coords, block_id);
+	}
+	pub(crate) fn _set(&mut self, coords: BlockCoords, block: Block) {
+		self.0.set(coords, block);
+	}
+
+	pub(crate) fn finish_generation(mut self) -> ChunkBlocks {
+		self.0.savable.modified = false;
+		self.0
 	}
 }
 
@@ -416,11 +457,18 @@ impl ChunkGrid {
 		self.culling_info_map.insert(chunk_coords, chunk_culling_info);
 	}
 
-	fn unload_chunk(&mut self, chunk_coords: ChunkCoords, save: Option<&Arc<Save>>) {
+	fn unload_chunk(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		save: Option<&Arc<Save>>,
+		only_save_modified_chunks: bool,
+	) {
 		let chunk_blocks = self.blocks_map.remove(&chunk_coords);
 		if let Some(chunk_blocks) = chunk_blocks {
 			if let Some(save) = save {
-				chunk_blocks.save(save);
+				if !only_save_modified_chunks || chunk_blocks.savable.modified {
+					chunk_blocks.save(save);
+				}
 			}
 		}
 		self.culling_info_map.remove(&chunk_coords);
@@ -433,6 +481,7 @@ impl ChunkGrid {
 		player_chunk_coords: ChunkCoords,
 		unloading_distance_in_blocks: f32,
 		save: Option<&Arc<Save>>,
+		only_save_modified_chunks: bool,
 	) {
 		let unloading_distance_in_chunks = unloading_distance_in_blocks / self.cd.edge as f32;
 		// TODO: Avoid copying all the keys in a vector and iterating over all the chunks every frame.
@@ -441,15 +490,19 @@ impl ChunkGrid {
 			let dist_in_chunks =
 				chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
 			if dist_in_chunks > unloading_distance_in_chunks {
-				self.unload_chunk(chunk_coords, save);
+				self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
 			}
 		}
 	}
 
-	pub(crate) fn unload_all_chunks(&mut self, save: Option<&Arc<Save>>) {
+	pub(crate) fn unload_all_chunks(
+		&mut self,
+		save: Option<&Arc<Save>>,
+		only_save_modified_chunks: bool,
+	) {
 		let chunk_coords_list: Vec<_> = self.blocks_map.keys().copied().collect();
 		for chunk_coords in chunk_coords_list.into_iter() {
-			self.unload_chunk(chunk_coords, save);
+			self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
 		}
 	}
 }

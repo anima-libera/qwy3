@@ -44,6 +44,7 @@ struct StateSavable {
 	chunk_dimensions_edge: i32,
 	world_gen_seed: i32,
 	which_world_generator: WhichWorldGenerator,
+	only_save_modified_chunks: bool,
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
 }
@@ -55,6 +56,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		chunk_dimensions_edge: game.cd.edge,
 		world_gen_seed: game.world_gen_seed,
 		which_world_generator: game.which_world_generator,
+		only_save_modified_chunks: game.only_save_modified_chunks,
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
 	};
@@ -121,6 +123,7 @@ pub(crate) struct Game {
 	pub(crate) output_atlas_when_generated: bool,
 	pub(crate) atlas_texture: wgpu::Texture,
 	pub(crate) save: Option<Arc<Save>>,
+	pub(crate) only_save_modified_chunks: bool,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -171,6 +174,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		no_fog,
 		fog_margin,
 		save_name,
+		only_save_modified_chunks,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -288,6 +292,11 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		println!("Warning: No save specified, nothing will persist.");
 		println!("A save name can be specified using `-s <NAME>` or `--save <NAME>`.");
 	}
+
+	let only_save_modified_chunks = saved_state
+		.as_ref()
+		.map(|state| state.only_save_modified_chunks)
+		.unwrap_or(only_save_modified_chunks);
 
 	let world_gen_seed =
 		saved_state.as_ref().map(|state| state.world_gen_seed).unwrap_or(world_gen_seed);
@@ -645,6 +654,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		output_atlas_when_generated,
 		atlas_texture,
 		save,
+		only_save_modified_chunks,
 
 		worker_tasks,
 		pool,

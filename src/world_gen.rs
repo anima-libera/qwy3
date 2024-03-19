@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use crate::block_types::{BlockTypeId, BlockTypeTable};
+use crate::chunks::ChunkBlocksBeingGenerated;
 use crate::coords::{iter_3d_rect_inf_sup_excluded, CubicCoordsSpan, NonOrientedAxis};
 use crate::{
 	chunks::ChunkBlocks,
@@ -159,8 +160,8 @@ impl WorldGenerator for DefaultWorldGenerator {
 			let scale = 75.0;
 			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -191,7 +192,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -203,8 +204,8 @@ impl WorldGenerator for FlatWorldGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let block = match coords.z.cmp(&0) {
 				Ordering::Less => block_type_table.ground_id(),
 				Ordering::Equal => block_type_table.kinda_grass_id(),
@@ -212,7 +213,7 @@ impl WorldGenerator for FlatWorldGenerator {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -224,8 +225,8 @@ impl WorldGenerator for EmptyWorldGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let block =
 				if coords.z == -1 && (-3..=3).contains(&coords.x) && (-3..=3).contains(&coords.y) {
 					block_type_table.ground_id()
@@ -234,7 +235,7 @@ impl WorldGenerator for EmptyWorldGenerator {
 				};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -278,8 +279,8 @@ impl WorldGenerator for WorldGeneratorLines01 {
 			let scale = 75.0;
 			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -310,7 +311,7 @@ impl WorldGenerator for WorldGeneratorLines01 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -331,8 +332,8 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 			let a = noise_a.sample_3d_1d(coordsf / scale, &[]);
 			a < 0.35
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -346,7 +347,7 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -376,8 +377,8 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 			let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
 			(coordsf - coordsf_min).distance(the) < radius
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -391,7 +392,7 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -430,8 +431,8 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 			let the = cgmath::vec3(a, b, c).map(|x| radius + x * (scale - 2.0 * radius));
 			(coordsf - coordsf_min).distance(the) < radius
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -445,7 +446,7 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -498,8 +499,8 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 			let vm = distance_to_segment(the, xm, coordsf);
 			vp < radius || vm < radius
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -513,7 +514,7 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -566,8 +567,8 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -581,7 +582,7 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -644,8 +645,8 @@ impl WorldGenerator for WorldGeneratorLinks {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -659,7 +660,7 @@ impl WorldGenerator for WorldGeneratorLinks {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -728,8 +729,8 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -743,7 +744,7 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -809,8 +810,8 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -824,7 +825,7 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -913,8 +914,8 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -928,7 +929,7 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1033,8 +1034,8 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 			let deformed_coordsf = coordsf + deformation;
 			coords_to_ground_uwu(deformed_coordsf)
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1048,7 +1049,7 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1123,8 +1124,8 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			};
 			noise_grass_b.sample_3d_1d(coordsf, &[]) < density
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1143,7 +1144,7 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1178,8 +1179,8 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 			let uwu = abc.dot(def);
 			uwu < -0.4 && def.z < 0.0
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1193,7 +1194,7 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1221,8 +1222,8 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			coords_to_ground_uwu(coords) < coords_to_ground_uwu(coords + cgmath::vec3(0, 0, 1))
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1236,7 +1237,7 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1271,8 +1272,8 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 				coords.z < 10
 			}
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1286,7 +1287,7 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1318,8 +1319,8 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 			let void = coords_to_void(coords);
 			(coords.z as f32).abs() < 6.0 / (1.0 / (1.0 - void))
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1333,7 +1334,7 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1365,8 +1366,8 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 			let void = coords_to_void(coords);
 			(coords.z as f32).abs() < (1.0 / void).log2() / (1.0 / (1.0 - void))
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1380,7 +1381,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1411,8 +1412,8 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 			let void = coords_to_void(coords);
 			(coords.z as f32).abs() < 20.0 / (1.0 / (1.0 - void))
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1426,7 +1427,7 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1455,8 +1456,8 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 			//let ry = ry + f32::sin(angle) * distance;
 			v < 0.5
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1470,7 +1471,7 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1506,8 +1507,8 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 			}
 			false
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1521,7 +1522,7 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1603,8 +1604,8 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 			let coordsf = coords.map(|x| x as f32);
 			coordsf.z < height
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1618,7 +1619,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1694,8 +1695,8 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 			let coordsf = coords.map(|x| x as f32);
 			coordsf.z < height
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1709,7 +1710,7 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1731,8 +1732,8 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 			let height = 20.0 * noise_a.sample_2d_1d(coordsf_xy / scale, &[]);
 			coordsf.z < height
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -1746,7 +1747,7 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1818,11 +1819,12 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			};
 
 		// Define structure generation.
-		let structure_place_block = |block_coords: BlockCoords,
-		                             block_type_to_place: BlockTypeId,
-		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set_simple(block_coords, block_type_to_place);
-		};
+		let structure_place_block =
+			|block_coords: BlockCoords,
+			 block_type_to_place: BlockTypeId,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				chunk_blocks.set_simple(block_coords, block_type_to_place);
+			};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
 			// BUT some structures may have already modified it, so we should not use it.
@@ -1832,36 +1834,36 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 		// generation can place blocks. A radius of 1 means just the origin block, a
 		// radius of 2 means a 3x3x3 blocks sized cube around the origin block, etc.
 		let structure_max_blocky_radius = 42;
-		let generate_structure = |origin_block_coords: BlockCoords,
-		                          chunk_blocks: &mut ChunkBlocks| {
-			for direction in crate::coords::OrientedAxis::all_the_six_possible_directions() {
-				let mut placing_head = origin_block_coords;
-				let delta = direction.delta();
-				for _i in 0..structure_max_blocky_radius {
-					if !block_type_table
-						.get(structure_look_terrain_block(placing_head))
-						.unwrap()
-						.is_air()
-					{
-						break;
+		let generate_structure =
+			|origin_block_coords: BlockCoords, chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				for direction in crate::coords::OrientedAxis::all_the_six_possible_directions() {
+					let mut placing_head = origin_block_coords;
+					let delta = direction.delta();
+					for _i in 0..structure_max_blocky_radius {
+						if !block_type_table
+							.get(structure_look_terrain_block(placing_head))
+							.unwrap()
+							.is_air()
+						{
+							break;
+						}
+						structure_place_block(placing_head, block_type_table.ground_id(), chunk_blocks);
+						placing_head += delta;
 					}
-					structure_place_block(placing_head, block_type_table.ground_id(), chunk_blocks);
-					placing_head += delta;
 				}
-			}
-			for coords in crate::coords::iter_3d_cube_center_radius(
-				origin_block_coords,
-				structure_max_blocky_radius.min(4),
-			) {
-				structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
-			}
-		};
+				for coords in crate::coords::iter_3d_cube_center_radius(
+					origin_block_coords,
+					structure_max_blocky_radius.min(4),
+				) {
+					structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+				}
+			};
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -1910,7 +1912,7 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			}
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -1982,11 +1984,12 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			};
 
 		// Define structure generation.
-		let structure_place_block = |block_coords: BlockCoords,
-		                             block_type_to_place: BlockTypeId,
-		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set_simple(block_coords, block_type_to_place);
-		};
+		let structure_place_block =
+			|block_coords: BlockCoords,
+			 block_type_to_place: BlockTypeId,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				chunk_blocks.set_simple(block_coords, block_type_to_place);
+			};
 		let _structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
 			// BUT some structures may have already modified it, so we should not use it.
@@ -1997,137 +2000,139 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 		// radius of 2 means a 3x3x3 blocks sized cube around the origin block, etc.
 		let structure_max_blocky_radius = 42;
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
-		let generate_structure = |origin_block_coords: BlockCoords,
-		                          chunk_blocks: &mut ChunkBlocks| {
-			// Setup function thta says if we are in the cubic area that we can actually modify.
-			let coords_span_writable_inf_included =
-				origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
-			let coords_span_writable_sup_excluded =
-				origin_block_coords + cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
-			let coords_are_writable = |block_coords: BlockCoords| -> bool {
-				let inf = coords_span_writable_inf_included;
-				let sup_excluded = coords_span_writable_sup_excluded;
-				let c = block_coords;
-				(inf.x <= c.x && c.x < sup_excluded.x)
-					&& (inf.y <= c.y && c.y < sup_excluded.y)
-					&& (inf.z <= c.z && c.z < sup_excluded.z)
-			};
+		let generate_structure =
+			|origin_block_coords: BlockCoords, chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				// Setup function thta says if we are in the cubic area that we can actually modify.
+				let coords_span_writable_inf_included =
+					origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
+				let coords_span_writable_sup_excluded = origin_block_coords
+					+ cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
+				let coords_are_writable = |block_coords: BlockCoords| -> bool {
+					let inf = coords_span_writable_inf_included;
+					let sup_excluded = coords_span_writable_sup_excluded;
+					let c = block_coords;
+					(inf.x <= c.x && c.x < sup_excluded.x)
+						&& (inf.y <= c.y && c.y < sup_excluded.y)
+						&& (inf.z <= c.z && c.z < sup_excluded.z)
+				};
 
-			// Find nearby structures that we can link to.
-			let coords_span_in_which_structure_origins_can_link_inf_included =
-				origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
-			let coords_span_in_which_structure_origins_can_link_sup_excluded =
-				origin_block_coords + cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
-			let coords_span_in_which_structure_origins_can_link_sup_included =
-				coords_span_in_which_structure_origins_can_link_sup_excluded - cgmath::vec3(1, 1, 1);
-			let structure_origin_can_link = |other_origin_block_coords: BlockCoords| -> bool {
-				let inf = coords_span_in_which_structure_origins_can_link_inf_included;
-				let sup_excluded = coords_span_in_which_structure_origins_can_link_sup_excluded;
-				let c = other_origin_block_coords;
-				(inf.x <= c.x && c.x < sup_excluded.x)
-					&& (inf.y <= c.y && c.y < sup_excluded.y)
-					&& (inf.z <= c.z && c.z < sup_excluded.z)
-			};
-			let cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link =
-				block_coords_to_cell_coords(
-					coords_span_in_which_structure_origins_can_link_inf_included,
-				);
-			let cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link =
-				block_coords_to_cell_coords(
-					coords_span_in_which_structure_origins_can_link_sup_included,
-				);
-			let cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link =
-				cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link
-					+ cgmath::vec3(1, 1, 1);
-			for cell_coords in iter_3d_rect_inf_sup_excluded(
-				cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link,
-				cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link,
-			) {
-				let number_of_origins = cell_coords_to_number_of_structure_origins(cell_coords);
-				for origin_index in 0..number_of_origins {
-					let other_origin_coords =
-						cell_coords_and_structure_origin_index_to_origin_coords_in_world(
-							cell_coords,
-							origin_index,
-						);
-					if other_origin_coords == origin_block_coords {
-						// We just found ourselves.
-						continue;
-					}
-					if structure_origin_can_link(other_origin_coords) {
-						// Hehe found one, let's decide if we link.
-						// We get two noise values that we will also get (in the other order)
-						// in the other structure, and when we add them we get the same value
-						// that the other would get, so we can agree on something that way ^^.
-						let value_us_to_other = noise_a.sample(
-							&[],
-							&[&[
-								origin_block_coords.x,
-								origin_block_coords.y,
-								origin_block_coords.z,
-								other_origin_coords.x,
-								other_origin_coords.y,
-								other_origin_coords.z,
-							]],
-						);
-						let value_other_to_us = noise_a.sample(
-							&[],
-							&[&[
-								other_origin_coords.x,
-								other_origin_coords.y,
-								other_origin_coords.z,
-								origin_block_coords.x,
-								origin_block_coords.y,
-								origin_block_coords.z,
-							]],
-						);
-						// We only link to a few other structures because if we linked
-						// to everyone we could then it fills the world with links
-						// and it becomes difficult to see and appreciate the generation.
-						let link = (value_us_to_other + value_other_to_us) * 0.5 < 0.08;
+				// Find nearby structures that we can link to.
+				let coords_span_in_which_structure_origins_can_link_inf_included =
+					origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
+				let coords_span_in_which_structure_origins_can_link_sup_excluded = origin_block_coords
+					+ cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
+				let coords_span_in_which_structure_origins_can_link_sup_included =
+					coords_span_in_which_structure_origins_can_link_sup_excluded - cgmath::vec3(1, 1, 1);
+				let structure_origin_can_link = |other_origin_block_coords: BlockCoords| -> bool {
+					let inf = coords_span_in_which_structure_origins_can_link_inf_included;
+					let sup_excluded = coords_span_in_which_structure_origins_can_link_sup_excluded;
+					let c = other_origin_block_coords;
+					(inf.x <= c.x && c.x < sup_excluded.x)
+						&& (inf.y <= c.y && c.y < sup_excluded.y)
+						&& (inf.z <= c.z && c.z < sup_excluded.z)
+				};
+				let cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link =
+					block_coords_to_cell_coords(
+						coords_span_in_which_structure_origins_can_link_inf_included,
+					);
+				let cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link =
+					block_coords_to_cell_coords(
+						coords_span_in_which_structure_origins_can_link_sup_included,
+					);
+				let cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link =
+					cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link
+						+ cgmath::vec3(1, 1, 1);
+				for cell_coords in iter_3d_rect_inf_sup_excluded(
+					cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link,
+					cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link,
+				) {
+					let number_of_origins = cell_coords_to_number_of_structure_origins(cell_coords);
+					for origin_index in 0..number_of_origins {
+						let other_origin_coords =
+							cell_coords_and_structure_origin_index_to_origin_coords_in_world(
+								cell_coords,
+								origin_index,
+							);
+						if other_origin_coords == origin_block_coords {
+							// We just found ourselves.
+							continue;
+						}
+						if structure_origin_can_link(other_origin_coords) {
+							// Hehe found one, let's decide if we link.
+							// We get two noise values that we will also get (in the other order)
+							// in the other structure, and when we add them we get the same value
+							// that the other would get, so we can agree on something that way ^^.
+							let value_us_to_other = noise_a.sample(
+								&[],
+								&[&[
+									origin_block_coords.x,
+									origin_block_coords.y,
+									origin_block_coords.z,
+									other_origin_coords.x,
+									other_origin_coords.y,
+									other_origin_coords.z,
+								]],
+							);
+							let value_other_to_us = noise_a.sample(
+								&[],
+								&[&[
+									other_origin_coords.x,
+									other_origin_coords.y,
+									other_origin_coords.z,
+									origin_block_coords.x,
+									origin_block_coords.y,
+									origin_block_coords.z,
+								]],
+							);
+							// We only link to a few other structures because if we linked
+							// to everyone we could then it fills the world with links
+							// and it becomes difficult to see and appreciate the generation.
+							let link = (value_us_to_other + value_other_to_us) * 0.5 < 0.08;
 
-						if link {
-							// Let's link!
-							let us = origin_block_coords.map(|x| x as f32);
-							let other = other_origin_coords.map(|x| x as f32);
-							let direction = (other - us).normalize();
-							let mut placing_head = us;
-							while coords_are_writable(placing_head.map(|x| x.round() as i32)) {
-								structure_place_block(
-									placing_head.map(|x| x.round() as i32),
-									block_type_table.ground_id(),
-									chunk_blocks,
-								);
-								let dist_to_other_before_step = other.distance(placing_head);
-								placing_head += direction * 0.1;
-								let dist_to_other_after_step = other.distance(placing_head);
-								if dist_to_other_before_step < dist_to_other_after_step {
-									// We are moving away from other, which means we already
-									// reached it and if we continued we would gon on behind it,
-									// which is not what we want to do (we just want to link to it).
-									break;
+							if link {
+								// Let's link!
+								let us = origin_block_coords.map(|x| x as f32);
+								let other = other_origin_coords.map(|x| x as f32);
+								let direction = (other - us).normalize();
+								let mut placing_head = us;
+								while coords_are_writable(placing_head.map(|x| x.round() as i32)) {
+									structure_place_block(
+										placing_head.map(|x| x.round() as i32),
+										block_type_table.ground_id(),
+										chunk_blocks,
+									);
+									let dist_to_other_before_step = other.distance(placing_head);
+									placing_head += direction * 0.1;
+									let dist_to_other_after_step = other.distance(placing_head);
+									if dist_to_other_before_step < dist_to_other_after_step {
+										// We are moving away from other, which means we already
+										// reached it and if we continued we would gon on behind it,
+										// which is not what we want to do (we just want to link to it).
+										break;
+									}
 								}
 							}
 						}
 					}
 				}
-			}
 
-			let ball_radius = structure_max_blocky_radius.min(4);
-			for coords in crate::coords::iter_3d_cube_center_radius(origin_block_coords, ball_radius) {
-				if coords.map(|x| x as f32).distance(origin_block_coords.map(|x| x as f32))
-					< ball_radius as f32
+				let ball_radius = structure_max_blocky_radius.min(4);
+				for coords in
+					crate::coords::iter_3d_cube_center_radius(origin_block_coords, ball_radius)
 				{
-					structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+					if coords.map(|x| x as f32).distance(origin_block_coords.map(|x| x as f32))
+						< ball_radius as f32
+					{
+						structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+					}
 				}
-			}
-		};
+			};
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -2176,7 +2181,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			}
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -2248,11 +2253,12 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			};
 
 		// Define structure generation.
-		let structure_place_block = |block_coords: BlockCoords,
-		                             block_type_to_place: BlockTypeId,
-		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set_simple(block_coords, block_type_to_place);
-		};
+		let structure_place_block =
+			|block_coords: BlockCoords,
+			 block_type_to_place: BlockTypeId,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				chunk_blocks.set_simple(block_coords, block_type_to_place);
+			};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
 			// BUT some structures may have already modified it, so we should not use it.
@@ -2263,55 +2269,57 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 		// radius of 2 means a 3x3x3 blocks sized cube around the origin block, etc.
 		let structure_max_blocky_radius = 42;
 		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3]);
-		let generate_structure = |origin_block_coords: BlockCoords,
-		                          chunk_blocks: &mut ChunkBlocks| {
-			let mut placing_head = origin_block_coords;
-			let mut found_ground = false;
-			for _i in 0..structure_max_blocky_radius {
-				let no_ground_above = block_type_table
-					.get(structure_look_terrain_block(
-						placing_head + cgmath::vec3(0, 0, 1),
-					))
-					.unwrap()
-					.is_air();
-				let ground_here =
-					!block_type_table.get(structure_look_terrain_block(placing_head)).unwrap().is_air();
-				if no_ground_above && ground_here {
-					found_ground = true;
-					break;
+		let generate_structure =
+			|origin_block_coords: BlockCoords, chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				let mut placing_head = origin_block_coords;
+				let mut found_ground = false;
+				for _i in 0..structure_max_blocky_radius {
+					let no_ground_above = block_type_table
+						.get(structure_look_terrain_block(
+							placing_head + cgmath::vec3(0, 0, 1),
+						))
+						.unwrap()
+						.is_air();
+					let ground_here = !block_type_table
+						.get(structure_look_terrain_block(placing_head))
+						.unwrap()
+						.is_air();
+					if no_ground_above && ground_here {
+						found_ground = true;
+						break;
+					}
+					placing_head.z -= 1;
 				}
-				placing_head.z -= 1;
-			}
-			if !found_ground {
-				return;
-			}
-			let noise_value_a =
-				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
-			let height =
-				((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(11) as f32) as i32;
-			placing_head.z += height;
-			let noise_value_b =
-				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
-			let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
-			for coords in
-				crate::coords::iter_3d_cube_center_radius(placing_head, ball_radius.ceil() as i32)
-			{
-				if coords.map(|x| x as f32).distance(placing_head.map(|x| x as f32)) < ball_radius {
-					structure_place_block(coords, block_type_table.kinda_leaf_id(), chunk_blocks);
+				if !found_ground {
+					return;
 				}
-			}
-			placing_head.z -= height;
-			for _i in 0..height {
-				structure_place_block(placing_head, block_type_table.kinda_wood_id(), chunk_blocks);
-				placing_head.z += 1;
-			}
-		};
+				let noise_value_a =
+					noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
+				let height =
+					((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(11) as f32) as i32;
+				placing_head.z += height;
+				let noise_value_b =
+					noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
+				let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
+				for coords in
+					crate::coords::iter_3d_cube_center_radius(placing_head, ball_radius.ceil() as i32)
+				{
+					if coords.map(|x| x as f32).distance(placing_head.map(|x| x as f32)) < ball_radius {
+						structure_place_block(coords, block_type_table.kinda_leaf_id(), chunk_blocks);
+					}
+				}
+				placing_head.z -= height;
+				for _i in 0..height {
+					structure_place_block(placing_head, block_type_table.kinda_wood_id(), chunk_blocks);
+					placing_head.z += 1;
+				}
+			};
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -2360,7 +2368,7 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			}
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -2432,11 +2440,12 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			};
 
 		// Define structure generation.
-		let structure_place_block = |block_coords: BlockCoords,
-		                             block_type_to_place: BlockTypeId,
-		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set_simple(block_coords, block_type_to_place);
-		};
+		let structure_place_block =
+			|block_coords: BlockCoords,
+			 block_type_to_place: BlockTypeId,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				chunk_blocks.set_simple(block_coords, block_type_to_place);
+			};
 		let structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
 			// BUT some structures may have already modified it, so we should not use it.
@@ -2447,81 +2456,81 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 		// radius of 2 means a 3x3x3 blocks sized cube around the origin block, etc.
 		let structure_max_blocky_radius = 61;
 		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3]);
-		let generate_structure = |origin_block_coords: BlockCoords,
-		                          chunk_blocks: &mut ChunkBlocks| {
-			let mut placing_head = origin_block_coords;
-			let mut found_ground = false;
-			let is_exactly_n_blocks_deep = |n: i32, coords: BlockCoords| -> bool {
-				for i in 0..n {
-					if block_type_table
-						.get(structure_look_terrain_block(coords + cgmath::vec3(0, 0, i)))
+		let generate_structure =
+			|origin_block_coords: BlockCoords, chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				let mut placing_head = origin_block_coords;
+				let mut found_ground = false;
+				let is_exactly_n_blocks_deep = |n: i32, coords: BlockCoords| -> bool {
+					for i in 0..n {
+						if block_type_table
+							.get(structure_look_terrain_block(coords + cgmath::vec3(0, 0, i)))
+							.unwrap()
+							.is_air()
+						{
+							return false;
+						}
+					}
+					block_type_table
+						.get(structure_look_terrain_block(coords + cgmath::vec3(0, 0, n)))
 						.unwrap()
 						.is_air()
-					{
-						return false;
-					}
-				}
-				block_type_table
-					.get(structure_look_terrain_block(coords + cgmath::vec3(0, 0, n)))
-					.unwrap()
-					.is_air()
-			};
-			for _i in 0..structure_max_blocky_radius {
-				if is_exactly_n_blocks_deep(6, placing_head) {
-					found_ground = true;
-					break;
-				}
-				placing_head.z -= 1;
-			}
-			if !found_ground {
-				return;
-			}
-			let noise_value_a =
-				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
-			let noise_value_b =
-				noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
-			let us = placing_head.map(|x| x as f32);
-			let spike_end = us
-				+ cgmath::vec3(
-					structure_max_blocky_radius as f32 * (noise_value_a * 2.0 - 1.0),
-					structure_max_blocky_radius as f32 * (noise_value_b * 2.0 - 1.0),
-					structure_max_blocky_radius as f32,
-				);
-			let direction = (spike_end - us).normalize();
-			let mut placing_head = us;
-			loop {
-				let ball_radius = spike_end.distance(placing_head) * 0.1 + 0.5;
-				for coords in crate::coords::iter_3d_cube_center_radius(
-					placing_head.map(|x| x.round() as i32),
-					ball_radius.ceil() as i32,
-				) {
-					if coords.map(|x| x as f32).distance(placing_head) < ball_radius {
-						structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
-					}
-				}
-
-				let dist_to_spike_end_before_step = spike_end.distance(placing_head);
-				let step = if dist_to_spike_end_before_step < 6.0 {
-					0.1
-				} else {
-					1.0
 				};
-				placing_head += direction * step;
-				let dist_to_spike_end_after_step = spike_end.distance(placing_head);
-				if dist_to_spike_end_before_step < dist_to_spike_end_after_step {
-					// We are moving away from spike_end, which means we already
-					// reached it and if we continued we would gon on behind it,
-					// which is not what we want to do (we just want to link to it).
-					break;
+				for _i in 0..structure_max_blocky_radius {
+					if is_exactly_n_blocks_deep(6, placing_head) {
+						found_ground = true;
+						break;
+					}
+					placing_head.z -= 1;
 				}
-			}
-		};
+				if !found_ground {
+					return;
+				}
+				let noise_value_a =
+					noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 1]]);
+				let noise_value_b =
+					noise_structure.sample(&[], &[&[placing_head.x, placing_head.y, placing_head.z, 2]]);
+				let us = placing_head.map(|x| x as f32);
+				let spike_end = us
+					+ cgmath::vec3(
+						structure_max_blocky_radius as f32 * (noise_value_a * 2.0 - 1.0),
+						structure_max_blocky_radius as f32 * (noise_value_b * 2.0 - 1.0),
+						structure_max_blocky_radius as f32,
+					);
+				let direction = (spike_end - us).normalize();
+				let mut placing_head = us;
+				loop {
+					let ball_radius = spike_end.distance(placing_head) * 0.1 + 0.5;
+					for coords in crate::coords::iter_3d_cube_center_radius(
+						placing_head.map(|x| x.round() as i32),
+						ball_radius.ceil() as i32,
+					) {
+						if coords.map(|x| x as f32).distance(placing_head) < ball_radius {
+							structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+						}
+					}
+
+					let dist_to_spike_end_before_step = spike_end.distance(placing_head);
+					let step = if dist_to_spike_end_before_step < 6.0 {
+						0.1
+					} else {
+						1.0
+					};
+					placing_head += direction * step;
+					let dist_to_spike_end_after_step = spike_end.distance(placing_head);
+					if dist_to_spike_end_before_step < dist_to_spike_end_after_step {
+						// We are moving away from spike_end, which means we already
+						// reached it and if we continued we would gon on behind it,
+						// which is not what we want to do (we just want to link to it).
+						break;
+					}
+				}
+			};
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -2570,7 +2579,7 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			}
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -2617,8 +2626,8 @@ impl WorldGenerator for WorldGeneratorLines02 {
 			let scale = 75.0;
 			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -2649,7 +2658,7 @@ impl WorldGenerator for WorldGeneratorLines02 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -2702,8 +2711,8 @@ impl WorldGenerator for WorldGeneratorLines03 {
 			let scale = 75.0;
 			noise_no_grass.sample_3d_1d(coordsf / scale, &[]) < 0.25
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -2734,7 +2743,7 @@ impl WorldGenerator for WorldGeneratorLines03 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -2806,11 +2815,12 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			};
 
 		// Define structure generation.
-		let structure_place_block = |block_coords: BlockCoords,
-		                             block_type_to_place: BlockTypeId,
-		                             chunk_blocks: &mut ChunkBlocks| {
-			chunk_blocks.set_simple(block_coords, block_type_to_place);
-		};
+		let structure_place_block =
+			|block_coords: BlockCoords,
+			 block_type_to_place: BlockTypeId,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				chunk_blocks.set_simple(block_coords, block_type_to_place);
+			};
 		let _structure_look_terrain_block = |block_coords: BlockCoords| -> BlockTypeId {
 			// We already generated the terrain for the whole chunk,
 			// BUT some structures may have already modified it, so we should not use it.
@@ -2821,155 +2831,158 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 		// radius of 2 means a 3x3x3 blocks sized cube around the origin block, etc.
 		let structure_max_blocky_radius = 61;
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
-		let structure_place_ball = |center: cgmath::Point3<f32>,
-		                            radius: f32,
-		                            chunk_blocks: &mut ChunkBlocks| {
-			let coords_inf = (center - cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.floor() as i32);
-			let coords_sup = (center + cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.ceil() as i32);
-			let chunk_inf = chunk_blocks.coords_span.block_coords_inf();
-			let chunk_sup =
-				chunk_blocks.coords_span.block_coords_sup_excluded() - cgmath::vec3(1, 1, 1);
-			let no_overlap_x = chunk_sup.x < coords_inf.x || chunk_inf.x > coords_sup.x;
-			let no_overlap_y = chunk_sup.y < coords_inf.y || chunk_inf.y > coords_sup.y;
-			let no_overlap_z = chunk_sup.z < coords_inf.z || chunk_inf.z > coords_sup.z;
-			let no_overlap = no_overlap_x && no_overlap_y && no_overlap_z;
-			if no_overlap {
-				return;
-			}
-			for coords in crate::coords::iter_3d_cube_center_radius(
-				center.map(|x| x.round() as i32),
-				radius.ceil() as i32,
-			) {
-				if coords.map(|x| x as f32).distance(center) < radius {
-					structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
+		let structure_place_ball =
+			|center: cgmath::Point3<f32>,
+			 radius: f32,
+			 chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				let coords_inf =
+					(center - cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.floor() as i32);
+				let coords_sup =
+					(center + cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.ceil() as i32);
+				let chunk_inf = chunk_blocks.coords_span().block_coords_inf();
+				let chunk_sup =
+					chunk_blocks.coords_span().block_coords_sup_excluded() - cgmath::vec3(1, 1, 1);
+				let no_overlap_x = chunk_sup.x < coords_inf.x || chunk_inf.x > coords_sup.x;
+				let no_overlap_y = chunk_sup.y < coords_inf.y || chunk_inf.y > coords_sup.y;
+				let no_overlap_z = chunk_sup.z < coords_inf.z || chunk_inf.z > coords_sup.z;
+				let no_overlap = no_overlap_x && no_overlap_y && no_overlap_z;
+				if no_overlap {
+					return;
 				}
-			}
-		};
-		let generate_structure = |origin_block_coords: BlockCoords,
-		                          chunk_blocks: &mut ChunkBlocks| {
-			// Setup function thta says if we are in the cubic area that we can actually modify.
-			let coords_span_writable_inf_included =
-				origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
-			let coords_span_writable_sup_excluded =
-				origin_block_coords + cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
-			let coords_are_writable = |block_coords: BlockCoords| -> bool {
-				let inf = coords_span_writable_inf_included;
-				let sup_excluded = coords_span_writable_sup_excluded;
-				let c = block_coords;
-				(inf.x <= c.x && c.x < sup_excluded.x)
-					&& (inf.y <= c.y && c.y < sup_excluded.y)
-					&& (inf.z <= c.z && c.z < sup_excluded.z)
-			};
-
-			// Find nearby structures that we can link to.
-			let coords_span_in_which_structure_origins_can_link_inf_included =
-				origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
-			let coords_span_in_which_structure_origins_can_link_sup_excluded =
-				origin_block_coords + cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
-			let coords_span_in_which_structure_origins_can_link_sup_included =
-				coords_span_in_which_structure_origins_can_link_sup_excluded - cgmath::vec3(1, 1, 1);
-			let structure_origin_can_link = |other_origin_block_coords: BlockCoords| -> bool {
-				let inf = coords_span_in_which_structure_origins_can_link_inf_included;
-				let sup_excluded = coords_span_in_which_structure_origins_can_link_sup_excluded;
-				let c = other_origin_block_coords;
-				(inf.x <= c.x && c.x < sup_excluded.x)
-					&& (inf.y <= c.y && c.y < sup_excluded.y)
-					&& (inf.z <= c.z && c.z < sup_excluded.z)
-			};
-			let cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link =
-				block_coords_to_cell_coords(
-					coords_span_in_which_structure_origins_can_link_inf_included,
-				);
-			let cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link =
-				block_coords_to_cell_coords(
-					coords_span_in_which_structure_origins_can_link_sup_included,
-				);
-			let cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link =
-				cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link
-					+ cgmath::vec3(1, 1, 1);
-			for cell_coords in iter_3d_rect_inf_sup_excluded(
-				cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link,
-				cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link,
-			) {
-				let number_of_origins = cell_coords_to_number_of_structure_origins(cell_coords);
-				for origin_index in 0..number_of_origins {
-					let other_origin_coords =
-						cell_coords_and_structure_origin_index_to_origin_coords_in_world(
-							cell_coords,
-							origin_index,
-						);
-					if other_origin_coords == origin_block_coords {
-						// We just found ourselves.
-						continue;
+				for coords in crate::coords::iter_3d_cube_center_radius(
+					center.map(|x| x.round() as i32),
+					radius.ceil() as i32,
+				) {
+					if coords.map(|x| x as f32).distance(center) < radius {
+						structure_place_block(coords, block_type_table.ground_id(), chunk_blocks);
 					}
-					if structure_origin_can_link(other_origin_coords) {
-						// Hehe found one, let's decide if we link.
-						// We get two noise values that we will also get (in the other order)
-						// in the other structure, and when we add them we get the same value
-						// that the other would get, so we can agree on something that way ^^.
-						let value_us_to_other = noise_a.sample(
-							&[],
-							&[&[
-								origin_block_coords.x,
-								origin_block_coords.y,
-								origin_block_coords.z,
-								other_origin_coords.x,
-								other_origin_coords.y,
-								other_origin_coords.z,
-							]],
-						);
-						let value_other_to_us = noise_a.sample(
-							&[],
-							&[&[
-								other_origin_coords.x,
-								other_origin_coords.y,
-								other_origin_coords.z,
-								origin_block_coords.x,
-								origin_block_coords.y,
-								origin_block_coords.z,
-							]],
-						);
-						// We only link to a few other structures because if we linked
-						// to everyone we could then it fills the world with links
-						// and it becomes difficult to see and appreciate the generation.
-						let link = (value_us_to_other + value_other_to_us) * 0.5 < 0.25;
+				}
+			};
+		let generate_structure =
+			|origin_block_coords: BlockCoords, chunk_blocks: &mut ChunkBlocksBeingGenerated| {
+				// Setup function thta says if we are in the cubic area that we can actually modify.
+				let coords_span_writable_inf_included =
+					origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
+				let coords_span_writable_sup_excluded = origin_block_coords
+					+ cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
+				let coords_are_writable = |block_coords: BlockCoords| -> bool {
+					let inf = coords_span_writable_inf_included;
+					let sup_excluded = coords_span_writable_sup_excluded;
+					let c = block_coords;
+					(inf.x <= c.x && c.x < sup_excluded.x)
+						&& (inf.y <= c.y && c.y < sup_excluded.y)
+						&& (inf.z <= c.z && c.z < sup_excluded.z)
+				};
 
-						if link {
-							// Let's link!
-							let us = origin_block_coords.map(|x| x as f32);
-							let other = other_origin_coords.map(|x| x as f32);
-							let distance_us_other = us.distance(other);
-							let direction = (other - us).normalize();
-							let mut placing_head = us;
-							while coords_are_writable(placing_head.map(|x| x.round() as i32)) {
-								let dist_to_us = us.distance(placing_head);
-								let dist_to_other_before_step = other.distance(placing_head);
-								let progression = 1.0 - dist_to_us / (distance_us_other / 2.0);
-								let smooth_progression = progression.powi(2);
-								let radius_min = 2.0;
-								let radius_max = 7.0;
-								let radius = radius_min + smooth_progression * (radius_max - radius_min);
-								structure_place_ball(placing_head, radius, chunk_blocks);
-								placing_head += direction * 0.8;
-								let dist_to_other_after_step = other.distance(placing_head);
-								if dist_to_other_before_step < dist_to_other_after_step {
-									// We are moving away from other, which means we already
-									// reached it and if we continued we would gon on behind it,
-									// which is not what we want to do (we just want to link to it).
-									break;
+				// Find nearby structures that we can link to.
+				let coords_span_in_which_structure_origins_can_link_inf_included =
+					origin_block_coords - cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2);
+				let coords_span_in_which_structure_origins_can_link_sup_excluded = origin_block_coords
+					+ cgmath::vec3(1, 1, 1) * (structure_max_blocky_radius * 2 - 2 + 1);
+				let coords_span_in_which_structure_origins_can_link_sup_included =
+					coords_span_in_which_structure_origins_can_link_sup_excluded - cgmath::vec3(1, 1, 1);
+				let structure_origin_can_link = |other_origin_block_coords: BlockCoords| -> bool {
+					let inf = coords_span_in_which_structure_origins_can_link_inf_included;
+					let sup_excluded = coords_span_in_which_structure_origins_can_link_sup_excluded;
+					let c = other_origin_block_coords;
+					(inf.x <= c.x && c.x < sup_excluded.x)
+						&& (inf.y <= c.y && c.y < sup_excluded.y)
+						&& (inf.z <= c.z && c.z < sup_excluded.z)
+				};
+				let cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link =
+					block_coords_to_cell_coords(
+						coords_span_in_which_structure_origins_can_link_inf_included,
+					);
+				let cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link =
+					block_coords_to_cell_coords(
+						coords_span_in_which_structure_origins_can_link_sup_included,
+					);
+				let cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link =
+					cell_coords_sup_included_that_can_have_origins_of_structures_that_can_link
+						+ cgmath::vec3(1, 1, 1);
+				for cell_coords in iter_3d_rect_inf_sup_excluded(
+					cell_coords_inf_included_that_can_have_origins_of_structures_that_can_link,
+					cell_coords_sup_excluded_that_can_have_origins_of_structures_that_can_link,
+				) {
+					let number_of_origins = cell_coords_to_number_of_structure_origins(cell_coords);
+					for origin_index in 0..number_of_origins {
+						let other_origin_coords =
+							cell_coords_and_structure_origin_index_to_origin_coords_in_world(
+								cell_coords,
+								origin_index,
+							);
+						if other_origin_coords == origin_block_coords {
+							// We just found ourselves.
+							continue;
+						}
+						if structure_origin_can_link(other_origin_coords) {
+							// Hehe found one, let's decide if we link.
+							// We get two noise values that we will also get (in the other order)
+							// in the other structure, and when we add them we get the same value
+							// that the other would get, so we can agree on something that way ^^.
+							let value_us_to_other = noise_a.sample(
+								&[],
+								&[&[
+									origin_block_coords.x,
+									origin_block_coords.y,
+									origin_block_coords.z,
+									other_origin_coords.x,
+									other_origin_coords.y,
+									other_origin_coords.z,
+								]],
+							);
+							let value_other_to_us = noise_a.sample(
+								&[],
+								&[&[
+									other_origin_coords.x,
+									other_origin_coords.y,
+									other_origin_coords.z,
+									origin_block_coords.x,
+									origin_block_coords.y,
+									origin_block_coords.z,
+								]],
+							);
+							// We only link to a few other structures because if we linked
+							// to everyone we could then it fills the world with links
+							// and it becomes difficult to see and appreciate the generation.
+							let link = (value_us_to_other + value_other_to_us) * 0.5 < 0.25;
+
+							if link {
+								// Let's link!
+								let us = origin_block_coords.map(|x| x as f32);
+								let other = other_origin_coords.map(|x| x as f32);
+								let distance_us_other = us.distance(other);
+								let direction = (other - us).normalize();
+								let mut placing_head = us;
+								while coords_are_writable(placing_head.map(|x| x.round() as i32)) {
+									let dist_to_us = us.distance(placing_head);
+									let dist_to_other_before_step = other.distance(placing_head);
+									let progression = 1.0 - dist_to_us / (distance_us_other / 2.0);
+									let smooth_progression = progression.powi(2);
+									let radius_min = 2.0;
+									let radius_max = 7.0;
+									let radius = radius_min + smooth_progression * (radius_max - radius_min);
+									structure_place_ball(placing_head, radius, chunk_blocks);
+									placing_head += direction * 0.8;
+									let dist_to_other_after_step = other.distance(placing_head);
+									if dist_to_other_before_step < dist_to_other_after_step {
+										// We are moving away from other, which means we already
+										// reached it and if we continued we would gon on behind it,
+										// which is not what we want to do (we just want to link to it).
+										break;
+									}
 								}
 							}
 						}
 					}
 				}
-			}
-		};
+			};
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -3018,7 +3031,7 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			}
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -3029,7 +3042,7 @@ mod structure_gen {
 
 	use crate::{
 		block_types::{BlockTypeId, BlockTypeTable},
-		chunks::ChunkBlocks,
+		chunks::ChunkBlocksBeingGenerated,
 		coords::{BlockCoords, CubicCoordsSpan},
 		noise::OctavedNoise,
 	};
@@ -3167,7 +3180,7 @@ mod structure_gen {
 	/// (and a type, though that is given in an other way).
 	pub(crate) struct StructureInstanceGenerationContext<'a> {
 		pub(crate) origin: StructureOrigin,
-		pub(crate) chunk_blocks: &'a mut ChunkBlocks,
+		pub(crate) chunk_blocks: &'a mut ChunkBlocksBeingGenerated,
 		pub(crate) _origin_generator: &'a dyn StructureOriginGenerator,
 		pub(crate) block_type_table: &'a Arc<BlockTypeTable>,
 		pub(crate) terrain_generator: &'a TerrainGenerator<'a>,
@@ -3203,7 +3216,7 @@ mod structure_gen {
 			let ball_inf = (center - cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.floor() as i32);
 			let ball_sup = (center + cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.ceil() as i32);
 			let ball_span = CubicCoordsSpan::with_inf_sup_but_sup_is_included(ball_inf, ball_sup);
-			let chunk_span = CubicCoordsSpan::from_chunk_span(self.chunk_blocks.coords_span);
+			let chunk_span = CubicCoordsSpan::from_chunk_span(self.chunk_blocks.coords_span());
 			if let Some(span) = chunk_span.intersection(&ball_span) {
 				for coords in span.iter() {
 					if coords.map(|x| x as f32).distance(center) < radius {
@@ -3360,10 +3373,10 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			TestStructureOriginGenerator::new(self.seed, 31, (-2, 21), structure_types.len() as i32);
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -3382,7 +3395,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -3474,10 +3487,10 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			TestStructureOriginGenerator::new(self.seed, 31, (-2, 21), structure_types.len() as i32);
 
 		// Now we generate the block data in the chunk.
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
 
@@ -3496,7 +3509,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
 
@@ -3526,8 +3539,8 @@ impl WorldGenerator for WorldGeneratorWierdTerrain03 {
 			let value = p.distance(cgmath::vec2(-10.0, 0.0));
 			value > 0.5 * coordsf.z
 		};
-		let mut chunk_blocks = ChunkBlocks::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span.iter_coords() {
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		for coords in chunk_blocks.coords_span().iter_coords() {
 			let ground = coords_to_ground(coords);
 			let block = if ground {
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -3541,6 +3554,6 @@ impl WorldGenerator for WorldGeneratorWierdTerrain03 {
 			};
 			chunk_blocks.set_simple(coords, block);
 		}
-		chunk_blocks
+		chunk_blocks.finish_generation()
 	}
 }
