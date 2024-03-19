@@ -130,6 +130,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 		coords_span: ChunkCoordsSpan,
 		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkBlocks {
+		// Define the terrain generation as a deterministic coords->block function.
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let noise_no_grass = noise::OctavedNoise::new(5, vec![self.seed, 3]);
@@ -165,14 +166,13 @@ impl WorldGenerator for DefaultWorldGenerator {
 			let scale = 75.0;
 			(noise_a.sample_3d_1d(coordsf / scale, &[]) > 0.75).then(|| {
 				let type_scale = 200.0;
-				let index = (noise_b.sample_3d_1d(coordsf / type_scale, &[]) * 10.0) as usize;
+				let index = (noise_b.sample_3d_1d(coordsf / type_scale, &[]) * 30.0) as usize;
 				block_type_table.generated_test_id(index)
 			})
 		};
-		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
-		for coords in chunk_blocks.coords_span().iter_coords() {
+		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
 			let ground = coords_to_ground(coords);
-			let block = if ground {
+			if ground {
 				let ground_maybe_generated =
 					coords_to_generated_block(coords).unwrap_or(block_type_table.ground_id());
 				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
@@ -200,9 +200,154 @@ impl WorldGenerator for DefaultWorldGenerator {
 				} else {
 					block_type_table.air_id()
 				}
-			};
-			chunk_blocks.set_simple(coords, block);
+			}
+		};
+
+		// Define structure generation.
+		let structure_max_blocky_radius = 42;
+		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 4]);
+		let noise_tree_spawning = noise::OctavedNoise::new(2, vec![self.seed, 5]);
+		let noise_boulder_spawning = noise::OctavedNoise::new(2, vec![self.seed, 6]);
+		let spawn_tree = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			noise_tree_spawning.sample_3d_1d(coordsf / scale, &[]) < 0.35
+		};
+		let spawn_boulder = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let scale = 75.0;
+			noise_boulder_spawning.sample_3d_1d(coordsf / scale, &[]) < 0.35
+		};
+		let generate_structure_tree = |mut context: StructureInstanceGenerationContext| {
+			if !spawn_tree(context.origin.coords) {
+				return;
+			}
+			// Let's generate a tree.
+			let mut placing_head = context.origin.coords;
+			// We try to find the ground (we don't want to generate a tree floating in the air).
+			// We go down and stop on ground, or abort (and fail to generate) if no ground is found.
+			let mut found_ground = false;
+			for _i in 0..structure_max_blocky_radius {
+				let no_ground_above = context
+					.block_type_table
+					.get((context.terrain_generator)(
+						placing_head + cgmath::vec3(0, 0, 1),
+					))
+					.unwrap()
+					.is_air();
+				let ground_here = !context
+					.block_type_table
+					.get((context.terrain_generator)(placing_head))
+					.unwrap()
+					.is_air();
+				if no_ground_above && ground_here {
+					found_ground = true;
+					break;
+				}
+				placing_head.z -= 1;
+			}
+			if !found_ground {
+				return;
+			}
+			// We are on the ground now, we can generate a tree.
+			// We pick a height of the trunk and generate it.
+			let noise_value_a = noise_structure.sample_i3d_1d(placing_head, &[1]);
+			let height =
+				((noise_value_a * 0.5 + 0.5) * structure_max_blocky_radius.min(15) as f32) as i32;
+			for _i in 0..height {
+				context.place_block(
+					&BlockPlacing {
+						block_type_to_place: context.block_type_table.kinda_wood_id(),
+						only_place_on_air: false,
+					},
+					placing_head,
+				);
+				placing_head.z += 1;
+			}
+			// We pick a radius for the ball of leaves and generate it.
+			let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+			let ball_radius = (noise_value_b * 0.2 + 0.8) * 3.5;
+			context.place_ball(
+				&BlockPlacing {
+					block_type_to_place: context.block_type_table.kinda_leaf_id(),
+					only_place_on_air: true,
+				},
+				placing_head.map(|x| x as f32),
+				ball_radius,
+			);
+			// The tree is done now ^^.
+		};
+		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 4]);
+		let generate_structure_boulder = |mut context: StructureInstanceGenerationContext| {
+			if !spawn_boulder(context.origin.coords) {
+				return;
+			}
+			let mut placing_head = context.origin.coords;
+			let mut found_ground = false;
+			for _i in 0..structure_max_blocky_radius {
+				let no_ground_above = context
+					.block_type_table
+					.get((context.terrain_generator)(
+						placing_head + cgmath::vec3(0, 0, 1),
+					))
+					.unwrap()
+					.is_air();
+				let ground_here = !context
+					.block_type_table
+					.get((context.terrain_generator)(placing_head))
+					.unwrap()
+					.is_air();
+				if no_ground_above && ground_here {
+					found_ground = true;
+					break;
+				}
+				placing_head.z -= 1;
+			}
+			if !found_ground {
+				return;
+			}
+			let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+			let ball_radius = (noise_value_b * 0.2 + 0.8) * 2.5;
+			context.place_ball(
+				&BlockPlacing {
+					block_type_to_place: context.block_type_table.ground_id(),
+					only_place_on_air: true,
+				},
+				placing_head.map(|x| x as f32),
+				ball_radius,
+			);
+		};
+
+		let structure_types: [&StructureTypeInstanceGenerator; 2] =
+			[&generate_structure_tree, &generate_structure_boulder];
+
+		// Setup structure origins generation stuff.
+		let structure_origin_generator =
+			TestStructureOriginGenerator::new(self.seed, 31, (-3, 10), structure_types.len() as i32);
+
+		// Now we generate the block data in the chunk.
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+
+		// Generate terrain in the chunk.
+		for coords in chunk_blocks.coords_span().iter_coords() {
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
 		}
+
+		// Generate the structures that can overlap with the chunk.
+		let mut span_to_check = CubicCoordsSpan::from_chunk_span(coords_span);
+		span_to_check.add_margins(structure_max_blocky_radius);
+		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
+		for origin in origins.into_iter() {
+			let context = StructureInstanceGenerationContext {
+				origin,
+				chunk_blocks: &mut chunk_blocks,
+				_origin_generator: &structure_origin_generator,
+				block_type_table,
+				terrain_generator: &coords_to_terrain,
+			};
+			structure_types[origin.type_id.index](context);
+		}
+
 		chunk_blocks.finish_generation()
 	}
 }
