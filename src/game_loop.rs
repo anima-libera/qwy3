@@ -304,6 +304,7 @@ pub fn run_game_loop() {
 					let cgmath::Point3 { x, y, z } = player_block_coords;
 					format!("{x},{y},{z}")
 				};
+				let seed = game.world_gen_seed;
 				let random_message = game.random_message;
 				let settings = font::TextRenderingSettings::with_scale(3.0);
 				let text = format!(
@@ -312,6 +313,7 @@ pub fn run_game_loop() {
 					blocks loaded: {block_count}\n\
 					chunks meshed: {chunk_meshed_count}\n\
 					player coords: {player_block_coords_str}\n\
+					seed: {seed}\n\
 					{random_message}"
 				);
 				*general_debug_info_widget = Widget::new_simple_text(text, settings);
