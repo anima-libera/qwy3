@@ -288,7 +288,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let save = save_name.map(|name| Arc::new(Save::create(name)));
 	let saved_state = save.as_ref().and_then(load_savable_state_from_save);
 
-	if saved_state.is_none() {
+	if save.is_none() {
 		println!("Warning: No save specified, nothing will persist.");
 		println!("A save name can be specified using `-s <NAME>` or `--save <NAME>`.");
 	}
