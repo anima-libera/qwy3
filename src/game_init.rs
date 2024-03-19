@@ -298,8 +298,10 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		.map(|state| state.only_save_modified_chunks)
 		.unwrap_or(only_save_modified_chunks);
 
-	let world_gen_seed =
-		saved_state.as_ref().map(|state| state.world_gen_seed).unwrap_or(world_gen_seed);
+	let world_gen_seed = saved_state
+		.as_ref()
+		.map(|state| state.world_gen_seed)
+		.unwrap_or(world_gen_seed.unwrap_or_else(|| rand::thread_rng().gen()));
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 

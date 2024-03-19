@@ -22,8 +22,8 @@ pub(crate) struct CommandLineSettings {
 	pub(crate) output_atlas: bool,
 
 	/// World generation seed.
-	#[arg(long = "seed", default_value_t = 0, value_name = "SEED")]
-	pub(crate) world_gen_seed: i32,
+	#[arg(long = "seed", value_name = "SEED")]
+	pub(crate) world_gen_seed: Option<i32>,
 
 	/// Selection of one world generator.
 	#[arg(
