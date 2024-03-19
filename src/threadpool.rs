@@ -1,7 +1,7 @@
 //! Thread pool! A pool of threads ready to do work without needing to spawn new threads
 //! for every task. Uses mpsc channels.
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Barrier};
 use std::thread;
 
 type Task = Box<dyn FnOnce() + Send>;
@@ -12,7 +12,7 @@ enum OrderToManager {
 	Task(Task),
 	/// The manager will ask all workers to end, and then follow them to where
 	/// dead threads go, hopefully a beautiful and peaceful place.
-	_End,
+	_End(Arc<Barrier>),
 }
 
 pub(crate) struct ThreadPool {
@@ -109,13 +109,23 @@ impl ThreadPool {
 								.send(OrderToWorker::Task(task))
 								.unwrap();
 						},
-						Ok(OrderToManager::_End) | Err(_) => {
+						Err(_) => {
 							for worker_asking_for_more in manager_receiver_of_worker_asking_for_more.iter()
 							{
 								order_sender_to_worker_array[worker_asking_for_more]
 									.send(OrderToWorker::End)
 									.unwrap();
 							}
+							return;
+						},
+						Ok(OrderToManager::_End(barrier)) => {
+							for worker_asking_for_more in manager_receiver_of_worker_asking_for_more.iter()
+							{
+								order_sender_to_worker_array[worker_asking_for_more]
+									.send(OrderToWorker::End)
+									.unwrap();
+							}
+							barrier.wait();
 							return;
 						},
 					}
@@ -129,8 +139,10 @@ impl ThreadPool {
 	/// Ends the manager and worker threads.
 	/// Note that dropping the `ThreadPool` should do the trick too (as it hangs up a channel
 	/// that makes the manager behaves the same way it would as by calling this method).
-	pub(crate) fn _end(self) {
-		self.order_sender_to_manager.send(OrderToManager::_End).unwrap();
+	pub(crate) fn _end_blocking(&self) {
+		let barrier = Arc::new(Barrier::new(2));
+		self.order_sender_to_manager.send(OrderToManager::_End(Arc::clone(&barrier))).unwrap();
+		barrier.wait();
 	}
 
 	pub(crate) fn enqueue_task(&self, task: Task) {

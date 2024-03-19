@@ -798,6 +798,9 @@ pub fn run_game_loop() {
 				save_savable_state(&game);
 				game.chunk_grid.unload_all_chunks(game.save.as_ref(), game.only_save_modified_chunks);
 			}
+
+			//game.window.set_visible(false);
+			//game.pool._end_blocking();
 		},
 
 		_ => {},
