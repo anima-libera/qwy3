@@ -20,7 +20,7 @@ fn positive_fract(x: f32) -> f32 {
 }
 
 fn unit_to_i32(x: f32) -> i32 {
-	(x * (i32::MAX as f32 - i32::MIN as f32) - i32::MIN as f32).round() as i32
+	(x * (i32::MAX as f32 - i32::MIN as f32) + i32::MIN as f32).round() as i32
 }
 
 fn _smoothstep(x: f32) -> f32 {
