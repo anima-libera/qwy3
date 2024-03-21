@@ -67,12 +67,14 @@ pub(crate) enum WhichWorldGenerator {
 	StructuresEnginePoc,
 	StructuresGeneratedBlocks,
 	WierdTerrain03,
+	StructuresProceduralPoc,
 }
 
 impl WhichWorldGenerator {
 	pub(crate) fn get_the_actual_generator(
 		self,
 		seed: i32,
+		block_type_table: &Arc<BlockTypeTable>,
 	) -> Arc<dyn WorldGenerator + Sync + Send> {
 		match self {
 			WhichWorldGenerator::Default => Arc::new(DefaultWorldGenerator { seed }),
@@ -123,6 +125,12 @@ impl WhichWorldGenerator {
 				Arc::new(WorldGeneratorStructuresGeneratedBlocks { seed })
 			},
 			WhichWorldGenerator::WierdTerrain03 => Arc::new(WorldGeneratorWierdTerrain03 { seed }),
+			WhichWorldGenerator::StructuresProceduralPoc => Arc::new(
+				procedural_structures_poc::WorldGeneratorStructuresProceduralPoc::new(
+					seed,
+					block_type_table,
+				),
+			),
 		}
 	}
 }
@@ -3521,5 +3529,297 @@ impl WorldGenerator for WorldGeneratorWierdTerrain03 {
 			chunk_blocks.set_simple(coords, block);
 		}
 		chunk_blocks.finish_generation()
+	}
+}
+
+mod procedural_structures_poc {
+	use crate::coords::OrientedAxis;
+
+	use self::noise::OctavedNoise;
+
+	use super::*;
+
+	enum Motion {
+		Constant(cgmath::Vector3<i32>),
+		Random,
+		ConstantOrRandom {
+			constant: cgmath::Vector3<i32>,
+			constant_probability: f32,
+		},
+	}
+
+	struct PlacingHead {
+		coords: BlockCoords,
+		rand_state: i32,
+	}
+	impl PlacingHead {
+		fn new_rand_state(&mut self) -> i32 {
+			self.rand_state += 1;
+			self.rand_state
+		}
+	}
+
+	enum GenStep {
+		Sequence { steps: Vec<GenStep> },
+		LoopN { number_of_iterations: usize, body: Box<GenStep> },
+		PlaceAndMove { placing: BlockPlacing, motion: Motion },
+	}
+
+	impl GenStep {
+		fn new_generated_step(
+			world_seed: i32,
+			structure_type_index: i32,
+			step_seed: i32,
+			depth: usize,
+			rand_state: &mut i32,
+			block_type_table: &Arc<BlockTypeTable>,
+		) -> GenStep {
+			let noise = OctavedNoise::new(1, vec![world_seed, structure_type_index, step_seed]);
+			let random_unit = |rand_state: &mut i32| {
+				*rand_state += 1;
+				noise.sample_i1d_1d(*rand_state, &[])
+			};
+			let new_seed = |rand_state: &mut i32| {
+				*rand_state += 1;
+				noise.sample_i1d_i1d(*rand_state, &[])
+			};
+
+			if random_unit(rand_state) < 1.0 / (depth as f32 + 1.0) {
+				let number_of_iterations =
+					((random_unit(rand_state) * 10.0 + 2.0) / (depth as f32 + 1.0)) as usize;
+				let body = Box::new(GenStep::new_generated_step(
+					world_seed,
+					structure_type_index,
+					new_seed(rand_state),
+					depth + 1,
+					rand_state,
+					block_type_table,
+				));
+				GenStep::LoopN { number_of_iterations, body }
+			} else if random_unit(rand_state) < 2.0 / (depth as f32 + 1.0) {
+				let number_of_steps = (random_unit(rand_state) * 15.0 / (depth as f32 + 2.0)) as usize;
+				let steps = (0..number_of_steps)
+					.map(|_step_number| {
+						GenStep::new_generated_step(
+							world_seed,
+							structure_type_index,
+							new_seed(rand_state),
+							depth + 1,
+							rand_state,
+							block_type_table,
+						)
+					})
+					.collect();
+				GenStep::Sequence { steps }
+			} else {
+				let block_type_to_place = if random_unit(rand_state) < 0.3 {
+					block_type_table.ground_id()
+				} else if random_unit(rand_state) < 0.2 {
+					block_type_table.kinda_wood_id()
+				} else if random_unit(rand_state) < 0.1 {
+					block_type_table.kinda_leaf_id()
+				} else if random_unit(rand_state) < 0.1 {
+					block_type_table.kinda_grass_id()
+				} else {
+					block_type_table.generated_test_id((random_unit(rand_state) * 10.0) as usize)
+				};
+				let placing = BlockPlacing {
+					block_type_to_place,
+					only_place_on_air: random_unit(rand_state) < 0.5,
+				};
+				let motion = if random_unit(rand_state) < 0.3 {
+					Motion::Constant(
+						OrientedAxis::all_the_six_possible_directions()
+							.nth((random_unit(rand_state) * 6.0).floor() as usize)
+							.unwrap()
+							.delta(),
+					)
+				} else if random_unit(rand_state) < 0.5 {
+					Motion::Random
+				} else {
+					Motion::ConstantOrRandom {
+						constant: OrientedAxis::all_the_six_possible_directions()
+							.nth((random_unit(rand_state) * 6.0).floor() as usize)
+							.unwrap()
+							.delta(),
+						constant_probability: random_unit(rand_state),
+					}
+				};
+				GenStep::PlaceAndMove { placing, motion }
+			}
+		}
+
+		fn apply(
+			&self,
+			context: &mut StructureInstanceGenerationContext,
+			placing_head: &mut PlacingHead,
+			noise: &OctavedNoise,
+		) {
+			match self {
+				GenStep::Sequence { steps } => {
+					for step in steps {
+						step.apply(context, placing_head, noise);
+					}
+				},
+				GenStep::LoopN { number_of_iterations, body } => {
+					for _i in 0..*number_of_iterations {
+						body.apply(context, placing_head, noise);
+					}
+				},
+				GenStep::PlaceAndMove { placing, motion } => {
+					context.place_block(placing, placing_head.coords);
+					let delta = match motion {
+						Motion::Random => OrientedAxis::all_the_six_possible_directions()
+							.nth(
+								(noise.sample_i1d_1d(placing_head.new_rand_state(), &[]) * 6.0).floor()
+									as usize,
+							)
+							.unwrap()
+							.delta(),
+						Motion::Constant(constant) => *constant,
+						Motion::ConstantOrRandom { constant, constant_probability } => {
+							if noise.sample_i1d_1d(placing_head.new_rand_state(), &[])
+								< *constant_probability
+							{
+								*constant
+							} else {
+								OrientedAxis::all_the_six_possible_directions()
+									.nth(
+										(noise.sample_i1d_1d(placing_head.new_rand_state(), &[]) * 6.0)
+											.floor() as usize,
+									)
+									.unwrap()
+									.delta()
+							}
+						},
+					};
+					placing_head.coords += delta;
+				},
+			}
+		}
+	}
+
+	struct StructureType {
+		generation_algorithm: GenStep,
+	}
+
+	impl StructureType {
+		fn new_generated_type(
+			world_seed: i32,
+			structure_type_index: i32,
+			block_type_table: &Arc<BlockTypeTable>,
+		) -> StructureType {
+			let mut rand_state = 0;
+			let generation_algorithm = GenStep::new_generated_step(
+				world_seed,
+				structure_type_index,
+				0,
+				0,
+				&mut rand_state,
+				block_type_table,
+			);
+			StructureType { generation_algorithm }
+		}
+	}
+
+	pub(crate) struct WorldGeneratorStructuresProceduralPoc {
+		seed: i32,
+		structure_types: Vec<StructureType>,
+	}
+
+	impl WorldGeneratorStructuresProceduralPoc {
+		pub(crate) fn new(
+			seed: i32,
+			block_type_table: &Arc<BlockTypeTable>,
+		) -> WorldGeneratorStructuresProceduralPoc {
+			let structure_types = (0..10)
+				.map(|structure_type_index| {
+					StructureType::new_generated_type(seed, structure_type_index, block_type_table)
+				})
+				.collect();
+			WorldGeneratorStructuresProceduralPoc { seed, structure_types }
+		}
+	}
+
+	impl WorldGenerator for WorldGeneratorStructuresProceduralPoc {
+		fn generate_chunk_blocks(
+			&self,
+			coords_span: ChunkCoordsSpan,
+			block_type_table: &Arc<BlockTypeTable>,
+		) -> ChunkBlocks {
+			// Define the terrain generation as a deterministic coords->block function.
+			let noise_terrain = OctavedNoise::new(3, vec![self.seed, 1]);
+			let coords_to_ground = |coords: BlockCoords| -> bool {
+				let coordsf = coords.map(|x| x as f32);
+				let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
+				let scale = 60.0;
+				let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
+				coordsf.z < height
+			};
+			let block_type_table_for_terrain = Arc::clone(block_type_table);
+			let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
+				let ground = coords_to_ground(coords);
+				if ground {
+					let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+					if ground_above {
+						block_type_table_for_terrain.ground_id()
+					} else {
+						block_type_table_for_terrain.kinda_grass_id()
+					}
+				} else {
+					block_type_table_for_terrain.air_id()
+				}
+			};
+
+			// Define structure generation.
+			let structure_max_blocky_radius = 42;
+			let placing_head_seeding_noise = OctavedNoise::new(1, vec![self.seed, 2]);
+			let generation_algorithm_noise = OctavedNoise::new(1, vec![self.seed, 3]);
+			let generate_structure = |mut context: StructureInstanceGenerationContext| {
+				let mut placing_head = PlacingHead {
+					coords: context.origin.coords,
+					rand_state: placing_head_seeding_noise.sample_i3d_i1d(context.origin.coords, &[]),
+				};
+				let structure_type = &self.structure_types[context.origin.type_id.index];
+				structure_type.generation_algorithm.apply(
+					&mut context,
+					&mut placing_head,
+					&generation_algorithm_noise,
+				);
+			};
+
+			// Setup structure origins generation stuff.
+			let structure_origin_generator = TestStructureOriginGenerator::new(
+				self.seed,
+				31,
+				(-2, 9),
+				self.structure_types.len() as i32,
+			);
+
+			// Now we generate the block data in the chunk.
+			let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+
+			// Generate terrain in the chunk.
+			for coords in chunk_blocks.coords_span().iter_coords() {
+				chunk_blocks.set_simple(coords, coords_to_terrain(coords));
+			}
+
+			// Generate the structures that can overlap with the chunk.
+			let mut span_to_check = CubicCoordsSpan::from_chunk_span(coords_span);
+			span_to_check.add_margins(structure_max_blocky_radius);
+			let origins = structure_origin_generator.get_origins_in_span(span_to_check);
+			for origin in origins.into_iter() {
+				let context = StructureInstanceGenerationContext {
+					origin,
+					chunk_blocks: &mut chunk_blocks,
+					_origin_generator: &structure_origin_generator,
+					block_type_table,
+					terrain_generator: &coords_to_terrain,
+				};
+				generate_structure(context);
+			}
+
+			chunk_blocks.finish_generation()
+		}
 	}
 }

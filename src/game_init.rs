@@ -530,7 +530,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		.as_ref()
 		.map(|state| state.which_world_generator)
 		.unwrap_or(which_world_generator);
-	let world_generator = which_world_generator.get_the_actual_generator(world_gen_seed);
+	let world_generator =
+		which_world_generator.get_the_actual_generator(world_gen_seed, &block_type_table);
 
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 
