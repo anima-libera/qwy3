@@ -3548,6 +3548,7 @@ mod procedural_structures_poc {
 		},
 	}
 
+	#[derive(Clone)]
 	struct PlacingHead {
 		coords: BlockCoords,
 		rand_state: i32,
@@ -3562,6 +3563,7 @@ mod procedural_structures_poc {
 	enum GenStep {
 		Sequence { steps: Vec<GenStep> },
 		LoopN { number_of_iterations: usize, body: Box<GenStep> },
+		LoopNDifferentHeads { number_of_iterations: usize, body: Box<GenStep> },
 		PlaceAndMove { placing: BlockPlacing, motion: Motion },
 	}
 
@@ -3584,9 +3586,9 @@ mod procedural_structures_poc {
 				noise.sample_i1d_i1d(*rand_state, &[])
 			};
 
-			if random_unit(rand_state) < 1.0 / (depth as f32 + 1.0) {
+			if random_unit(rand_state) < 2.0 / (depth as f32 + 1.0) {
 				let number_of_iterations =
-					((random_unit(rand_state) * 10.0 + 2.0) / (depth as f32 + 1.0)) as usize;
+					((random_unit(rand_state) * 20.0 + 2.0) / (depth as f32 + 1.0)) as usize;
 				let body = Box::new(GenStep::new_generated_step(
 					world_seed,
 					structure_type_index,
@@ -3595,9 +3597,13 @@ mod procedural_structures_poc {
 					rand_state,
 					block_type_table,
 				));
-				GenStep::LoopN { number_of_iterations, body }
+				if random_unit(rand_state) < 0.5 {
+					GenStep::LoopN { number_of_iterations, body }
+				} else {
+					GenStep::LoopNDifferentHeads { number_of_iterations, body }
+				}
 			} else if random_unit(rand_state) < 2.0 / (depth as f32 + 1.0) {
-				let number_of_steps = (random_unit(rand_state) * 15.0 / (depth as f32 + 2.0)) as usize;
+				let number_of_steps = (random_unit(rand_state) * 30.0 / (depth as f32 + 2.0)) as usize;
 				let steps = (0..number_of_steps)
 					.map(|_step_number| {
 						GenStep::new_generated_step(
@@ -3664,6 +3670,15 @@ mod procedural_structures_poc {
 				GenStep::LoopN { number_of_iterations, body } => {
 					for _i in 0..*number_of_iterations {
 						body.apply(context, placing_head, noise);
+					}
+				},
+				GenStep::LoopNDifferentHeads { number_of_iterations, body } => {
+					let mut random_state = placing_head.new_rand_state();
+					for _i in 0..*number_of_iterations {
+						let mut new_placing_head = placing_head.clone();
+						new_placing_head.rand_state = random_state;
+						body.apply(context, &mut new_placing_head, noise);
+						random_state = new_placing_head.new_rand_state();
 					}
 				},
 				GenStep::PlaceAndMove { placing, motion } => {
