@@ -68,7 +68,7 @@ impl AlignedPhysBox {
 			return;
 		}
 
-		self.new_box_pos += self.motion;
+		self.new_box_pos += self.motion * 144.0 * dt.as_secs_f32();
 		self.motion.z -= self.gravity_factor * 0.3 * dt.as_secs_f32();
 		// TODO: There has to be a missing `dt` here, but what would be the correct expression?
 		self.motion *= 0.998;
