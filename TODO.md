@@ -103,3 +103,4 @@
 - Reduce the length of `lib.rs` and the `run_game_loop` function.
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
+- Move the code in `unsorted.rs` to better suited modules.
