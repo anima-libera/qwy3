@@ -1,3 +1,3 @@
 fn main() {
-	qwy3::run_game_loop();
+	qwy3::init_and_run_game_loop();
 }

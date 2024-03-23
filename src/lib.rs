@@ -27,4 +27,4 @@ mod unsorted;
 mod widgets;
 mod world_gen;
 
-pub use game_loop::run_game_loop;
+pub use game_loop::init_and_run_game_loop;

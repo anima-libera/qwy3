@@ -21,7 +21,7 @@ use rand::Rng;
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 
 /// Initializes the game and run the main game loop.
-pub fn run_game_loop() {
+pub fn init_and_run_game_loop() {
 	let (mut game, event_loop) = init_game();
 
 	use winit::event::*;
