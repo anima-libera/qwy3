@@ -94,8 +94,8 @@ impl AlignedPhysBox {
 							self.motion[axis] = 0.0;
 						}
 						let mut player_side = next_aligned_box.pos;
-						player_side[axis] += (next_aligned_box.dims[axis] / 2.0 + 0.0001) * sign;
-						player_side = player_side.map(|x| x.round() - 0.0001 * sign);
+						player_side[axis] += (next_aligned_box.dims[axis] / 2.0 + 0.001) * sign;
+						player_side = player_side.map(|x| x.round() - 0.001 * sign);
 						let mut new_pos = next_aligned_box.pos;
 						new_pos[axis] =
 							player_side[axis] - (0.5 + next_aligned_box.dims[axis] / 2.0) * sign;
