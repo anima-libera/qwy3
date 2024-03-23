@@ -3570,11 +3570,27 @@ mod procedural_structures_poc {
 	}
 
 	enum GenStep {
-		Sequence { steps: Vec<GenStep> },
-		LoopN { number_of_iterations: usize, body: Box<GenStep> },
-		LoopNDifferentHeads { number_of_iterations: usize, body: Box<GenStep> },
+		Sequence {
+			steps: Vec<GenStep>,
+		},
+		LoopN {
+			number_of_iterations: usize,
+			body: Box<GenStep>,
+		},
+		LoopNDifferentHeads {
+			number_of_iterations: usize,
+			body: Box<GenStep>,
+		},
 		FindGroundDownwardOrAbort,
-		PlaceAndMove { placing: BlockPlacing, motion: Motion },
+		PlaceAndMove {
+			placing: BlockPlacing,
+			motion: Motion,
+		},
+		PlaceBallAndMove {
+			placing: BlockPlacing,
+			radius_inf_sup: (f32, f32),
+			motion: Motion,
+		},
 	}
 
 	impl GenStep {
@@ -3682,7 +3698,17 @@ mod procedural_structures_poc {
 						constant_probability: random_unit(rand_state),
 					}
 				};
-				GenStep::PlaceAndMove { placing, motion }
+				if random_unit(rand_state) < 0.98 {
+					GenStep::PlaceAndMove { placing, motion }
+				} else {
+					let radius_inf = random_unit(rand_state) * 1.5;
+					let radius_sup = radius_inf + random_unit(rand_state) * 3.0;
+					GenStep::PlaceBallAndMove {
+						placing,
+						radius_inf_sup: (radius_inf, radius_sup),
+						motion,
+					}
+				}
 			}
 		}
 
@@ -3745,6 +3771,41 @@ mod procedural_structures_poc {
 				},
 				GenStep::PlaceAndMove { placing, motion } => {
 					context.place_block(placing, placing_head.coords);
+
+					let delta = match motion {
+						Motion::Random => OrientedAxis::all_the_six_possible_directions()
+							.nth(
+								(noise.sample_i1d_1d(placing_head.new_rand_state(), &[]) * 6.0).floor()
+									as usize,
+							)
+							.unwrap()
+							.delta(),
+						Motion::Constant(constant) => *constant,
+						Motion::ConstantOrRandom { constant, constant_probability } => {
+							if noise.sample_i1d_1d(placing_head.new_rand_state(), &[])
+								< *constant_probability
+							{
+								*constant
+							} else {
+								OrientedAxis::all_the_six_possible_directions()
+									.nth(
+										(noise.sample_i1d_1d(placing_head.new_rand_state(), &[]) * 6.0)
+											.floor() as usize,
+									)
+									.unwrap()
+									.delta()
+							}
+						},
+					};
+					placing_head.coords += delta;
+					Some(())
+				},
+				GenStep::PlaceBallAndMove { placing, radius_inf_sup, motion } => {
+					let radius = radius_inf_sup.0
+						+ noise.sample_i1d_1d(placing_head.new_rand_state(), &[])
+							* (radius_inf_sup.1 - radius_inf_sup.0);
+					context.place_ball(placing, placing_head.coords.map(|x| x as f32), radius);
+
 					let delta = match motion {
 						Motion::Random => OrientedAxis::all_the_six_possible_directions()
 							.nth(
