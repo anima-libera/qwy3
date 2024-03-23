@@ -144,7 +144,7 @@ pub(crate) mod unsorted {
 			let chunk_generator = Arc::clone(world_generator);
 			let coords_span = ChunkCoordsSpan { cd, chunk_coords };
 			let block_type_table = Arc::clone(block_type_table);
-			let save = save.map(Arc::clone);
+			let save = save.cloned();
 			pool.enqueue_task(Box::new(move || {
 				// Loading a chunk means either loading from save (disk)
 				// if there is a save and the chunk was already generated and saved in the past,

@@ -354,6 +354,8 @@ fn tokenize(qwy_script_code: &str) -> Vec<(Token, Span)> {
 	tokens
 }
 
+// For now, these are only read by Debug display, which is ignored by dead code analysis.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum ExpressionParsingError {
 	ExpectedStartOfExpressionButGotNoMoreTokens,
