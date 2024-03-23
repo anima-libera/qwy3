@@ -124,6 +124,7 @@ pub(crate) struct Game {
 	pub(crate) atlas_texture: wgpu::Texture,
 	pub(crate) save: Option<Arc<Save>>,
 	pub(crate) only_save_modified_chunks: bool,
+	pub(crate) max_fps: Option<i32>,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -171,6 +172,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		chunk_edge,
 		fullscreen,
 		no_vsync,
+		max_fps,
 		no_fog,
 		fog_margin,
 		save_name,
@@ -658,6 +660,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		atlas_texture,
 		save,
 		only_save_modified_chunks,
+		max_fps,
 
 		worker_tasks,
 		pool,

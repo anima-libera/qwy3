@@ -61,6 +61,10 @@ pub(crate) struct CommandLineSettings {
 	#[arg(long)]
 	pub(crate) no_vsync: bool,
 
+	/// Limit FPS to an arbitrary rate.
+	#[arg(long, value_name = "MAX_FRAMERATE")]
+	pub(crate) max_fps: Option<i32>,
+
 	/// Disables the fog from the start.
 	#[arg(long)]
 	pub(crate) no_fog: bool,

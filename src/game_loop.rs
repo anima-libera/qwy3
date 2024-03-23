@@ -787,6 +787,17 @@ pub fn run_game_loop() {
 			};
 			data_for_rendering.render();
 
+			// Limit FPS if asked for and needed.
+			if let Some(max_fps) = game.max_fps {
+				let time_at_start_of_iteration = game.time_from_last_iteration;
+				let iteration_duration = time_at_start_of_iteration.elapsed();
+				let min_iteration_duration = std::time::Duration::from_secs_f32(1.0 / max_fps as f32);
+				let sleep_time_if_any = min_iteration_duration.checked_sub(iteration_duration);
+				if let Some(sleep_time) = sleep_time_if_any {
+					std::thread::sleep(sleep_time);
+				}
+			}
+
 			if game.close_after_one_frame {
 				println!("Closing after one frame, as asked via command line arguments");
 				elwt.exit();

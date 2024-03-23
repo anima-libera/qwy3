@@ -37,6 +37,7 @@ pub(crate) struct DataForRendering<'a> {
 }
 
 impl<'a> DataForRendering<'a> {
+	/// Blocking if V-sync is enabled which will make the FPS match the screen refresh rate.
 	pub(crate) fn render(&self) {
 		let mut encoder = self
 			.device
