@@ -3610,9 +3610,9 @@ mod procedural_structures_poc {
 						),
 					],
 				}
-			} else if random_unit(rand_state) < 2.0 / (depth as f32) {
+			} else if random_unit(rand_state) < 2.5 / (depth as f32) {
 				let number_of_iterations =
-					((random_unit(rand_state) * 20.0 + 2.0) / (depth as f32)) as usize;
+					((random_unit(rand_state) * 10.0 + 2.0) / (depth as f32)) as usize + 2;
 				let body = Box::new(GenStep::new_generated_step(
 					world_seed,
 					structure_type_index,
@@ -3626,8 +3626,9 @@ mod procedural_structures_poc {
 				} else {
 					GenStep::LoopNDifferentHeads { number_of_iterations, body }
 				}
-			} else if random_unit(rand_state) < 2.0 / (depth as f32) {
-				let number_of_steps = (random_unit(rand_state) * 30.0 / (depth as f32 + 1.0)) as usize;
+			} else if random_unit(rand_state) < 2.5 / (depth as f32) {
+				let number_of_steps =
+					(random_unit(rand_state) * 10.0 / (depth as f32 + 1.0)) as usize + 2;
 				let steps = (0..number_of_steps)
 					.map(|_step_number| {
 						GenStep::new_generated_step(
@@ -3658,20 +3659,26 @@ mod procedural_structures_poc {
 					only_place_on_air: random_unit(rand_state) < 0.5,
 				};
 				let motion = if random_unit(rand_state) < 0.3 {
-					Motion::Constant(
+					Motion::Constant(if random_unit(rand_state) < 0.5 {
+						cgmath::vec3(0, 0, 1)
+					} else {
 						OrientedAxis::all_the_six_possible_directions()
 							.nth((random_unit(rand_state) * 6.0).floor() as usize)
 							.unwrap()
-							.delta(),
-					)
+							.delta()
+					})
 				} else if random_unit(rand_state) < 0.5 {
 					Motion::Random
 				} else {
 					Motion::ConstantOrRandom {
-						constant: OrientedAxis::all_the_six_possible_directions()
-							.nth((random_unit(rand_state) * 6.0).floor() as usize)
-							.unwrap()
-							.delta(),
+						constant: if random_unit(rand_state) < 0.5 {
+							cgmath::vec3(0, 0, 1)
+						} else {
+							OrientedAxis::all_the_six_possible_directions()
+								.nth((random_unit(rand_state) * 6.0).floor() as usize)
+								.unwrap()
+								.delta()
+						},
 						constant_probability: random_unit(rand_state),
 					}
 				};
@@ -3863,7 +3870,7 @@ mod procedural_structures_poc {
 			let structure_origin_generator = TestStructureOriginGenerator::new(
 				self.seed,
 				31,
-				(-2, 9),
+				(-2, 30),
 				self.structure_types.len() as i32,
 			);
 
