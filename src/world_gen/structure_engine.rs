@@ -141,10 +141,20 @@ type TerrainGenerator<'a> = dyn Fn(BlockCoords) -> BlockTypeId + 'a;
 /// A structure instance is just one structure with an origin position
 /// (and a type, though that is given in an other way).
 pub(crate) struct StructureInstanceGenerationContext<'a> {
+	/// The origin of the structure that we generate now.
 	pub(crate) origin: StructureOrigin,
+	/// The span in which the structure is allowed to place blocks.
+	pub(crate) allowed_span: CubicCoordsSpan,
+	/// The chunk that is being generated and for which we generate a structure.
+	/// We are only generating this chunk now, so all the blocks placed by the structure outside
+	/// of this chunk will be discarded. Other chunks that this structure might place blocks into
+	/// will also generate this structure (in the exact same way) so the blcosk that are discarded
+	/// now are not lost, but just the matter of an other chunk generation task.
 	pub(crate) chunk_blocks: &'a mut ChunkBlocksBeingGenerated,
+	/// Structures are allowed to see the origins of other structures and maybe react to it.
 	pub(crate) _origin_generator: &'a dyn StructureOriginGenerator,
 	pub(crate) block_type_table: &'a Arc<BlockTypeTable>,
+	/// Structures are allowed to see the terrain (the world if there was no structures).
 	pub(crate) terrain_generator: &'a TerrainGenerator<'a>,
 }
 
@@ -159,13 +169,15 @@ pub(crate) struct BlockPlacing {
 
 impl<'a> StructureInstanceGenerationContext<'a> {
 	pub(crate) fn place_block(&mut self, block_placing: &BlockPlacing, coords: BlockCoords) {
-		let shall_place_block = !block_placing.only_place_on_air
-			|| self
-				.chunk_blocks
-				.get(coords)
-				.is_some_and(|block| self.block_type_table.get(block.type_id).unwrap().is_air());
-		if shall_place_block {
-			self.chunk_blocks.set_simple(coords, block_placing.block_type_to_place);
+		if self.allowed_span.contains(coords) {
+			let shall_place_block = !block_placing.only_place_on_air
+				|| self
+					.chunk_blocks
+					.get(coords)
+					.is_some_and(|block| self.block_type_table.get(block.type_id).unwrap().is_air());
+			if shall_place_block {
+				self.chunk_blocks.set_simple(coords, block_placing.block_type_to_place);
+			}
 		}
 	}
 

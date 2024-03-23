@@ -353,8 +353,11 @@ impl WorldGenerator for DefaultWorldGenerator {
 		span_to_check.add_margins(structure_max_blocky_radius);
 		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
 		for origin in origins.into_iter() {
+			let allowed_span =
+				CubicCoordsSpan::with_center_and_radius(origin.coords, structure_max_blocky_radius);
 			let context = StructureInstanceGenerationContext {
 				origin,
+				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
@@ -3359,8 +3362,11 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 		span_to_check.add_margins(structure_max_blocky_radius);
 		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
 		for origin in origins.into_iter() {
+			let allowed_span =
+				CubicCoordsSpan::with_center_and_radius(origin.coords, structure_max_blocky_radius);
 			let context = StructureInstanceGenerationContext {
 				origin,
+				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
@@ -3473,8 +3479,11 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 		span_to_check.add_margins(structure_max_blocky_radius);
 		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
 		for origin in origins.into_iter() {
+			let allowed_span =
+				CubicCoordsSpan::with_center_and_radius(origin.coords, structure_max_blocky_radius);
 			let context = StructureInstanceGenerationContext {
 				origin,
+				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
@@ -3564,6 +3573,7 @@ mod procedural_structures_poc {
 		Sequence { steps: Vec<GenStep> },
 		LoopN { number_of_iterations: usize, body: Box<GenStep> },
 		LoopNDifferentHeads { number_of_iterations: usize, body: Box<GenStep> },
+		FindGroundDownwardOrAbort,
 		PlaceAndMove { placing: BlockPlacing, motion: Motion },
 	}
 
@@ -3586,9 +3596,23 @@ mod procedural_structures_poc {
 				noise.sample_i1d_i1d(*rand_state, &[])
 			};
 
-			if random_unit(rand_state) < 2.0 / (depth as f32 + 1.0) {
+			if depth == 0 {
+				GenStep::Sequence {
+					steps: vec![
+						GenStep::FindGroundDownwardOrAbort,
+						GenStep::new_generated_step(
+							world_seed,
+							structure_type_index,
+							new_seed(rand_state),
+							depth + 1,
+							rand_state,
+							block_type_table,
+						),
+					],
+				}
+			} else if random_unit(rand_state) < 2.0 / (depth as f32) {
 				let number_of_iterations =
-					((random_unit(rand_state) * 20.0 + 2.0) / (depth as f32 + 1.0)) as usize;
+					((random_unit(rand_state) * 20.0 + 2.0) / (depth as f32)) as usize;
 				let body = Box::new(GenStep::new_generated_step(
 					world_seed,
 					structure_type_index,
@@ -3602,8 +3626,8 @@ mod procedural_structures_poc {
 				} else {
 					GenStep::LoopNDifferentHeads { number_of_iterations, body }
 				}
-			} else if random_unit(rand_state) < 2.0 / (depth as f32 + 1.0) {
-				let number_of_steps = (random_unit(rand_state) * 30.0 / (depth as f32 + 2.0)) as usize;
+			} else if random_unit(rand_state) < 2.0 / (depth as f32) {
+				let number_of_steps = (random_unit(rand_state) * 30.0 / (depth as f32 + 1.0)) as usize;
 				let steps = (0..number_of_steps)
 					.map(|_step_number| {
 						GenStep::new_generated_step(
@@ -3660,25 +3684,56 @@ mod procedural_structures_poc {
 			context: &mut StructureInstanceGenerationContext,
 			placing_head: &mut PlacingHead,
 			noise: &OctavedNoise,
-		) {
+		) -> Option<()> {
 			match self {
 				GenStep::Sequence { steps } => {
 					for step in steps {
-						step.apply(context, placing_head, noise);
+						step.apply(context, placing_head, noise)?;
 					}
+					Some(())
 				},
 				GenStep::LoopN { number_of_iterations, body } => {
 					for _i in 0..*number_of_iterations {
-						body.apply(context, placing_head, noise);
+						body.apply(context, placing_head, noise)?;
 					}
+					Some(())
 				},
 				GenStep::LoopNDifferentHeads { number_of_iterations, body } => {
 					let mut random_state = placing_head.new_rand_state();
 					for _i in 0..*number_of_iterations {
 						let mut new_placing_head = placing_head.clone();
 						new_placing_head.rand_state = random_state;
-						body.apply(context, &mut new_placing_head, noise);
+						body.apply(context, &mut new_placing_head, noise)?;
 						random_state = new_placing_head.new_rand_state();
+					}
+					Some(())
+				},
+				GenStep::FindGroundDownwardOrAbort => {
+					let mut found_ground = false;
+					while placing_head.coords.z > context.allowed_span.inf.z {
+						let no_ground_above = context
+							.block_type_table
+							.get((context.terrain_generator)(
+								placing_head.coords + cgmath::vec3(0, 0, 1),
+							))
+							.unwrap()
+							.is_air();
+						let ground_here = !context
+							.block_type_table
+							.get((context.terrain_generator)(placing_head.coords))
+							.unwrap()
+							.is_air();
+						if no_ground_above && ground_here {
+							found_ground = true;
+							break;
+						}
+						placing_head.coords.z -= 1;
+					}
+					if !found_ground {
+						// Abort.
+						None
+					} else {
+						Some(())
 					}
 				},
 				GenStep::PlaceAndMove { placing, motion } => {
@@ -3709,6 +3764,7 @@ mod procedural_structures_poc {
 						},
 					};
 					placing_head.coords += delta;
+					Some(())
 				},
 			}
 		}
@@ -3747,7 +3803,7 @@ mod procedural_structures_poc {
 			seed: i32,
 			block_type_table: &Arc<BlockTypeTable>,
 		) -> WorldGeneratorStructuresProceduralPoc {
-			let structure_types = (0..10)
+			let structure_types = (0..20)
 				.map(|structure_type_index| {
 					StructureType::new_generated_type(seed, structure_type_index, block_type_table)
 				})
@@ -3824,8 +3880,11 @@ mod procedural_structures_poc {
 			span_to_check.add_margins(structure_max_blocky_radius);
 			let origins = structure_origin_generator.get_origins_in_span(span_to_check);
 			for origin in origins.into_iter() {
+				let allowed_span =
+					CubicCoordsSpan::with_center_and_radius(origin.coords, structure_max_blocky_radius);
 				let context = StructureInstanceGenerationContext {
 					origin,
+					allowed_span,
 					chunk_blocks: &mut chunk_blocks,
 					_origin_generator: &structure_origin_generator,
 					block_type_table,
