@@ -456,31 +456,38 @@ impl ChunkGrid {
 		dt: std::time::Duration,
 	) {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
+		let mut changes_of_chunk = vec![];
 		for chunk_coords in chunk_coords_list.into_iter() {
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
-			chunk_entities.apply_one_physics_step(self, block_type_table, dt);
+			chunk_entities.apply_one_physics_step(self, block_type_table, dt, &mut changes_of_chunk);
 			if chunk_entities.count_entities() > 0 {
-				let chunk_entities_that_took_the_place =
+				let unexpected_chunk_entities_that_took_the_place_of_the_one_handled_just_now =
 					self.entities_map.insert(chunk_coords, chunk_entities);
-				assert!(
-					chunk_entities_that_took_the_place.is_none(),
-					"What to do in this situation? Merge them?"
-				);
+				if unexpected_chunk_entities_that_took_the_place_of_the_one_handled_just_now.is_some() {
+					unimplemented!("TODO: What to do in this situation? Merge them?");
+				}
 			} else {
 				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
 			}
 		}
+		for change_of_chunk in changes_of_chunk.into_iter() {
+			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity);
+		}
 	}
 
-	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
-		let coords = entity.pos().map(|x| x.round() as i32);
-		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
+	fn put_entity_in_chunk(&mut self, chunk_coords: ChunkCoords, entity: Entity) {
 		let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
 		self
 			.entities_map
 			.entry(chunk_coords)
 			.or_insert(ChunkEntities::new_empty(coords_span))
 			.spawn_entity(entity);
+	}
+
+	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
+		let coords = entity.pos().map(|x| x.round() as i32);
+		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
+		self.put_entity_in_chunk(chunk_coords, entity);
 	}
 
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {

@@ -5,12 +5,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
 	block_types::BlockTypeTable,
 	chunks::{Block, ChunkGrid},
-	coords::{AlignedBox, ChunkCoordsSpan},
+	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Entity {
 	pos: cgmath::Point3<f32>,
+	to_delete: bool,
 	typed: EntityTyped,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -24,11 +25,20 @@ impl Entity {
 		pos: cgmath::Point3<f32>,
 		motion: cgmath::Vector3<f32>,
 	) -> Entity {
-		Entity { pos, typed: EntityTyped::Block { block, motion } }
+		Entity {
+			pos,
+			to_delete: false,
+			typed: EntityTyped::Block { block, motion },
+		}
 	}
 
 	pub(crate) fn pos(&self) -> cgmath::Point3<f32> {
 		self.pos
+	}
+
+	pub(crate) fn chunk_coords(&self, cd: ChunkDimensions) -> ChunkCoords {
+		let coords = self.pos().map(|x| x.round() as i32);
+		cd.world_coords_to_containing_chunk_coords(coords)
 	}
 
 	pub(crate) fn aligned_box(&self) -> Option<AlignedBox> {
@@ -67,7 +77,7 @@ impl Entity {
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-	) -> EntityPhysicsStepKeepOrDelete {
+	) {
 		match &mut self.typed {
 			EntityTyped::Block { block, motion } => {
 				self.pos += *motion * 144.0 * dt.as_secs_f32();
@@ -79,19 +89,11 @@ impl Entity {
 				if collides {
 					let coords = self.pos.map(|x| x.round() as i32);
 					chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
-					EntityPhysicsStepKeepOrDelete::Delete
-				} else {
-					EntityPhysicsStepKeepOrDelete::Keep
+					self.to_delete = true;
 				}
 			},
 		}
 	}
-}
-
-enum EntityPhysicsStepKeepOrDelete {
-	Keep,
-	/// The entity is to be deleted.
-	Delete,
 }
 
 pub(crate) struct ChunkEntities {
@@ -100,30 +102,24 @@ pub(crate) struct ChunkEntities {
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct ChunkEntitiesSavable {
-	entities: Vec<Entity>,
-	entities_coming_from_other_chunks: Vec<Entity>,
+	/// The `Option` is always `Some` and is there to ease the moving of entities out of the vec.
+	entities: Vec<Option<Entity>>,
 }
 
 impl ChunkEntities {
 	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkEntities {
-		ChunkEntities {
-			coords_span,
-			savable: ChunkEntitiesSavable {
-				entities: vec![],
-				entities_coming_from_other_chunks: vec![],
-			},
-		}
+		ChunkEntities { coords_span, savable: ChunkEntitiesSavable { entities: vec![] } }
 	}
 
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
-		self.savable.entities.iter()
+		self.savable.entities.iter().map(|entity| entity.as_ref().unwrap())
 	}
 	pub(crate) fn count_entities(&self) -> usize {
 		self.savable.entities.len()
 	}
 
 	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
-		self.savable.entities.push(entity);
+		self.savable.entities.push(Some(entity));
 	}
 
 	pub(crate) fn apply_one_physics_step(
@@ -131,19 +127,33 @@ impl ChunkEntities {
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
+		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 	) {
-		let mut entities_to_delete_indices = vec![];
-		for (index, entity) in self.savable.entities.iter_mut().enumerate() {
-			let keep_or_delete = entity.apply_one_physics_step(chunk_grid, block_type_table, dt);
-			if matches!(keep_or_delete, EntityPhysicsStepKeepOrDelete::Delete) {
-				entities_to_delete_indices.push(index);
+		for entity in self.savable.entities.iter_mut() {
+			entity.as_mut().unwrap().apply_one_physics_step(chunk_grid, block_type_table, dt);
+		}
+		self.savable.entities.retain_mut(|entity| {
+			if entity.as_ref().unwrap().to_delete {
+				false
+			} else {
+				let entity_chunk_coords = entity.as_ref().unwrap().chunk_coords(chunk_grid.cd());
+				if entity_chunk_coords != self.coords_span.chunk_coords {
+					changes_of_chunk.push(ChunkEntitiesPhysicsStepChangeOfChunk {
+						new_chunk: entity_chunk_coords,
+						entity: entity.take().unwrap(),
+					});
+					false
+				} else {
+					true
+				}
 			}
-		}
-		for index in entities_to_delete_indices.into_iter().rev() {
-			self.savable.entities.remove(index);
-			// TODO: Also handle moving entities to their chunk if it changed here.
-		}
+		});
 	}
+}
+
+pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
+	pub(crate) new_chunk: ChunkCoords,
+	pub(crate) entity: Entity,
 }
 
 // TODO:
