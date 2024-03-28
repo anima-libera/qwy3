@@ -460,7 +460,12 @@ impl ChunkGrid {
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
 			chunk_entities.apply_one_physics_step(self, block_type_table, dt);
 			if chunk_entities.count_entities() > 0 {
-				self.entities_map.insert(chunk_coords, chunk_entities).unwrap();
+				let chunk_entities_that_took_the_place =
+					self.entities_map.insert(chunk_coords, chunk_entities);
+				assert!(
+					chunk_entities_that_took_the_place.is_none(),
+					"What to do in this situation? Merge them?"
+				);
 			} else {
 				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
 			}
