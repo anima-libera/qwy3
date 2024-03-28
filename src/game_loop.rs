@@ -314,6 +314,8 @@ pub fn init_and_run_game_loop() {
 					let cgmath::Point3 { x, y, z } = player_block_coords;
 					format!("{x},{y},{z}")
 				};
+				let (entity_count, chunk_entity_count) =
+					game.chunk_grid.count_entities_and_chunks_that_have_entities();
 				let seed = game.world_gen_seed;
 				let random_message = game.random_message;
 				let settings = font::TextRenderingSettings::with_scale(3.0);
@@ -322,6 +324,8 @@ pub fn init_and_run_game_loop() {
 					chunks loaded: {chunk_count}\n\
 					blocks loaded: {block_count}\n\
 					chunks meshed: {chunk_meshed_count}\n\
+					entities: {entity_count}\n\
+					chunk with entities: {chunk_entity_count}\n\
 					player coords: {player_block_coords_str}\n\
 					seed: {seed}\n\
 					{random_message}"

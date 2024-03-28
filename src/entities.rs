@@ -118,6 +118,9 @@ impl ChunkEntities {
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
 		self.savable.entities.iter()
 	}
+	pub(crate) fn count_entities(&self) -> usize {
+		self.savable.entities.len()
+	}
 
 	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
 		self.savable.entities.push(entity);

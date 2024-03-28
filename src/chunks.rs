@@ -479,6 +479,15 @@ impl ChunkGrid {
 		self.entities_map.values().flat_map(|chunk_entities| chunk_entities.iter_entities())
 	}
 
+	pub(crate) fn count_entities_and_chunks_that_have_entities(&self) -> (usize, usize) {
+		let chunks_that_have_entities_count = self.entities_map.len();
+		let mut entities_count = 0;
+		for chunk_entities in self.entities_map.values() {
+			entities_count += chunk_entities.count_entities();
+		}
+		(entities_count, chunks_that_have_entities_count)
+	}
+
 	pub(crate) fn add_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
