@@ -459,9 +459,12 @@ impl ChunkGrid {
 		for chunk_coords in chunk_coords_list.into_iter() {
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
 			chunk_entities.apply_one_physics_step(self, block_type_table, dt);
-			self.entities_map.insert(chunk_coords, chunk_entities);
+			if chunk_entities.count_entities() > 0 {
+				self.entities_map.insert(chunk_coords, chunk_entities).unwrap();
+			} else {
+				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
+			}
 		}
-		// TODO: Make sure that chunks devoid of entities do not have a `ChunkEntities`.
 	}
 
 	pub(crate) fn spawn_entity(&mut self, entity: Entity) {

@@ -153,3 +153,4 @@ impl ChunkEntities {
 //   so that like an entity can be made of shapes and texture and move each shape separately.
 // Render these with instanced rendering.
 // Get falling blocks working.
+// Handle the case where an entity spawns new entities in its own chunk.
