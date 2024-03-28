@@ -623,6 +623,14 @@ pub fn init_and_run_game_loop() {
 				&game.player_phys.aligned_box().overlapping_block_coords_span().to_aligned_box(),
 			);
 
+			let mut entities_box_meshes = vec![];
+			for entity in game.chunk_grid.iter_entities() {
+				if let Some(aligned_box) = entity.aligned_box() {
+					entities_box_meshes
+						.push(SimpleLineMesh::from_aligned_box(&game.device, &aligned_box));
+				}
+			}
+
 			let first_person_camera_position = game.player_phys.aligned_box().pos
 				+ cgmath::Vector3::<f32>::from((0.0, 0.0, game.player_phys.aligned_box().dims.z / 2.0))
 					* 0.7;
@@ -788,6 +796,7 @@ pub fn init_and_run_game_loop() {
 				enable_display_phys_box: game.enable_display_phys_box,
 				player_box_mesh: &player_box_mesh,
 				player_blocks_box_mesh: &player_blocks_box_mesh,
+				entities_box_meshes: &entities_box_meshes,
 				targeted_block_box_mesh_opt: &targeted_block_box_mesh_opt,
 				enable_display_interface: game.enable_display_interface,
 				chunk_box_meshes: &chunk_box_meshes,

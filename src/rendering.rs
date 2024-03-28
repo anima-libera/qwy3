@@ -26,6 +26,7 @@ pub(crate) struct DataForRendering<'a> {
 	pub(crate) enable_display_phys_box: bool,
 	pub(crate) player_box_mesh: &'a SimpleLineMesh,
 	pub(crate) player_blocks_box_mesh: &'a SimpleLineMesh,
+	pub(crate) entities_box_meshes: &'a [SimpleLineMesh],
 	pub(crate) targeted_block_box_mesh_opt: &'a Option<SimpleLineMesh>,
 	pub(crate) enable_display_interface: bool,
 	pub(crate) chunk_box_meshes: &'a [SimpleLineMesh],
@@ -142,6 +143,13 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
 				render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
+			}
+
+			for entity_box_mesh in self.entities_box_meshes.iter() {
+				render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
+				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
+				render_pass.set_vertex_buffer(0, entity_box_mesh.vertex_buffer.slice(..));
+				render_pass.draw(0..(entity_box_mesh.vertices.len() as u32), 0..1);
 			}
 		}
 

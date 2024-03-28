@@ -31,7 +31,7 @@ impl Entity {
 		self.pos
 	}
 
-	fn aligned_box(&self) -> Option<AlignedBox> {
+	pub(crate) fn aligned_box(&self) -> Option<AlignedBox> {
 		match self.typed {
 			EntityTyped::Block { .. } => {
 				Some(AlignedBox { pos: self.pos, dims: cgmath::vec3(1.0, 1.0, 1.0) })
@@ -113,6 +113,10 @@ impl ChunkEntities {
 				entities_coming_from_other_chunks: vec![],
 			},
 		}
+	}
+
+	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
+		self.savable.entities.iter()
 	}
 
 	pub(crate) fn spawn_entity(&mut self, entity: Entity) {

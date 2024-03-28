@@ -475,6 +475,10 @@ impl ChunkGrid {
 			.spawn_entity(entity);
 	}
 
+	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
+		self.entities_map.values().flat_map(|chunk_entities| chunk_entities.iter_entities())
+	}
+
 	pub(crate) fn add_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
