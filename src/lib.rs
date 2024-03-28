@@ -9,6 +9,7 @@ mod chunks;
 mod cmdline;
 mod commands;
 mod coords;
+mod entities;
 mod font;
 mod game_init;
 mod game_loop;

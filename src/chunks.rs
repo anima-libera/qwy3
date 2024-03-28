@@ -15,6 +15,7 @@ use crate::{
 		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
 		CubicCoordsSpan, OrientedAxis,
 	},
+	entities::ChunkEntities,
 	font::Font,
 	saves::Save,
 	threadpool::ThreadPool,
@@ -296,6 +297,7 @@ pub(crate) struct ChunkGrid {
 	culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	remeshing_required_set: FxHashSet<ChunkCoords>,
+	entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
 }
 
 impl ChunkGrid {
@@ -306,6 +308,7 @@ impl ChunkGrid {
 			culling_info_map: HashMap::default(),
 			mesh_map: HashMap::default(),
 			remeshing_required_set: HashSet::default(),
+			entities_map: HashMap::default(),
 		}
 	}
 
