@@ -13,6 +13,7 @@ bind_control key:O place_or_remove_block_under_player
 bind_control key:I toggle_world_generation
 bind_control key:U toggle_display_interface
 bind_control key:Y toggle_display_not_surrounded_chunks_as_boxes
+bind_control key:T toggle_display_chunks_with_entities_as_boxes
 bind_control key:N toggle_display_interfaces_debug_boxes
 bind_control key:G toggle_fog
 bind_control key:F11 toggle_fullscreen

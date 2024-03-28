@@ -503,6 +503,10 @@ impl ChunkGrid {
 		(entities_count, chunks_that_have_entities_count)
 	}
 
+	pub(crate) fn iter_chunk_whith_entities_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
+		self.entities_map.keys().copied()
+	}
+
 	pub(crate) fn add_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,

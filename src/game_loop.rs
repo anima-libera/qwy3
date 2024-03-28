@@ -301,6 +301,10 @@ pub fn init_and_run_game_loop() {
 								))
 							}
 						},
+						(Action::ToggleDisplayChunksWithEntitiesAsBoxes, true) => {
+							game.enable_display_chunks_with_entities_as_boxes =
+								!game.enable_display_chunks_with_entities_as_boxes;
+						},
 						(_, false) => {},
 					}
 				}
@@ -713,6 +717,20 @@ pub fn init_and_run_game_loop() {
 				}
 			}
 
+			let mut chunk_with_entities_box_meshes = vec![];
+			if game.enable_display_chunks_with_entities_as_boxes {
+				for chunk_coords in game.chunk_grid.iter_chunk_whith_entities_coords() {
+					let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
+					let inf = coords_span.block_coords_inf().map(|x| x as f32);
+					let dims = coords_span.cd._dimensions().map(|x| x as f32 - 1.0);
+					let pos = inf + dims / 2.0;
+					chunk_with_entities_box_meshes.push(SimpleLineMesh::from_aligned_box(
+						&game.device,
+						&AlignedBox { pos, dims },
+					));
+				}
+			}
+
 			game.sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
 
 			let sun_camera_view_projection_matrices: Vec<_> = game
@@ -812,6 +830,7 @@ pub fn init_and_run_game_loop() {
 				player_box_mesh: &player_box_mesh,
 				player_blocks_box_mesh: &player_blocks_box_mesh,
 				entities_box_meshes: &entities_box_meshes,
+				chunk_with_entities_box_meshes: &chunk_with_entities_box_meshes,
 				targeted_block_box_mesh_opt: &targeted_block_box_mesh_opt,
 				enable_display_interface: game.enable_display_interface,
 				chunk_box_meshes: &chunk_box_meshes,
