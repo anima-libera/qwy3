@@ -58,6 +58,7 @@ pub(crate) enum Action {
 	ToggleDisplayInterfaceDebugBoxes,
 	ToggleFog,
 	ToggleFullscreen,
+	ThrowBlock,
 }
 
 /// The main-thread reciever for the results of a task that was given to a worker thread.

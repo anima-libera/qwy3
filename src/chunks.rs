@@ -15,7 +15,7 @@ use crate::{
 		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
 		CubicCoordsSpan, OrientedAxis,
 	},
-	entities::ChunkEntities,
+	entities::{ChunkEntities, Entity},
 	font::Font,
 	saves::Save,
 	threadpool::ThreadPool,
@@ -448,6 +448,31 @@ impl ChunkGrid {
 
 	pub(crate) fn count_chunks_that_have_blocks(&self) -> usize {
 		self.blocks_map.len()
+	}
+
+	pub(crate) fn apply_one_physics_step(
+		&mut self,
+		block_type_table: &Arc<BlockTypeTable>,
+		dt: std::time::Duration,
+	) {
+		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
+		for chunk_coords in chunk_coords_list.into_iter() {
+			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
+			chunk_entities.apply_one_physics_step(self, block_type_table, dt);
+			self.entities_map.insert(chunk_coords, chunk_entities);
+		}
+		// TODO: Make sure that chunks devoid of entities do not have a `ChunkEntities`.
+	}
+
+	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
+		let coords = entity.pos().map(|x| x.round() as i32);
+		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
+		let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+		self
+			.entities_map
+			.entry(chunk_coords)
+			.or_insert(ChunkEntities::new_empty(coords_span))
+			.spawn_entity(entity);
 	}
 
 	pub(crate) fn add_chunk_loading_results(

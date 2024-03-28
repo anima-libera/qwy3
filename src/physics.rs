@@ -65,7 +65,7 @@ impl AlignedPhysBox {
 		self.on_ground = false;
 	}
 
-	pub(crate) fn apply_on_physics_step(
+	pub(crate) fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
@@ -91,8 +91,7 @@ impl AlignedPhysBox {
 
 		self.new_box_pos += self.motion * 144.0 * dt.as_secs_f32();
 		self.motion.z -= self.gravity_factor * 0.35 * dt.as_secs_f32();
-		// TODO: There has to be a missing `dt` here, but what would be the correct expression?
-		self.motion *= 0.998;
+		self.motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
 
 		// Inspired from Minecraft's algorithm described at https://www.mcpk.wiki/wiki/Collisions
 

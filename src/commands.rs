@@ -101,6 +101,7 @@ pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 					"toggle_display_interfaces_debug_boxes" => Action::ToggleDisplayInterfaceDebugBoxes,
 					"toggle_fog" => Action::ToggleFog,
 					"toggle_fullscreen" => Action::ToggleFullscreen,
+					"throw_block" => Action::ThrowBlock,
 					"toggle_third_person_view" => {
 						println!(
 							"\x1b[33mWarning in file \"{command_file_path}\" at line {line_number}: \

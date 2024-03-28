@@ -19,3 +19,4 @@ bind_control key:F11 toggle_fullscreen
 bind_control key:enter open_command_line
 bind_control mouse_button:left remove_block_at_target
 bind_control mouse_button:right place_block_at_target
+bind_control key:E throw_block

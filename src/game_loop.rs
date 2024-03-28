@@ -4,6 +4,7 @@ use crate::{
 	camera::{aspect_ratio, CameraSettings},
 	chunks::{Block, BlockData},
 	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
+	entities::Entity,
 	font,
 	game_init::{init_game, save_savable_state},
 	lang::{self, LogItem},
@@ -279,6 +280,15 @@ pub fn init_and_run_game_loop() {
 									.enable_fullscreen
 									.then_some(winit::window::Fullscreen::Borderless(None)),
 							);
+						},
+						(Action::ThrowBlock, true) => {
+							let block =
+								Block { type_id: game.block_type_table.kinda_leaf_id(), data: None };
+							game.chunk_grid.spawn_entity(Entity::new_block(
+								block,
+								game.player_phys.aligned_box().pos,
+								game.camera_direction.to_vec3(),
+							))
 						},
 						(_, false) => {},
 					}
@@ -592,8 +602,10 @@ pub fn init_and_run_game_loop() {
 			game.player_phys.walk(walking_vector, !game.enable_physics);
 
 			if game.enable_physics {
-				game.player_phys.apply_on_physics_step(&game.chunk_grid, &game.block_type_table, dt);
+				game.player_phys.apply_one_physics_step(&game.chunk_grid, &game.block_type_table, dt);
 			}
+
+			game.chunk_grid.apply_one_physics_step(&game.block_type_table, dt);
 
 			game.queue.write_buffer(
 				&game.fog_center_position_thingy.resource,
