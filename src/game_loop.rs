@@ -282,13 +282,24 @@ pub fn init_and_run_game_loop() {
 							);
 						},
 						(Action::ThrowBlock, true) => {
-							let block =
-								Block { type_id: game.block_type_table.kinda_leaf_id(), data: None };
-							game.chunk_grid.spawn_entity(Entity::new_block(
-								block,
-								game.player_phys.aligned_box().pos,
-								game.camera_direction.to_vec3(),
-							))
+							for _ in 0..30 {
+								let block =
+									Block { type_id: game.block_type_table.kinda_leaf_id(), data: None };
+
+								let mut motion = game.camera_direction.to_vec3();
+								motion.x +=
+									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
+								motion.y +=
+									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
+								motion.z +=
+									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
+
+								game.chunk_grid.spawn_entity(Entity::new_block(
+									block,
+									game.player_phys.aligned_box().pos,
+									motion,
+								))
+							}
 						},
 						(_, false) => {},
 					}
