@@ -510,7 +510,8 @@ impl ChunkGrid {
 		loaded_area: LoadedArea,
 		save: Option<&Arc<Save>>,
 	) {
-		let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
+		//let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
+		let chunk_entities_is_loaded = self.is_loaded(chunk_coords);
 		if chunk_entities_is_loaded {
 			let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
 			self

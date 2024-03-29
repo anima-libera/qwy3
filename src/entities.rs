@@ -92,8 +92,14 @@ impl Entity {
 				let collides = self.collides_with_blocks(chunk_grid, block_type_table);
 				if collides {
 					let coords = self.pos.map(|x| x.round() as i32);
-					chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
-					self.to_delete = true;
+
+					let chunk_coords = chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
+					let is_loaded = chunk_grid.is_loaded(chunk_coords);
+
+					if is_loaded {
+						chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
+						self.to_delete = true;
+					}
 				}
 			},
 		}
@@ -189,7 +195,7 @@ impl ChunkEntities {
 		let mut chunk_file = std::fs::File::open(&chunk_file_path).ok()?;
 		let mut compressed_data = vec![];
 		chunk_file.read_to_end(&mut compressed_data).unwrap();
-		std::fs::remove_file(chunk_file_path).unwrap();
+		std::fs::remove_file(chunk_file_path).ok();
 		let mut uncompressed_data = vec![];
 		{
 			let mut decoder = flate2::bufread::DeflateDecoder::new(compressed_data.as_slice());
