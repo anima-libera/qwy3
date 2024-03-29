@@ -15,7 +15,7 @@ use crate::{
 		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
 		CubicCoordsSpan, OrientedAxis,
 	},
-	entities::{add_entity_directly_to_save, ChunkEntities, Entity},
+	entities::{ChunkEntities, Entity},
 	font::Font,
 	saves::{Save, WhichChunkFile},
 	threadpool::ThreadPool,
@@ -454,7 +454,6 @@ impl ChunkGrid {
 		&mut self,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-		loaded_area: LoadedArea,
 		save: Option<&Arc<Save>>,
 	) {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
@@ -473,12 +472,7 @@ impl ChunkGrid {
 		}
 		// The entities that got out of their chunks are now put in their new chunks.
 		for change_of_chunk in changes_of_chunk.into_iter() {
-			self.put_entity_in_chunk(
-				change_of_chunk.new_chunk,
-				change_of_chunk.entity,
-				loaded_area,
-				save,
-			);
+			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity, save);
 		}
 	}
 
@@ -497,19 +491,10 @@ impl ChunkGrid {
 		}
 	}
 
-	fn chunk_entities_is_loaded(&self, chunk_coords: ChunkCoords, loaded_area: LoadedArea) -> bool {
-		let loading_distance_in_chunks = loaded_area.loading_distance / self.cd().edge as f32;
-		let too_far =
-			chunk_coords.map(|x| x as f32).distance(loaded_area.player_chunk.map(|x| x as f32))
-				> loading_distance_in_chunks;
-		!too_far
-	}
-
 	fn put_entity_in_chunk(
 		&mut self,
 		chunk_coords: ChunkCoords,
 		entity: Entity,
-		loaded_area: LoadedArea,
 		save: Option<&Arc<Save>>,
 	) {
 		//let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
@@ -532,15 +517,10 @@ impl ChunkGrid {
 		//}
 	}
 
-	pub(crate) fn add_entity(
-		&mut self,
-		entity: Entity,
-		loaded_area: LoadedArea,
-		save: Option<&Arc<Save>>,
-	) {
+	pub(crate) fn add_entity(&mut self, entity: Entity, save: Option<&Arc<Save>>) {
 		let coords = entity.pos().map(|x| x.round() as i32);
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
-		self.put_entity_in_chunk(chunk_coords, entity, loaded_area, save);
+		self.put_entity_in_chunk(chunk_coords, entity, save);
 	}
 
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
@@ -627,10 +607,4 @@ impl ChunkGrid {
 			self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
 		}
 	}
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct LoadedArea {
-	pub(crate) player_chunk: ChunkCoords,
-	pub(crate) loading_distance: f32,
 }

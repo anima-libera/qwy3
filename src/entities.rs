@@ -205,16 +205,6 @@ impl ChunkEntities {
 	}
 }
 
-pub(crate) fn add_entity_directly_to_save(entity: Entity, cd: ChunkDimensions, save: &Arc<Save>) {
-	let chunk_coords = entity.chunk_coords(cd);
-	let coords_span = ChunkCoordsSpan { cd, chunk_coords };
-	let mut chunk_entities =
-		ChunkEntities::load_from_save_while_removing_the_save(coords_span, save)
-			.unwrap_or_else(|| ChunkEntities::new_empty(coords_span));
-	chunk_entities.add_entity(entity);
-	chunk_entities.save(save);
-}
-
 pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
 	pub(crate) new_chunk: ChunkCoords,
 	pub(crate) entity: Entity,
