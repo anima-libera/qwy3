@@ -55,10 +55,18 @@ impl Save {
 		}
 	}
 
-	pub(crate) fn chunk_file_path(&self, chunk_coords: ChunkCoords) -> std::path::PathBuf {
+	pub(crate) fn chunk_file_path(
+		&self,
+		chunk_coords: ChunkCoords,
+		which_file: WhichChunkFile,
+	) -> std::path::PathBuf {
 		let mut path = self.chunks_directory.clone();
 		let cgmath::Point3 { x, y, z } = chunk_coords;
-		path.push(format!("{x},{y},{z}"));
+		let which_file_char = match which_file {
+			WhichChunkFile::Blocks => 'b',
+			WhichChunkFile::Entities => 'e',
+		};
+		path.push(format!("{x},{y},{z},{which_file_char}",));
 		path
 	}
 
@@ -72,4 +80,9 @@ impl Save {
 		path.push(format!("{sign}{axis}.png"));
 		path
 	}
+}
+
+pub(crate) enum WhichChunkFile {
+	Blocks,
+	Entities,
 }

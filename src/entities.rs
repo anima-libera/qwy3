@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+	io::{Read, Write},
+	sync::Arc,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +9,7 @@ use crate::{
 	block_types::BlockTypeTable,
 	chunks::{Block, ChunkGrid},
 	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	saves::{Save, WhichChunkFile},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -111,6 +115,14 @@ impl ChunkEntities {
 		ChunkEntities { coords_span, savable: ChunkEntitiesSavable { entities: vec![] } }
 	}
 
+	pub(crate) fn merge_to(&mut self, mut other: ChunkEntities) {
+		assert_eq!(
+			self.coords_span.chunk_coords,
+			other.coords_span.chunk_coords
+		);
+		self.savable.entities.append(&mut other.savable.entities);
+	}
+
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
 		self.savable.entities.iter().map(|entity| entity.as_ref().unwrap())
 	}
@@ -148,6 +160,44 @@ impl ChunkEntities {
 				}
 			}
 		});
+	}
+
+	pub(crate) fn save(&self, save: &Arc<Save>) {
+		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
+		let chunk_file_path =
+			save.chunk_file_path(self.coords_span.chunk_coords, WhichChunkFile::Entities);
+		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
+		let uncompressed_data = rmp_serde::encode::to_vec(&self.savable).unwrap();
+		let mut compressed_data = vec![];
+		{
+			let mut encoder = flate2::write::DeflateEncoder::new(
+				&mut compressed_data,
+				flate2::Compression::default(),
+			);
+			encoder.write_all(&uncompressed_data).unwrap();
+		}
+		chunk_file.write_all(&compressed_data).unwrap();
+	}
+
+	pub(crate) fn load_from_save_while_removing_the_save(
+		coords_span: ChunkCoordsSpan,
+		save: &Arc<Save>,
+	) -> Option<ChunkEntities> {
+		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
+		let chunk_file_path =
+			save.chunk_file_path(coords_span.chunk_coords, WhichChunkFile::Entities);
+		let mut chunk_file = std::fs::File::open(&chunk_file_path).ok()?;
+		let mut compressed_data = vec![];
+		chunk_file.read_to_end(&mut compressed_data).unwrap();
+		std::fs::remove_file(chunk_file_path).unwrap();
+		let mut uncompressed_data = vec![];
+		{
+			let mut decoder = flate2::bufread::DeflateDecoder::new(compressed_data.as_slice());
+			decoder.read_to_end(&mut uncompressed_data).unwrap();
+		}
+		let savable: ChunkEntitiesSavable =
+			rmp_serde::decode::from_slice(&uncompressed_data).unwrap();
+		Some(ChunkEntities { coords_span, savable })
 	}
 }
 

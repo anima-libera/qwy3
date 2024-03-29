@@ -1,5 +1,5 @@
 use std::{
-	collections::{HashMap, HashSet},
+	collections::{hash_map::Entry, HashMap, HashSet},
 	io::{Read, Write},
 	sync::Arc,
 };
@@ -17,7 +17,7 @@ use crate::{
 	},
 	entities::{ChunkEntities, Entity},
 	font::Font,
-	saves::Save,
+	saves::{Save, WhichChunkFile},
 	threadpool::ThreadPool,
 	unsorted::CurrentWorkerTasks,
 };
@@ -138,7 +138,8 @@ impl ChunkBlocks {
 
 	fn save(&self, save: &Arc<Save>) {
 		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
-		let chunk_file_path = save.chunk_file_path(self.coords_span.chunk_coords);
+		let chunk_file_path =
+			save.chunk_file_path(self.coords_span.chunk_coords, WhichChunkFile::Blocks);
 		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
 		let uncompressed_data = rmp_serde::encode::to_vec(&self.savable).unwrap();
 		let mut compressed_data = vec![];
@@ -157,7 +158,7 @@ impl ChunkBlocks {
 		save: &Arc<Save>,
 	) -> Option<ChunkBlocks> {
 		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
-		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords);
+		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords, WhichChunkFile::Blocks);
 		let mut chunk_file = std::fs::File::open(chunk_file_path).ok()?;
 		let mut compressed_data = vec![];
 		chunk_file.read_to_end(&mut compressed_data).unwrap();
@@ -461,17 +462,28 @@ impl ChunkGrid {
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
 			chunk_entities.apply_one_physics_step(self, block_type_table, dt, &mut changes_of_chunk);
 			if chunk_entities.count_entities() > 0 {
-				let unexpected_chunk_entities_that_took_the_place_of_the_one_handled_just_now =
-					self.entities_map.insert(chunk_coords, chunk_entities);
-				if unexpected_chunk_entities_that_took_the_place_of_the_one_handled_just_now.is_some() {
-					unimplemented!("TODO: What to do in this situation? Merge them?");
-				}
+				self.add_chunk_entities(chunk_entities);
 			} else {
 				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
 			}
 		}
 		for change_of_chunk in changes_of_chunk.into_iter() {
 			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity);
+		}
+	}
+
+	/// To insert or re-insert a `ChunkEntities` in the map, using this method ensures that
+	/// if the chunk already had a `ChunkEntities` then it is merged with the one given here.
+	fn add_chunk_entities(&mut self, chunk_entities: ChunkEntities) {
+		let chunk_coords = chunk_entities.coords_span.chunk_coords;
+		let entry = self.entities_map.entry(chunk_coords);
+		match entry {
+			Entry::Occupied(mut occupied) => {
+				occupied.get_mut().merge_to(chunk_entities);
+			},
+			Entry::Vacant(vacant) => {
+				vacant.insert(chunk_entities);
+			},
 		}
 	}
 
@@ -512,9 +524,13 @@ impl ChunkGrid {
 		chunk_coords: ChunkCoords,
 		chunk_blocks: ChunkBlocks,
 		chunk_culling_info: ChunkCullingInfo,
+		chunk_entities: Option<ChunkEntities>,
 	) {
 		self.blocks_map.insert(chunk_coords, Arc::new(chunk_blocks));
 		self.culling_info_map.insert(chunk_coords, chunk_culling_info);
+		if let Some(chunk_entities) = chunk_entities {
+			self.add_chunk_entities(chunk_entities);
+		}
 	}
 
 	fn unload_chunk(
@@ -524,11 +540,15 @@ impl ChunkGrid {
 		only_save_modified_chunks: bool,
 	) {
 		let chunk_blocks = self.blocks_map.remove(&chunk_coords);
-		if let Some(chunk_blocks) = chunk_blocks {
-			if let Some(save) = save {
+		let chunk_entities = self.entities_map.remove(&chunk_coords);
+		if let Some(save) = save {
+			if let Some(chunk_blocks) = chunk_blocks {
 				if !only_save_modified_chunks || chunk_blocks.savable.modified {
 					chunk_blocks.save(save);
 				}
+			}
+			if let Some(chunk_entities) = chunk_entities {
+				chunk_entities.save(save);
 			}
 		}
 		self.culling_info_map.remove(&chunk_coords);

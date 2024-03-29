@@ -482,19 +482,26 @@ pub fn init_and_run_game_loop() {
 			// Recieve task results from workers.
 			game.worker_tasks.tasks.retain_mut(|worker_task| {
 				let is_not_done_yet = match worker_task {
-					WorkerTask::LoadChunkBlocks(chunk_coords, receiver) => {
-						let chunk_coords_and_result_opt =
-							receiver.try_recv().ok().map(|(chunk_blocks, chunk_culling_info)| {
-								(*chunk_coords, chunk_blocks, chunk_culling_info)
-							});
+					WorkerTask::LoadChunkBlocksAndEntities(chunk_coords, receiver) => {
+						let chunk_coords_and_result_opt = receiver.try_recv().ok().map(
+							|(chunk_blocks, chunk_culling_info, chunk_entities)| {
+								(
+									*chunk_coords,
+									chunk_blocks,
+									chunk_culling_info,
+									chunk_entities,
+								)
+							},
+						);
 						let is_not_done_yet = chunk_coords_and_result_opt.is_none();
-						if let Some((chunk_coords, chunk_blocks, chunk_culling_info)) =
+						if let Some((chunk_coords, chunk_blocks, chunk_culling_info, chunk_entities)) =
 							chunk_coords_and_result_opt
 						{
 							game.loading_manager.handle_chunk_loading_results(
 								chunk_coords,
 								chunk_blocks,
 								chunk_culling_info,
+								chunk_entities,
 								&mut game.chunk_grid,
 							);
 						}

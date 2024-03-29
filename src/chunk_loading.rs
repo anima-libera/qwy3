@@ -7,6 +7,7 @@ use crate::{
 	block_types::BlockTypeTable,
 	chunks::{ChunkBlocks, ChunkCullingInfo, ChunkGrid},
 	coords::{iter_3d_cube_center_radius, ChunkCoords, OrientedAxis},
+	entities::ChunkEntities,
 	saves::Save,
 	threadpool::ThreadPool,
 	unsorted::CurrentWorkerTasks,
@@ -159,9 +160,15 @@ impl LoadingManager {
 		chunk_coords: ChunkCoords,
 		chunk_blocks: ChunkBlocks,
 		chunk_culling_info: ChunkCullingInfo,
+		chunk_entities: Option<ChunkEntities>,
 		chunk_grid: &mut ChunkGrid,
 	) {
-		chunk_grid.add_chunk_loading_results(chunk_coords, chunk_blocks, chunk_culling_info.clone());
+		chunk_grid.add_chunk_loading_results(
+			chunk_coords,
+			chunk_blocks,
+			chunk_culling_info.clone(),
+			chunk_entities,
+		);
 
 		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
 			chunk_grid.require_remeshing(neighbor_chunk_coords);

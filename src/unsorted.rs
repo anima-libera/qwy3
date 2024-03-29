@@ -10,6 +10,7 @@ use crate::{
 	chunk_meshing::{ChunkMesh, DataForChunkMeshing},
 	chunks::{ChunkBlocks, ChunkCullingInfo},
 	coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	entities::ChunkEntities,
 	saves::Save,
 	shaders::{self, simple_texture_2d::SimpleTextureVertexPod},
 	skybox::SkyboxFaces,
@@ -64,9 +65,9 @@ pub(crate) enum Action {
 
 /// The main-thread reciever for the results of a task that was given to a worker thread.
 pub(crate) enum WorkerTask {
-	LoadChunkBlocks(
+	LoadChunkBlocksAndEntities(
 		ChunkCoords,
-		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo)>,
+		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo, Option<ChunkEntities>)>,
 	),
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
 	/// The counter at the end is the number of faces already finished.
@@ -112,7 +113,10 @@ impl CurrentWorkerTasks {
 		cd: ChunkDimensions,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		self.tasks.push(WorkerTask::LoadChunkBlocks(chunk_coords, receiver));
+		self.tasks.push(WorkerTask::LoadChunkBlocksAndEntities(
+			chunk_coords,
+			receiver,
+		));
 		let chunk_generator = Arc::clone(world_generator);
 		let coords_span = ChunkCoordsSpan { cd, chunk_coords };
 		let block_type_table = Arc::clone(block_type_table);
@@ -121,19 +125,26 @@ impl CurrentWorkerTasks {
 			// Loading a chunk means either loading from save (disk)
 			// if there is a save and the chunk was already generated and saved in the past,
 			// or else generating it.
-			let chunk_blocks =
-				save.and_then(|save| ChunkBlocks::load_from_save(coords_span, &save)).unwrap_or_else(
-					|| chunk_generator.generate_chunk_blocks(coords_span, &block_type_table),
-				);
+			let chunk_blocks = save
+				.as_ref()
+				.and_then(|save| ChunkBlocks::load_from_save(coords_span, save))
+				.unwrap_or_else(|| {
+					chunk_generator.generate_chunk_blocks(coords_span, &block_type_table)
+				});
 			let chunk_culling_info =
 				ChunkCullingInfo::compute_from_blocks(&chunk_blocks, &block_type_table);
-			let _ = sender.send((chunk_blocks, chunk_culling_info));
+			let chunk_entities = save.as_ref().and_then(|save| {
+				ChunkEntities::load_from_save_while_removing_the_save(coords_span, save)
+			});
+			let _ = sender.send((chunk_blocks, chunk_culling_info, chunk_entities));
 		}));
 	}
 
 	pub(crate) fn is_being_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.tasks.iter().any(|worker_task| match worker_task {
-			WorkerTask::LoadChunkBlocks(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
+			WorkerTask::LoadChunkBlocksAndEntities(chunk_coords_uwu, ..) => {
+				*chunk_coords_uwu == chunk_coords
+			},
 			_ => false,
 		})
 	}
