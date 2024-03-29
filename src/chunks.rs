@@ -461,6 +461,9 @@ impl ChunkGrid {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
 		for chunk_coords in chunk_coords_list.into_iter() {
+			if !self.is_loaded(chunk_coords) {
+				continue;
+			}
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
 			chunk_entities.apply_one_physics_step(self, block_type_table, dt, &mut changes_of_chunk);
 			if chunk_entities.count_entities() > 0 {
@@ -511,17 +514,17 @@ impl ChunkGrid {
 		save: Option<&Arc<Save>>,
 	) {
 		//let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
-		let chunk_entities_is_loaded = self.is_loaded(chunk_coords);
-		if chunk_entities_is_loaded {
-			let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
-			self
-				.entities_map
-				.entry(chunk_coords)
-				.or_insert(ChunkEntities::new_empty(coords_span))
-				.add_entity(entity);
-		} else if let Some(save) = save {
-			add_entity_directly_to_save(entity, self.cd, save);
-		}
+		//let chunk_entities_is_loaded = self.is_loaded(chunk_coords);
+		//if chunk_entities_is_loaded {
+		let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+		self
+			.entities_map
+			.entry(chunk_coords)
+			.or_insert(ChunkEntities::new_empty(coords_span))
+			.add_entity(entity);
+		//} else if let Some(save) = save {
+		//	add_entity_directly_to_save(entity, self.cd, save);
+		//}
 	}
 
 	pub(crate) fn add_entity(
@@ -548,7 +551,7 @@ impl ChunkGrid {
 		(entities_count, chunks_that_have_entities_count)
 	}
 
-	pub(crate) fn iter_chunk_whith_entities_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
+	pub(crate) fn iter_chunk_with_entities_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
 		self.entities_map.keys().copied()
 	}
 

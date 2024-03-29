@@ -737,7 +737,7 @@ pub fn init_and_run_game_loop() {
 
 			let mut chunk_with_entities_box_meshes = vec![];
 			if game.enable_display_chunks_with_entities_as_boxes {
-				for chunk_coords in game.chunk_grid.iter_chunk_whith_entities_coords() {
+				for chunk_coords in game.chunk_grid.iter_chunk_with_entities_coords() {
 					let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 					let inf = coords_span.block_coords_inf().map(|x| x as f32);
 					let dims = coords_span.cd._dimensions().map(|x| x as f32 - 1.0);

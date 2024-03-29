@@ -116,6 +116,7 @@ impl LoadingManager {
 		for direction in OrientedAxis::all_the_six_possible_directions() {
 			self.front_high_priority.push(player_chunk_coords + direction.delta());
 		}
+		self.front_high_priority.extend(chunk_grid.iter_chunk_with_entities_coords());
 
 		self.front_high_priority.retain(|&chunk_coords| {
 			let blocks_was_loaded = chunk_grid.is_loaded(chunk_coords);
