@@ -140,7 +140,6 @@ impl ChunkBlocks {
 		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
 		let chunk_file_path =
 			save.chunk_file_path(self.coords_span.chunk_coords, WhichChunkFile::Blocks);
-		let mut chunk_file = std::fs::File::create(chunk_file_path).unwrap();
 		let uncompressed_data = rmp_serde::encode::to_vec(&self.savable).unwrap();
 		let mut compressed_data = vec![];
 		{
@@ -150,7 +149,8 @@ impl ChunkBlocks {
 			);
 			encoder.write_all(&uncompressed_data).unwrap();
 		}
-		chunk_file.write_all(&compressed_data).unwrap();
+		let chunk_file = save.get_file_io(chunk_file_path);
+		chunk_file.write(&compressed_data);
 	}
 
 	pub(crate) fn load_from_save(
@@ -159,9 +159,8 @@ impl ChunkBlocks {
 	) -> Option<ChunkBlocks> {
 		// TODO: Use buffered streams instead of full vecs of data as intermediary steps.
 		let chunk_file_path = save.chunk_file_path(coords_span.chunk_coords, WhichChunkFile::Blocks);
-		let mut chunk_file = std::fs::File::open(chunk_file_path).ok()?;
-		let mut compressed_data = vec![];
-		chunk_file.read_to_end(&mut compressed_data).unwrap();
+		let chunk_file = save.get_file_io(chunk_file_path);
+		let compressed_data = chunk_file.read(false)?;
 		let mut uncompressed_data = vec![];
 		{
 			let mut decoder = flate2::bufread::DeflateDecoder::new(compressed_data.as_slice());
@@ -520,7 +519,13 @@ impl ChunkGrid {
 		self
 			.entities_map
 			.entry(chunk_coords)
-			.or_insert(ChunkEntities::new_empty(coords_span))
+			.or_insert_with(|| {
+				save
+					.and_then(|save| {
+						ChunkEntities::load_from_save_while_removing_the_save(coords_span, save)
+					})
+					.unwrap_or(ChunkEntities::new_empty(coords_span))
+			})
 			.add_entity(entity);
 		//} else if let Some(save) = save {
 		//	add_entity_directly_to_save(entity, self.cd, save);
@@ -601,7 +606,8 @@ impl ChunkGrid {
 	) {
 		let unloading_distance_in_chunks = unloading_distance_in_blocks / self.cd.edge as f32;
 		// TODO: Avoid copying all the keys in a vector and iterating over all the chunks every frame.
-		let chunk_coords_list: Vec<_> = self.blocks_map.keys().copied().collect();
+		let chunk_coords_list: Vec<_> =
+			self.blocks_map.keys().copied().chain(self.entities_map.keys().copied()).collect();
 		for chunk_coords in chunk_coords_list.into_iter() {
 			let dist_in_chunks =
 				chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
