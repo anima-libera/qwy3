@@ -15,7 +15,7 @@ use crate::{
 		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
 		CubicCoordsSpan, OrientedAxis,
 	},
-	entities::{ChunkEntities, Entity},
+	entities::{add_entity_directly_to_save, ChunkEntities, Entity},
 	font::Font,
 	saves::{Save, WhichChunkFile},
 	threadpool::ThreadPool,
@@ -455,6 +455,8 @@ impl ChunkGrid {
 		&mut self,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
+		loaded_area: LoadedArea,
+		save: Option<&Arc<Save>>,
 	) {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
@@ -467,8 +469,14 @@ impl ChunkGrid {
 				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
 			}
 		}
+		// The entities that got out of their chunks are now put in their new chunks.
 		for change_of_chunk in changes_of_chunk.into_iter() {
-			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity);
+			self.put_entity_in_chunk(
+				change_of_chunk.new_chunk,
+				change_of_chunk.entity,
+				loaded_area,
+				save,
+			);
 		}
 	}
 
@@ -487,19 +495,43 @@ impl ChunkGrid {
 		}
 	}
 
-	fn put_entity_in_chunk(&mut self, chunk_coords: ChunkCoords, entity: Entity) {
-		let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
-		self
-			.entities_map
-			.entry(chunk_coords)
-			.or_insert(ChunkEntities::new_empty(coords_span))
-			.spawn_entity(entity);
+	fn chunk_entities_is_loaded(&self, chunk_coords: ChunkCoords, loaded_area: LoadedArea) -> bool {
+		let loading_distance_in_chunks = loaded_area.loading_distance / self.cd().edge as f32;
+		let too_far =
+			chunk_coords.map(|x| x as f32).distance(loaded_area.player_chunk.map(|x| x as f32))
+				> loading_distance_in_chunks;
+		!too_far
 	}
 
-	pub(crate) fn spawn_entity(&mut self, entity: Entity) {
+	fn put_entity_in_chunk(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		entity: Entity,
+		loaded_area: LoadedArea,
+		save: Option<&Arc<Save>>,
+	) {
+		let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
+		if chunk_entities_is_loaded {
+			let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+			self
+				.entities_map
+				.entry(chunk_coords)
+				.or_insert(ChunkEntities::new_empty(coords_span))
+				.add_entity(entity);
+		} else if let Some(save) = save {
+			add_entity_directly_to_save(entity, self.cd, save);
+		}
+	}
+
+	pub(crate) fn add_entity(
+		&mut self,
+		entity: Entity,
+		loaded_area: LoadedArea,
+		save: Option<&Arc<Save>>,
+	) {
 		let coords = entity.pos().map(|x| x.round() as i32);
 		let chunk_coords = self.cd.world_coords_to_containing_chunk_coords(coords);
-		self.put_entity_in_chunk(chunk_coords, entity);
+		self.put_entity_in_chunk(chunk_coords, entity, loaded_area, save);
 	}
 
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
@@ -585,4 +617,10 @@ impl ChunkGrid {
 			self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
 		}
 	}
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct LoadedArea {
+	pub(crate) player_chunk: ChunkCoords,
+	pub(crate) loading_distance: f32,
 }

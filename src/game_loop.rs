@@ -2,7 +2,7 @@ use std::f32::consts::TAU;
 
 use crate::{
 	camera::{aspect_ratio, CameraSettings},
-	chunks::{Block, BlockData},
+	chunks::{Block, BlockData, LoadedArea},
 	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
 	entities::Entity,
 	font,
@@ -294,11 +294,14 @@ pub fn init_and_run_game_loop() {
 								motion.z +=
 									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
 
-								game.chunk_grid.spawn_entity(Entity::new_block(
-									block,
-									game.player_phys.aligned_box().pos,
-									motion,
-								))
+								game.chunk_grid.add_entity(
+									Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
+									LoadedArea {
+										player_chunk: game.player_chunk(),
+										loading_distance: game.loading_manager.loading_distance,
+									},
+									game.save.as_ref(),
+								)
 							}
 						},
 						(Action::ToggleDisplayChunksWithEntitiesAsBoxes, true) => {
@@ -631,7 +634,15 @@ pub fn init_and_run_game_loop() {
 				game.player_phys.apply_one_physics_step(&game.chunk_grid, &game.block_type_table, dt);
 			}
 
-			game.chunk_grid.apply_one_physics_step(&game.block_type_table, dt);
+			game.chunk_grid.apply_one_physics_step(
+				&game.block_type_table,
+				dt,
+				LoadedArea {
+					player_chunk: game.player_chunk(),
+					loading_distance: game.loading_manager.loading_distance,
+				},
+				game.save.as_ref(),
+			);
 
 			game.queue.write_buffer(
 				&game.fog_center_position_thingy.resource,
