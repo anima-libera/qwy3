@@ -216,5 +216,3 @@ pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
 // Each entity can have a list of parts, each part having its own entry in a table of data
 //   so that like an entity can be made of shapes and texture and move each shape separately.
 // Render these with instanced rendering.
-// Get falling blocks working.
-// Handle the case where an entity spawns new entities in its own chunk.

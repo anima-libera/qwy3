@@ -10,6 +10,7 @@ mod cmdline;
 mod commands;
 mod coords;
 mod entities;
+mod entities_parts;
 mod font;
 mod game_init;
 mod game_loop;

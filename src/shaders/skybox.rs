@@ -2,7 +2,7 @@ use wgpu::vertex_attr_array;
 
 use crate::rendering_init::BindingThingy;
 
-/// Vertex type used in chunk block meshes.
+/// Vertex type used by the skybox mesh.
 #[derive(Copy, Clone, Debug)]
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
@@ -34,7 +34,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let skybox_vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SkyboxVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &SkyboxVertexPod::vertex_attributes(),
@@ -76,7 +76,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		vertex: wgpu::VertexState {
 			module: &skybox_shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[block_vertex_buffer_layout],
+			buffers: &[skybox_vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
 			module: &skybox_shader,

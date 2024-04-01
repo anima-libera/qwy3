@@ -1,5 +1,6 @@
 pub(crate) mod block;
 pub(crate) mod block_shadow;
+pub(crate) mod part_textured;
 pub(crate) mod simple_line;
 pub(crate) mod simple_line_2d;
 pub(crate) mod simple_texture_2d;

@@ -92,6 +92,8 @@ pub(crate) struct RenderPipelinesAndBindGroups {
 	pub(crate) block_shadow_bind_group: wgpu::BindGroup,
 	pub(crate) block_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) block_bind_group: wgpu::BindGroup,
+	pub(crate) part_textured_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) part_textured_bind_group: wgpu::BindGroup,
 	pub(crate) simple_line_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) simple_line_bind_group: wgpu::BindGroup,
 	pub(crate) simple_line_2d_render_pipeline: wgpu::RenderPipeline,
@@ -155,6 +157,18 @@ pub(crate) fn init_rendering_stuff(
 		z_buffer_format,
 	);
 
+	let (part_textured_render_pipeline, part_textured_bind_group) =
+		shaders::part_textured::render_pipeline_and_bind_group(
+			&device,
+			shaders::part_textured::BindingThingies {
+				camera_matrix_thingy: all_binding_thingies.camera_matrix_thingy,
+				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
+				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
+			},
+			window_surface_format,
+			z_buffer_format,
+		);
+
 	let (simple_line_render_pipeline, simple_line_bind_group) =
 		shaders::simple_line::render_pipeline_and_bind_group(
 			&device,
@@ -205,6 +219,8 @@ pub(crate) fn init_rendering_stuff(
 		block_shadow_bind_group,
 		block_render_pipeline,
 		block_bind_group,
+		part_textured_render_pipeline,
+		part_textured_bind_group,
 		simple_line_render_pipeline,
 		simple_line_bind_group,
 		simple_line_2d_render_pipeline,

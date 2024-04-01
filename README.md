@@ -27,7 +27,7 @@ Examples:
 - `cargo run --release -- --threads 12 --gen structures-generated-blocks --save hello`
 
 Note:
-The `--save <SAVE_NAME>` or `-s <SAVE_NAME>` option creates or opens the save of the specified name and will save/load the game state (seed, player position, chunks, etc.) to/from the disk. Not specifying a save means that nothing will be saved and all that is unloaded is lost.
+The `--save <SAVE_NAME>` or `-s <SAVE_NAME>` option creates or opens the save of the specified name and will save/load the game state (seed, player position, chunks, etc.) to/from the disk. Not specifying a save means that nothing will be saved and all that is unloaded is lost (chunks and entities that get too far from the player).
 
 Advice:
 - Up the number of `--threads` the game shall use to almost the number of virtual cores of the hardware.
