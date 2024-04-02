@@ -5,7 +5,7 @@ use crate::{
 	chunks::{Block, BlockData},
 	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
 	entities::Entity,
-	entity_parts::PartTexturedCubeInstanceData,
+	entity_parts::textured_cubes::PartTexturedCubeInstanceData,
 	font,
 	game_init::{init_game, save_savable_state},
 	lang::{self, LogItem},
@@ -821,7 +821,14 @@ pub fn init_and_run_game_loop() {
 			);
 
 			// TEST
-			game.part_tables.textured_cubes.add_instance(PartTexturedCubeInstanceData::new().to_pod());
+			game.part_tables.textured_cubes.add_instance(
+				PartTexturedCubeInstanceData::new(cgmath::point3(
+					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+				))
+				.to_pod(),
+			);
 
 			game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
 

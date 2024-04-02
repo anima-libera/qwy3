@@ -1,3 +1,4 @@
+use cgmath::EuclideanSpace;
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -11,20 +12,7 @@ pub(crate) struct PartTables {
 
 impl PartTables {
 	pub(crate) fn new(device: &wgpu::Device) -> PartTables {
-		let name = "Textured Cube Part";
-		let textured_cubes = PartTable {
-			mesh: cube_mesh(device, name),
-			instance_table: vec![],
-			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some(&format!("{name} Instance Buffer")),
-				contents: &[],
-				usage: wgpu::BufferUsages::VERTEX,
-			}),
-			cpu_to_gpu_update_required_for_instances: false,
-			cpu_to_gpu_update_required_for_new_instances: false,
-			name,
-		};
-		PartTables { textured_cubes }
+		PartTables { textured_cubes: textured_cubes::textured_cube_part_table(device) }
 	}
 
 	pub(crate) fn cup_to_gpu_update_if_required(
@@ -106,85 +94,105 @@ struct Mesh {
 	buffer: wgpu::Buffer,
 }
 
-pub(crate) struct PartTexturedCubeInstanceData {
-	model_matrix: [[f32; 4]; 4],
-}
+pub(crate) mod textured_cubes {
+	use super::*;
 
-impl PartTexturedCubeInstanceData {
-	pub(crate) fn new() -> PartTexturedCubeInstanceData {
-		let model_matrix = cgmath::Matrix4::<f32>::from_translation(cgmath::vec3(0.0, 0.0, 3.0));
-		let model_matrix = cgmath::conv::array4x4(model_matrix);
-		PartTexturedCubeInstanceData { model_matrix }
-	}
-
-	pub(crate) fn to_pod(&self) -> PartInstancePod {
-		PartInstancePod {
-			model_matrix_1_of_4: self.model_matrix[0],
-			model_matrix_2_of_4: self.model_matrix[1],
-			model_matrix_3_of_4: self.model_matrix[2],
-			model_matrix_4_of_4: self.model_matrix[3],
+	pub(super) fn textured_cube_part_table(device: &wgpu::Device) -> PartTable<PartInstancePod> {
+		let name = "Textured Cube Part";
+		PartTable {
+			mesh: cube_mesh(device, name),
+			instance_table: vec![],
+			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Instance Buffer")),
+				contents: &[],
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+			cpu_to_gpu_update_required_for_instances: false,
+			cpu_to_gpu_update_required_for_new_instances: false,
+			name,
 		}
 	}
-}
 
-fn cube_mesh(device: &wgpu::Device, name: &str) -> Mesh {
-	// There is a lot of code duplicated from `chunk_meshing::generate_block_face_mesh`.
-	// TODO: Factorize some code with there.
+	pub(crate) struct PartTexturedCubeInstanceData {
+		model_matrix: [[f32; 4]; 4],
+	}
 
-	let mut vertices: Vec<PartVertexPod> = vec![];
+	impl PartTexturedCubeInstanceData {
+		pub(crate) fn new(pos: cgmath::Point3<f32>) -> PartTexturedCubeInstanceData {
+			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
+			let model_matrix = cgmath::conv::array4x4(model_matrix);
+			PartTexturedCubeInstanceData { model_matrix }
+		}
 
-	let cube_center = cgmath::point3(0.0, 0.0, 0.0);
-	for direction in OrientedAxis::all_the_six_possible_directions() {
-		let normal: [f32; 3] = cgmath::conv::array3(direction.delta().map(|x| x as f32));
-
-		let face_center = cube_center + direction.delta().map(|x| x as f32) * 0.5;
-
-		let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
-			.into_iter()
-			.filter(|&axis| axis != direction.axis);
-		let other_axis_a = other_axes.next().unwrap();
-		let other_axis_b = other_axes.next().unwrap();
-
-		let mut coords_array = [face_center; 4];
-
-		coords_array[0][other_axis_a.index()] -= 0.5;
-		coords_array[0][other_axis_b.index()] -= 0.5;
-		coords_array[1][other_axis_a.index()] -= 0.5;
-		coords_array[1][other_axis_b.index()] += 0.5;
-		coords_array[2][other_axis_a.index()] += 0.5;
-		coords_array[2][other_axis_b.index()] -= 0.5;
-		coords_array[3][other_axis_a.index()] += 0.5;
-		coords_array[3][other_axis_b.index()] += 0.5;
-
-		let indices = [1, 0, 3, 3, 0, 2];
-
-		// Adjusting the order of the vertices to makeup for face culling.
-		let reverse_order = match direction.axis {
-			NonOrientedAxis::X => direction.orientation == AxisOrientation::Negativewards,
-			NonOrientedAxis::Y => direction.orientation == AxisOrientation::Positivewards,
-			NonOrientedAxis::Z => direction.orientation == AxisOrientation::Negativewards,
-		};
-		let indices_indices_normal = [0, 1, 2, 3, 4, 5];
-		let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
-		let mut handle_index = |index: usize| {
-			vertices.push(PartVertexPod { position: coords_array[index].into(), normal });
-		};
-		if !reverse_order {
-			for indices_index in indices_indices_normal {
-				handle_index(indices[indices_index]);
-			}
-		} else {
-			for indices_index in indices_indices_reversed {
-				handle_index(indices[indices_index]);
+		pub(crate) fn to_pod(&self) -> PartInstancePod {
+			PartInstancePod {
+				model_matrix_1_of_4: self.model_matrix[0],
+				model_matrix_2_of_4: self.model_matrix[1],
+				model_matrix_3_of_4: self.model_matrix[2],
+				model_matrix_4_of_4: self.model_matrix[3],
 			}
 		}
 	}
 
-	let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-		label: Some(&format!("{name} Vertex Buffer")),
-		contents: bytemuck::cast_slice(&vertices),
-		usage: wgpu::BufferUsages::VERTEX,
-	});
+	fn cube_mesh(device: &wgpu::Device, name: &str) -> Mesh {
+		// There is a lot of code duplicated from `chunk_meshing::generate_block_face_mesh`.
+		// TODO: Factorize some code with there.
 
-	Mesh { vertex_count: vertices.len() as u32, buffer }
+		let mut vertices: Vec<PartVertexPod> = vec![];
+
+		let cube_center = cgmath::point3(0.0, 0.0, 0.0);
+		for direction in OrientedAxis::all_the_six_possible_directions() {
+			let normal: [f32; 3] = cgmath::conv::array3(direction.delta().map(|x| x as f32));
+
+			let face_center = cube_center + direction.delta().map(|x| x as f32) * 0.5;
+
+			let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
+				.into_iter()
+				.filter(|&axis| axis != direction.axis);
+			let other_axis_a = other_axes.next().unwrap();
+			let other_axis_b = other_axes.next().unwrap();
+
+			let mut coords_array = [face_center; 4];
+
+			coords_array[0][other_axis_a.index()] -= 0.5;
+			coords_array[0][other_axis_b.index()] -= 0.5;
+			coords_array[1][other_axis_a.index()] -= 0.5;
+			coords_array[1][other_axis_b.index()] += 0.5;
+			coords_array[2][other_axis_a.index()] += 0.5;
+			coords_array[2][other_axis_b.index()] -= 0.5;
+			coords_array[3][other_axis_a.index()] += 0.5;
+			coords_array[3][other_axis_b.index()] += 0.5;
+
+			let indices = [1, 0, 3, 3, 0, 2];
+
+			// Adjusting the order of the vertices to makeup for face culling.
+			let reverse_order = match direction.axis {
+				NonOrientedAxis::X => direction.orientation == AxisOrientation::Negativewards,
+				NonOrientedAxis::Y => direction.orientation == AxisOrientation::Positivewards,
+				NonOrientedAxis::Z => direction.orientation == AxisOrientation::Negativewards,
+			};
+			let indices_indices_normal = [0, 1, 2, 3, 4, 5];
+			let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
+			let mut handle_index = |index: usize| {
+				vertices.push(PartVertexPod { position: coords_array[index].into(), normal });
+			};
+			if !reverse_order {
+				for indices_index in indices_indices_normal {
+					handle_index(indices[indices_index]);
+				}
+			} else {
+				for indices_index in indices_indices_reversed {
+					handle_index(indices[indices_index]);
+				}
+			}
+		}
+
+		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some(&format!("{name} Vertex Buffer")),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+
+		Mesh { vertex_count: vertices.len() as u32, buffer }
+	}
 }
