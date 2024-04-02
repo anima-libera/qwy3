@@ -3,11 +3,11 @@ use std::{mem::size_of, sync::Arc};
 use crate::{
 	camera::{CameraOrthographicSettings, Matrix4x4Pod},
 	chunks::ChunkGrid,
+	entities_parts::{DataForPartTableRendering, PartTables},
 	line_meshes::SimpleLineMesh,
 	rendering_init::{BindingThingy, RenderPipelinesAndBindGroups},
 	skybox::SkyboxMesh,
-	unsorted::SimpleTextureMesh,
-	unsorted::WhichCameraToUse,
+	unsorted::{SimpleTextureMesh, WhichCameraToUse},
 };
 
 pub(crate) struct DataForRendering<'a> {
@@ -36,6 +36,7 @@ pub(crate) struct DataForRendering<'a> {
 	pub(crate) cursor_mesh: &'a SimpleLineMesh,
 	pub(crate) interface_simple_texture_mesh: &'a SimpleTextureMesh,
 	pub(crate) interface_simple_line_mesh: &'a SimpleLineMesh,
+	pub(crate) part_tables: &'a PartTables,
 }
 
 impl<'a> DataForRendering<'a> {
@@ -119,6 +120,20 @@ impl<'a> DataForRendering<'a> {
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
 				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
 				render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+			}
+
+			render_pass.set_pipeline(&self.rendering.part_textured_render_pipeline);
+			render_pass.set_bind_group(0, &self.rendering.part_textured_bind_group, &[]);
+			for part_table_for_rendering in self.part_tables.tables_for_rendering() {
+				let DataForPartTableRendering {
+					mesh_vertices_count,
+					mesh_vertex_buffer,
+					instances_count,
+					instance_buffer,
+				} = part_table_for_rendering.get_data_for_rendering();
+				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
+				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
 			}
 
 			if self.enable_display_phys_box {

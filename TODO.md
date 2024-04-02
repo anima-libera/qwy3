@@ -9,6 +9,12 @@
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
 - Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.
+- Faster noise.
+  - Allow to generate N values at once (to sample vectors instead of single values) in one sampling call.
+
+## Correction
+
+- Make the distribution of noise values at nodes of the noise implementation to be uniform by using the same technique that random number generators use to generate floats in uniform distrucbutions. A certain crate does [this](https://github.com/engusmaze/frand/blob/2305cf97832a26dddfd0f7d5679f56b061f6c834/src/gen/float.rs#L9) and cite [this](https://mina86.com/2016/random-reals/) as a source which links to [this](https://github.com/mina86/random-reals/blob/3a614a9c9f2d1298682321d1c7abd463ab8f68f3/make-real.h#L65). The we could actually assume that sampling the noise at the nodes (all integer parameters) would pick values in a uniform distribution.
 
 ## Graphics
 

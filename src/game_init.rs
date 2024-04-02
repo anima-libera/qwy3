@@ -13,6 +13,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
+	entities_parts::PartTables,
 	font::{self, Font},
 	lang,
 	line_meshes::SimpleLineMesh,
@@ -125,6 +126,7 @@ pub(crate) struct Game {
 	pub(crate) save: Option<Arc<Save>>,
 	pub(crate) only_save_modified_chunks: bool,
 	pub(crate) max_fps: Option<i32>,
+	pub(crate) part_tables: PartTables,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -476,6 +478,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		face_counter
 	});
 
+	let part_tables = PartTables::new(&device);
+
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
@@ -664,6 +668,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		save,
 		only_save_modified_chunks,
 		max_fps,
+		part_tables,
 
 		worker_tasks,
 		pool,

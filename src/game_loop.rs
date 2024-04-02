@@ -5,13 +5,14 @@ use crate::{
 	chunks::{Block, BlockData},
 	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
 	entities::Entity,
+	entities_parts::PartTexturedCubeInstanceData,
 	font,
 	game_init::{init_game, save_savable_state},
 	lang::{self, LogItem},
 	line_meshes::SimpleLineMesh,
 	rendering,
 	rendering_init::{make_z_buffer_texture_view, update_atlas_texture, update_skybox_texture},
-	shaders::{Vector2Pod, Vector3Pod},
+	shaders::{part_textured::PartInstancePod, Vector2Pod, Vector3Pod},
 	skybox::SkyboxMesh,
 	unsorted::{Action, Control, ControlEvent, SimpleTextureMesh, WhichCameraToUse, WorkerTask},
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
@@ -819,6 +820,11 @@ pub fn init_and_run_game_loop() {
 				interface_meshes_vertices.simple_line_vertices,
 			);
 
+			// TEST
+			game.part_tables.textured_cubes.add_instance(PartTexturedCubeInstanceData::new().to_pod());
+
+			game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
+
 			let data_for_rendering = rendering::DataForRendering {
 				device: &game.device,
 				queue: &game.queue,
@@ -845,6 +851,7 @@ pub fn init_and_run_game_loop() {
 				cursor_mesh: &game.cursor_mesh,
 				interface_simple_texture_mesh: &interface_simple_texture_mesh,
 				interface_simple_line_mesh: &interface_simple_line_mesh,
+				part_tables: &game.part_tables,
 			};
 			data_for_rendering.render();
 
