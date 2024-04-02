@@ -13,17 +13,17 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
-	entity_parts::PartTables,
+	entity_parts::{textured_cubes::texture_mappings_for_cube, PartTables},
 	font::{self, Font},
 	lang,
 	line_meshes::SimpleLineMesh,
 	physics::AlignedPhysBox,
 	rendering_init::{
-		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy, init_fog_stuff,
-		init_shadow_map_stuff, init_skybox_stuff, init_sun_camera_matrices_thingy,
-		init_sun_light_direction_thingy, make_z_buffer_texture_view, AllBindingThingies, AtlasStuff,
-		BindingThingy, FogStuff, RenderPipelinesAndBindGroups, ShadowMapStuff, SkyboxStuff,
-		SunCameraStuff,
+		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy,
+		init_coords_in_atlas_array_thingy, init_fog_stuff, init_shadow_map_stuff, init_skybox_stuff,
+		init_sun_camera_matrices_thingy, init_sun_light_direction_thingy, make_z_buffer_texture_view,
+		AllBindingThingies, AtlasStuff, BindingThingy, FogStuff, RenderPipelinesAndBindGroups,
+		ShadowMapStuff, SkyboxStuff, SunCameraStuff,
 	},
 	saves::Save,
 	shaders::{Vector2Pod, Vector3Pod},
@@ -480,6 +480,17 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let part_tables = PartTables::new(&device);
 
+	let coords_in_atlas_array_thingy = init_coords_in_atlas_array_thingy(Arc::clone(&device));
+	{
+		// TEST for one texture mapping
+		let mappings = texture_mappings_for_cube(cgmath::point2(16 * 3, 0));
+		queue.write_buffer(
+			&coords_in_atlas_array_thingy.resource,
+			0,
+			bytemuck::cast_slice(&mappings),
+		);
+	}
+
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
 		AllBindingThingies {
@@ -496,6 +507,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			skybox_cubemap_texture_sampler_thingy: &skybox_cubemap_texture_sampler_thingy,
 			fog_center_position_thingy: &fog_center_position_thingy,
 			fog_inf_sup_radiuses_thingy: &fog_inf_sup_radiuses_thingy,
+			coords_in_atlas_array_thingy: &coords_in_atlas_array_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,

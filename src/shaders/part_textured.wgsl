@@ -13,12 +13,13 @@ struct InstanceInput {
 struct VertexOutput {
 	@builtin(position) screen_position: vec4<f32>,
 	@location(0) world_position: vec3<f32>,
+	@location(1) coords_in_atlas: vec2<f32>,
 };
 
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
-//@group(0) @binding(1) var uniform_atlas_texture: texture_2d<f32>;
-//@group(0) @binding(2) var uniform_atlas_sampler: sampler;
-// TODO: Add texture mappings in sompe uniform buffer object or something indexable.
+@group(0) @binding(1) var uniform_atlas_texture: texture_2d<f32>;
+@group(0) @binding(2) var uniform_atlas_sampler: sampler;
+@group(0) @binding(3) var<storage, read> uniform_coords_in_atlas_array: array<vec2<f32> >;
 // TODO: Add the shadow map and fog uniforms.
 
 @vertex
@@ -34,17 +35,19 @@ fn vertex_shader_main(
 		instance_input.model_matrix_4_of_4,
 	);
 
+	var coords_in_atlas = uniform_coords_in_atlas_array[vertex_index];
+
 	var vertex_output: VertexOutput;
 	vertex_output.screen_position =
 		uniform_camera * model_matrix * vec4<f32>(vertex_input.position, 1.0);
 	vertex_output.world_position = vertex_input.position;
+	vertex_output.coords_in_atlas = coords_in_atlas;
 	return vertex_output;
 }
 
 @fragment
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
-	//var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
-	var out_color = vec4(1.0, 1.0, 0.0, 1.0);
+	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
 
 	// Full transparency.
 	if out_color.a == 0.0 {

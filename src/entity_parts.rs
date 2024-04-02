@@ -95,6 +95,8 @@ struct Mesh {
 }
 
 pub(crate) mod textured_cubes {
+	use crate::shaders::Vector2Pod;
+
 	use super::*;
 
 	pub(super) fn textured_cube_part_table(device: &wgpu::Device) -> PartTable<PartInstancePod> {
@@ -194,5 +196,75 @@ pub(crate) mod textured_cubes {
 		});
 
 		Mesh { vertex_count: vertices.len() as u32, buffer }
+	}
+
+	pub(crate) fn texture_mappings_for_cube(
+		texture_coords_on_atlas: cgmath::Point2<i32>,
+	) -> Vec<Vector2Pod> {
+		// There is a lot of code duplicated from `chunk_meshing::generate_block_face_mesh`.
+		// TODO: Factorize some code with there.
+
+		let mut mappings_coords_on_atlas: Vec<Vector2Pod> = vec![];
+
+		for direction in OrientedAxis::all_the_six_possible_directions() {
+			let texture_rect_in_atlas_xy: cgmath::Point2<f32> =
+				texture_coords_on_atlas.map(|x| x as f32) * (1.0 / 512.0);
+			let texture_rect_in_atlas_wh: cgmath::Vector2<f32> =
+				cgmath::vec2(16.0, 16.0) * (1.0 / 512.0);
+			let mut coords_in_atlas_array: [cgmath::Point2<f32>; 4] = [
+				texture_rect_in_atlas_xy,
+				texture_rect_in_atlas_xy,
+				texture_rect_in_atlas_xy,
+				texture_rect_in_atlas_xy,
+			];
+			// We flip horizontally the texture for some face orientations so that
+			// we don't observe a "mirror" effect on some vertical block edges.
+			let order = if direction
+				== (OrientedAxis {
+					axis: NonOrientedAxis::X,
+					orientation: AxisOrientation::Positivewards,
+				}) || direction
+				== (OrientedAxis {
+					axis: NonOrientedAxis::Y,
+					orientation: AxisOrientation::Negativewards,
+				}) {
+				[2, 3, 0, 1]
+			} else {
+				[0, 1, 2, 3]
+			};
+			coords_in_atlas_array[order[0]].x += texture_rect_in_atlas_wh.x * 0.0;
+			coords_in_atlas_array[order[0]].y += texture_rect_in_atlas_wh.y * 0.0;
+			coords_in_atlas_array[order[1]].x += texture_rect_in_atlas_wh.x * 0.0;
+			coords_in_atlas_array[order[1]].y += texture_rect_in_atlas_wh.y * 1.0;
+			coords_in_atlas_array[order[2]].x += texture_rect_in_atlas_wh.x * 1.0;
+			coords_in_atlas_array[order[2]].y += texture_rect_in_atlas_wh.y * 0.0;
+			coords_in_atlas_array[order[3]].x += texture_rect_in_atlas_wh.x * 1.0;
+			coords_in_atlas_array[order[3]].y += texture_rect_in_atlas_wh.y * 1.0;
+
+			let indices = [1, 0, 3, 3, 0, 2];
+
+			let reverse_order = match direction.axis {
+				NonOrientedAxis::X => direction.orientation == AxisOrientation::Negativewards,
+				NonOrientedAxis::Y => direction.orientation == AxisOrientation::Positivewards,
+				NonOrientedAxis::Z => direction.orientation == AxisOrientation::Negativewards,
+			};
+			let indices_indices_normal = [0, 1, 2, 3, 4, 5];
+			let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
+			let mut handle_index = |index: usize| {
+				mappings_coords_on_atlas
+					.push(Vector2Pod { values: cgmath::conv::array2(coords_in_atlas_array[index]) });
+			};
+			if !reverse_order {
+				for indices_index in indices_indices_normal {
+					handle_index(indices[indices_index]);
+				}
+			} else {
+				for indices_index in indices_indices_reversed {
+					handle_index(indices[indices_index]);
+				}
+			}
+		}
+
+		mappings_coords_on_atlas
 	}
 }

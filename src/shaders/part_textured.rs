@@ -46,6 +46,7 @@ pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub(crate) fn render_pipeline_and_bind_group(
@@ -70,8 +71,9 @@ pub(crate) fn render_pipeline_and_bind_group(
 		label: Some("Part Textured Shader Bind Group Layout"),
 		entries: &[
 			binding_thingies.camera_matrix_thingy.layout_entry(0, S::VERTEX),
-			//binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
-			//binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
+			binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
+			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
+			binding_thingies.coords_in_atlas_array_thingy.layout_entry(3, S::VERTEX),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -79,8 +81,9 @@ pub(crate) fn render_pipeline_and_bind_group(
 		layout: &bind_group_layout,
 		entries: &[
 			binding_thingies.camera_matrix_thingy.bind_group_entry(0),
-			//binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
-			//binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
+			binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
+			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
+			binding_thingies.coords_in_atlas_array_thingy.bind_group_entry(3),
 		],
 	});
 
