@@ -3,7 +3,7 @@ use std::{mem::size_of, sync::Arc};
 use crate::{
 	camera::{CameraOrthographicSettings, Matrix4x4Pod},
 	chunks::ChunkGrid,
-	entities_parts::{DataForPartTableRendering, PartTables},
+	entity_parts::{DataForPartTableRendering, PartTables},
 	line_meshes::SimpleLineMesh,
 	rendering_init::{BindingThingy, RenderPipelinesAndBindGroups},
 	skybox::SkyboxMesh,
@@ -115,6 +115,7 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_viewport(x, y, w, h, 0.0, 1.0);
 			}
 
+			// Blocks.
 			render_pass.set_pipeline(&self.rendering.block_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.block_bind_group, &[]);
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
@@ -122,6 +123,7 @@ impl<'a> DataForRendering<'a> {
 				render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
 			}
 
+			// Entity parts.
 			render_pass.set_pipeline(&self.rendering.part_textured_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.part_textured_bind_group, &[]);
 			for part_table_for_rendering in self.part_tables.tables_for_rendering() {

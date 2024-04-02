@@ -13,7 +13,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
-	entities_parts::PartTables,
+	entity_parts::PartTables,
 	font::{self, Font},
 	lang,
 	line_meshes::SimpleLineMesh,
