@@ -58,7 +58,7 @@ impl<T: PartInstance> PartTable<T> {
 		index
 	}
 
-	pub(crate) fn set_instance(&mut self, index: usize, instance: T) {
+	pub(crate) fn _set_instance(&mut self, index: usize, instance: T) {
 		self.instance_table[index] = instance;
 		self.cpu_to_gpu_update_required_for_instances = true;
 	}
@@ -88,7 +88,7 @@ impl<T: PartInstance> PartTable<T> {
 				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 					label: Some(&format!("{name} Instance Buffer")),
 					contents: bytemuck::cast_slice(&self.instance_table),
-					usage: wgpu::BufferUsages::VERTEX,
+					usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
 				});
 		} else if self.cpu_to_gpu_update_required_for_instances {
 			self.cpu_to_gpu_update_required_for_instances = false;

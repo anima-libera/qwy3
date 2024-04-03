@@ -5,7 +5,6 @@ use crate::{
 	chunks::{Block, BlockData},
 	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
 	entities::Entity,
-	entity_parts::textured_cubes::PartTexturedCubeInstanceData,
 	font,
 	game_init::{init_game, save_savable_state},
 	lang::{self, LogItem},
@@ -284,8 +283,12 @@ pub fn init_and_run_game_loop() {
 						},
 						(Action::ThrowBlock, true) => {
 							for _ in 0..30 {
-								let block =
-									Block { type_id: game.block_type_table.kinda_leaf_id(), data: None };
+								let block = Block {
+									type_id: game
+										.block_type_table
+										.generated_test_id(rand::thread_rng().gen_range(0..10)),
+									data: None,
+								};
 
 								let mut motion = game.camera_direction.to_vec3();
 								motion.x +=
@@ -659,10 +662,12 @@ pub fn init_and_run_game_loop() {
 			);
 
 			let mut entities_box_meshes = vec![];
-			for entity in game.chunk_grid.iter_entities() {
-				if let Some(aligned_box) = entity.aligned_box() {
-					entities_box_meshes
-						.push(SimpleLineMesh::from_aligned_box(&game.device, &aligned_box));
+			if game.enable_display_entity_boxes {
+				for entity in game.chunk_grid.iter_entities() {
+					if let Some(aligned_box) = entity.aligned_box() {
+						entities_box_meshes
+							.push(SimpleLineMesh::from_aligned_box(&game.device, &aligned_box));
+					}
 				}
 			}
 
@@ -828,48 +833,6 @@ pub fn init_and_run_game_loop() {
 				&game.device,
 				interface_meshes_vertices.simple_line_vertices,
 			);
-
-			// TEST
-			for i in 0..10 {
-				let block_id = if i < 5 {
-					game.block_type_table.kinda_leaf_id()
-				} else {
-					game.block_type_table.generated_test_id(rand::thread_rng().gen_range(0..10))
-				};
-				let texture_mapping_point_offset = game
-					.texture_mapping_table
-					.get_offset_of_block(
-						block_id,
-						&game.block_type_table,
-						&game.coords_in_atlas_array_thingy,
-						&game.queue,
-					)
-					.unwrap();
-				game.part_tables.textured_cubes.add_instance(
-					PartTexturedCubeInstanceData::new(
-						cgmath::point3(
-							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-						),
-						texture_mapping_point_offset,
-					)
-					.to_pod(),
-				);
-
-				game.part_tables.textured_cubes.set_instance(
-					i,
-					PartTexturedCubeInstanceData::new(
-						cgmath::point3(
-							rand::thread_rng().gen_range(-30.0..-10.0),
-							rand::thread_rng().gen_range(0.0..30.0),
-							rand::thread_rng().gen_range(0.0..30.0),
-						),
-						texture_mapping_point_offset,
-					)
-					.to_pod(),
-				);
-			}
 
 			game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
 

@@ -148,6 +148,7 @@ pub(crate) struct Game {
 	pub(crate) enable_display_interface: bool,
 	pub(crate) enable_display_not_surrounded_chunks_as_boxes: bool,
 	pub(crate) enable_display_chunks_with_entities_as_boxes: bool,
+	pub(crate) enable_display_entity_boxes: bool,
 	pub(crate) enable_fog: bool,
 	pub(crate) enable_fullscreen: bool,
 }
@@ -549,6 +550,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_display_not_surrounded_chunks_as_boxes = false;
 
 	let enable_display_chunks_with_entities_as_boxes = false;
+	let enable_display_entity_boxes = false;
 
 	let mut widget_tree_root = Widget::new_margins(
 		(5.0, 5.0, 0.0, 0.0),
@@ -696,6 +698,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_display_interface,
 		enable_display_not_surrounded_chunks_as_boxes,
 		enable_display_chunks_with_entities_as_boxes,
+		enable_display_entity_boxes,
 		enable_fog,
 		enable_fullscreen,
 	};
