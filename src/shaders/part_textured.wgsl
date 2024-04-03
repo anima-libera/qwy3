@@ -47,10 +47,11 @@ fn vertex_shader_main(
 	var shade = dot(vertex_input.normal, -uniform_sun_light_direction);
 	shade = clamp(shade, 0.0, 1.0);
 
+	var world_position = model_matrix * vec4<f32>(vertex_input.position, 1.0);
+
 	var vertex_output: VertexOutput;
-	vertex_output.screen_position =
-		uniform_camera * model_matrix * vec4<f32>(vertex_input.position, 1.0);
-	vertex_output.world_position = vertex_input.position;
+	vertex_output.screen_position = uniform_camera * world_position;
+	vertex_output.world_position = world_position.xyz;
 	vertex_output.coords_in_atlas = coords_in_atlas;
 	vertex_output.shade = shade;
 	return vertex_output;
@@ -61,9 +62,41 @@ fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
 	// TODO: There is a lot of code duplication between here and `blocks.wgsl`,
 	// we have to factorize!
 
-	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
-
 	var not_in_shadow = 1.0;
+
+	// Each cascade is a shadow map, from smallest (so more precise) to largest.
+	// We querry the smallest shadow map that we are in to get the best available precision.
+	var position_in_shadow_map: vec2<f32>;
+	var position_in_sun_screen: vec4<f32>;
+	var smallest_cascade_index: u32 = 0;
+	var cascade_count = arrayLength(&uniform_sun_camera_array);
+	for (var cascade_index: u32 = 0; cascade_index < cascade_count; cascade_index++) {
+		position_in_sun_screen =
+			uniform_sun_camera_array[cascade_index] * vec4<f32>(the.world_position, 1.0);
+		// Stealed the coordinate correction from
+		// https://github.com/gfx-rs/wgpu/blob/trunk/examples/shadow/src/shader.wgsl
+		position_in_shadow_map =
+			position_in_sun_screen.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5, 0.5);
+		var hit_this_cascade =
+			!(position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+			position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y);
+		if hit_this_cascade {
+			smallest_cascade_index = cascade_index;
+			break;
+		}
+	}
+	not_in_shadow = textureSampleCompare(
+		uniform_shadow_map_texture_array, uniform_shadow_map_sampler,
+		position_in_shadow_map, smallest_cascade_index, position_in_sun_screen.z);
+	// Remove shadows outside all the shadow maps.
+	var missed_even_last_cascade =
+		position_in_shadow_map.x < 0.0 || 1.0 < position_in_shadow_map.x ||
+		position_in_shadow_map.y < 0.0 || 1.0 < position_in_shadow_map.y;
+	if missed_even_last_cascade {
+		not_in_shadow = 1.0;
+	} 
+
+	var out_color = textureSample(uniform_atlas_texture, uniform_atlas_sampler, the.coords_in_atlas);
 
 	// Full transparency.
 	if out_color.a == 0.0 {
