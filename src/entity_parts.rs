@@ -36,7 +36,11 @@ impl PartTables {
 	}
 }
 
-pub(crate) struct PartTable<T: bytemuck::Pod + bytemuck::Zeroable> {
+pub(crate) trait PartInstance: bytemuck::Pod + bytemuck::Zeroable {
+	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>);
+}
+
+pub(crate) struct PartTable<T: PartInstance> {
 	mesh: Mesh,
 	instance_table: Vec<T>,
 	instance_table_buffer: wgpu::Buffer,
@@ -45,16 +49,33 @@ pub(crate) struct PartTable<T: bytemuck::Pod + bytemuck::Zeroable> {
 	name: &'static str,
 }
 
-impl<T: bytemuck::Pod + bytemuck::Zeroable> PartTable<T> {
-	pub(crate) fn add_instance(&mut self, instance: T) {
+impl<T: PartInstance> PartTable<T> {
+	pub(crate) fn add_instance(&mut self, instance: T) -> usize {
+		let index = self.instance_table.len();
 		self.instance_table.push(instance);
 		self.cpu_to_gpu_update_required_for_instances = true;
 		self.cpu_to_gpu_update_required_for_new_instances = true;
+		index
 	}
 
 	pub(crate) fn set_instance(&mut self, index: usize, instance: T) {
-		self.cpu_to_gpu_update_required_for_instances = true;
 		self.instance_table[index] = instance;
+		self.cpu_to_gpu_update_required_for_instances = true;
+	}
+
+	pub(crate) fn set_instance_model_matrix(
+		&mut self,
+		index: usize,
+		model_matrix: &cgmath::Matrix4<f32>,
+	) {
+		self.instance_table[index].set_model_matrix(model_matrix);
+		self.cpu_to_gpu_update_required_for_instances = true;
+	}
+
+	pub(crate) fn delete_instance(&mut self, index: usize) {
+		// TODO: Reuse the now available index for a future instance creation.
+		self.instance_table[index] = T::zeroed();
+		self.cpu_to_gpu_update_required_for_instances = true;
 	}
 
 	fn cup_to_gpu_update_if_required(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -91,7 +112,7 @@ pub(crate) trait PartTableRendrable {
 	fn get_data_for_rendering(&self) -> DataForPartTableRendering;
 }
 
-impl<T: bytemuck::Pod + bytemuck::Zeroable> PartTableRendrable for PartTable<T> {
+impl<T: PartInstance> PartTableRendrable for PartTable<T> {
 	fn get_data_for_rendering(&self) -> DataForPartTableRendering {
 		DataForPartTableRendering {
 			mesh_vertices_count: self.mesh.vertex_count,
@@ -169,6 +190,16 @@ pub(crate) mod textured_cubes {
 	use crate::shaders::Vector2Pod;
 
 	use super::*;
+
+	impl PartInstance for PartInstancePod {
+		fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+			let model_matrix = cgmath::conv::array4x4(*model_matrix);
+			self.model_matrix_1_of_4 = model_matrix[0];
+			self.model_matrix_2_of_4 = model_matrix[1];
+			self.model_matrix_3_of_4 = model_matrix[2];
+			self.model_matrix_4_of_4 = model_matrix[3];
+		}
+	}
 
 	pub(super) fn textured_cube_part_table(device: &wgpu::Device) -> PartTable<PartInstancePod> {
 		let name = "Textured Cube Part";

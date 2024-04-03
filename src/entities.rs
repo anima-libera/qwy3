@@ -3,12 +3,15 @@ use std::{
 	sync::Arc,
 };
 
+use cgmath::EuclideanSpace;
 use serde::{Deserialize, Serialize};
 
 use crate::{
 	block_types::BlockTypeTable,
 	chunks::{Block, ChunkGrid},
 	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	entity_parts::{textured_cubes::PartTexturedCubeInstanceData, PartTables, TextureMappingTable},
+	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
 };
 
@@ -20,7 +23,12 @@ pub(crate) struct Entity {
 }
 #[derive(Clone, Serialize, Deserialize)]
 enum EntityTyped {
-	Block { block: Block, motion: cgmath::Vector3<f32> },
+	Block {
+		block: Block,
+		motion: cgmath::Vector3<f32>,
+		#[serde(skip)]
+		textured_cube_part_index: Option<usize>,
+	},
 }
 
 impl Entity {
@@ -32,7 +40,7 @@ impl Entity {
 		Entity {
 			pos,
 			to_delete: false,
-			typed: EntityTyped::Block { block, motion },
+			typed: EntityTyped::Block { block, motion, textured_cube_part_index: None },
 		}
 	}
 
@@ -76,14 +84,20 @@ impl Entity {
 		}
 	}
 
+	// TODO: Bundle part-managing arguments in a struct.
+	#[allow(clippy::too_many_arguments)]
 	fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
+		part_tables: &mut PartTables,
+		texture_mapping_table: &mut TextureMappingTable,
+		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
 	) {
 		match &mut self.typed {
-			EntityTyped::Block { block, motion } => {
+			EntityTyped::Block { block, motion, .. } => {
 				self.pos += *motion * 144.0 * dt.as_secs_f32();
 				motion.z -= 1.0 * 0.35 * dt.as_secs_f32();
 				*motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
@@ -100,6 +114,50 @@ impl Entity {
 						chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
 						self.to_delete = true;
 					}
+				}
+
+				// Re borrow due to borrow cheking shenanigans.
+				// TODO: Fix this borrowing mess!
+				match &mut self.typed {
+					EntityTyped::Block { block, textured_cube_part_index, .. } => {
+						// Manage the part.
+						if !self.to_delete {
+							if let Some(textured_cube_part_index) = textured_cube_part_index {
+								part_tables.textured_cubes.set_instance_model_matrix(
+									*textured_cube_part_index,
+									&cgmath::Matrix4::<f32>::from_translation(self.pos.to_vec()),
+								);
+							} else {
+								let texture_mapping_point_offset = texture_mapping_table
+									.get_offset_of_block(
+										block.type_id,
+										block_type_table,
+										coords_in_atlas_array_thingy,
+										queue,
+									)
+									.unwrap();
+								*textured_cube_part_index = Some(
+									part_tables.textured_cubes.add_instance(
+										PartTexturedCubeInstanceData::new(
+											self.pos,
+											texture_mapping_point_offset,
+										)
+										.to_pod(),
+									),
+								);
+							}
+						}
+					},
+				}
+			},
+		}
+	}
+
+	fn handle_deletion(self, part_tables: &mut PartTables) {
+		match self.typed {
+			EntityTyped::Block { textured_cube_part_index, .. } => {
+				if let Some(textured_cube_part_index) = textured_cube_part_index {
+					part_tables.textured_cubes.delete_instance(textured_cube_part_index);
 				}
 			},
 		}
@@ -140,18 +198,33 @@ impl ChunkEntities {
 		self.savable.entities.push(Some(entity));
 	}
 
+	// TODO: Bundle part-managing arguments in a struct.
+	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
+		part_tables: &mut PartTables,
+		texture_mapping_table: &mut TextureMappingTable,
+		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
 	) {
 		for entity in self.savable.entities.iter_mut() {
-			entity.as_mut().unwrap().apply_one_physics_step(chunk_grid, block_type_table, dt);
+			entity.as_mut().unwrap().apply_one_physics_step(
+				chunk_grid,
+				block_type_table,
+				dt,
+				part_tables,
+				texture_mapping_table,
+				coords_in_atlas_array_thingy,
+				queue,
+			);
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
+				entity.take().unwrap().handle_deletion(part_tables);
 				false
 			} else {
 				let entity_chunk_coords = entity.as_ref().unwrap().chunk_coords(chunk_grid.cd());

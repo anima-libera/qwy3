@@ -631,7 +631,15 @@ pub fn init_and_run_game_loop() {
 				game.player_phys.apply_one_physics_step(&game.chunk_grid, &game.block_type_table, dt);
 			}
 
-			game.chunk_grid.apply_one_physics_step(&game.block_type_table, dt, game.save.as_ref());
+			game.chunk_grid.apply_one_physics_step(
+				&game.block_type_table,
+				dt,
+				game.save.as_ref(),
+				&mut game.part_tables,
+				&mut game.texture_mapping_table,
+				&game.coords_in_atlas_array_thingy,
+				&game.queue,
+			);
 
 			game.queue.write_buffer(
 				&game.fog_center_position_thingy.resource,

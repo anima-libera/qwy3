@@ -16,7 +16,9 @@ use crate::{
 		CubicCoordsSpan, OrientedAxis,
 	},
 	entities::{ChunkEntities, Entity},
+	entity_parts::{PartTables, TextureMappingTable},
 	font::Font,
+	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
 	threadpool::ThreadPool,
 	unsorted::CurrentWorkerTasks,
@@ -450,11 +452,16 @@ impl ChunkGrid {
 		self.blocks_map.len()
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn apply_one_physics_step(
 		&mut self,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		save: Option<&Arc<Save>>,
+		part_tables: &mut PartTables,
+		texture_mapping_table: &mut TextureMappingTable,
+		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
 	) {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
@@ -463,7 +470,16 @@ impl ChunkGrid {
 				continue;
 			}
 			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
-			chunk_entities.apply_one_physics_step(self, block_type_table, dt, &mut changes_of_chunk);
+			chunk_entities.apply_one_physics_step(
+				self,
+				block_type_table,
+				dt,
+				&mut changes_of_chunk,
+				part_tables,
+				texture_mapping_table,
+				coords_in_atlas_array_thingy,
+				queue,
+			);
 			if chunk_entities.count_entities() > 0 {
 				self.add_chunk_entities(chunk_entities);
 			} else {
