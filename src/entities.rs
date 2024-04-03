@@ -153,7 +153,7 @@ impl Entity {
 		}
 	}
 
-	fn handle_deletion(self, part_tables: &mut PartTables) {
+	fn handle_unloading_or_deletion(self, part_tables: &mut PartTables) {
 		match self.typed {
 			EntityTyped::Block { textured_cube_part_index, .. } => {
 				if let Some(textured_cube_part_index) = textured_cube_part_index {
@@ -224,7 +224,7 @@ impl ChunkEntities {
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
-				entity.take().unwrap().handle_deletion(part_tables);
+				entity.take().unwrap().handle_unloading_or_deletion(part_tables);
 				false
 			} else {
 				let entity_chunk_coords = entity.as_ref().unwrap().chunk_coords(chunk_grid.cd());
@@ -239,6 +239,12 @@ impl ChunkEntities {
 				}
 			}
 		});
+	}
+
+	pub(crate) fn handle_unloading(self, part_tables: &mut PartTables) {
+		for entity in self.savable.entities.into_iter() {
+			entity.unwrap().handle_unloading_or_deletion(part_tables);
+		}
 	}
 
 	pub(crate) fn save(&self, save: &Arc<Save>) {

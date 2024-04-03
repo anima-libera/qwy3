@@ -513,9 +513,6 @@ impl ChunkGrid {
 		entity: Entity,
 		save: Option<&Arc<Save>>,
 	) {
-		//let chunk_entities_is_loaded = self.chunk_entities_is_loaded(chunk_coords, loaded_area);
-		//let chunk_entities_is_loaded = self.is_loaded(chunk_coords);
-		//if chunk_entities_is_loaded {
 		let coords_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
 		self
 			.entities_map
@@ -528,9 +525,6 @@ impl ChunkGrid {
 					.unwrap_or(ChunkEntities::new_empty(coords_span))
 			})
 			.add_entity(entity);
-		//} else if let Some(save) = save {
-		//	add_entity_directly_to_save(entity, self.cd, save);
-		//}
 	}
 
 	pub(crate) fn add_entity(&mut self, entity: Entity, save: Option<&Arc<Save>>) {
@@ -575,6 +569,7 @@ impl ChunkGrid {
 		chunk_coords: ChunkCoords,
 		save: Option<&Arc<Save>>,
 		only_save_modified_chunks: bool,
+		part_tables: &mut PartTables,
 	) {
 		let chunk_blocks = self.blocks_map.remove(&chunk_coords);
 		let chunk_entities = self.entities_map.remove(&chunk_coords);
@@ -584,9 +579,12 @@ impl ChunkGrid {
 					chunk_blocks.save(save);
 				}
 			}
-			if let Some(chunk_entities) = chunk_entities {
+			if let Some(chunk_entities) = &chunk_entities {
 				chunk_entities.save(save);
 			}
+		}
+		if let Some(chunk_entities) = chunk_entities {
+			chunk_entities.handle_unloading(part_tables);
 		}
 		self.culling_info_map.remove(&chunk_coords);
 		self.mesh_map.remove(&chunk_coords);
@@ -599,6 +597,7 @@ impl ChunkGrid {
 		unloading_distance_in_blocks: f32,
 		save: Option<&Arc<Save>>,
 		only_save_modified_chunks: bool,
+		part_tables: &mut PartTables,
 	) {
 		let unloading_distance_in_chunks = unloading_distance_in_blocks / self.cd.edge as f32;
 		// TODO: Avoid copying all the keys in a vector and iterating over all the chunks every frame.
@@ -608,7 +607,7 @@ impl ChunkGrid {
 			let dist_in_chunks =
 				chunk_coords.map(|x| x as f32).distance(player_chunk_coords.map(|x| x as f32));
 			if dist_in_chunks > unloading_distance_in_chunks {
-				self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
+				self.unload_chunk(chunk_coords, save, only_save_modified_chunks, part_tables);
 			}
 		}
 	}
@@ -617,10 +616,11 @@ impl ChunkGrid {
 		&mut self,
 		save: Option<&Arc<Save>>,
 		only_save_modified_chunks: bool,
+		part_tables: &mut PartTables,
 	) {
 		let chunk_coords_list: Vec<_> = self.blocks_map.keys().copied().collect();
 		for chunk_coords in chunk_coords_list.into_iter() {
-			self.unload_chunk(chunk_coords, save, only_save_modified_chunks);
+			self.unload_chunk(chunk_coords, save, only_save_modified_chunks, part_tables);
 		}
 	}
 }
