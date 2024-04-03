@@ -39,6 +39,7 @@ use crate::{
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use wgpu::BufferAddress;
 
 #[derive(Serialize, Deserialize)]
 struct StateSavable {
@@ -484,11 +485,14 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	{
 		// TEST for one texture mapping
 		let mappings = texture_mappings_for_cube(cgmath::point2(16 * 3, 0));
-		queue.write_buffer(
-			&coords_in_atlas_array_thingy.resource,
-			0,
-			bytemuck::cast_slice(&mappings),
-		);
+		let data = bytemuck::cast_slice(&mappings);
+		queue.write_buffer(&coords_in_atlas_array_thingy.resource, 0, data);
+
+		// TEST for a second texture mapping
+		let new_offest = data.len() as BufferAddress;
+		let mappings = texture_mappings_for_cube(cgmath::point2(16 * 4, 0));
+		let data = bytemuck::cast_slice(&mappings);
+		queue.write_buffer(&coords_in_atlas_array_thingy.resource, new_offest, data);
 	}
 
 	let rendering = rendering_init::init_rendering_stuff(

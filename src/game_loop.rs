@@ -821,14 +821,20 @@ pub fn init_and_run_game_loop() {
 			);
 
 			// TEST
-			game.part_tables.textured_cubes.add_instance(
-				PartTexturedCubeInstanceData::new(cgmath::point3(
-					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-					rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
-				))
-				.to_pod(),
-			);
+			for i in 0..10 {
+				let texture_mapping_point_offset = if i < 5 { 0 } else { 6 * 3 * 2 };
+				game.part_tables.textured_cubes.add_instance(
+					PartTexturedCubeInstanceData::new(
+						cgmath::point3(
+							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+							rand::thread_rng().gen_range(0.0.._time_since_beginning.as_secs_f32() * 30.0),
+						),
+						texture_mapping_point_offset,
+					)
+					.to_pod(),
+				);
+			}
 
 			game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
 

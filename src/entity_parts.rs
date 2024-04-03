@@ -117,13 +117,18 @@ pub(crate) mod textured_cubes {
 
 	pub(crate) struct PartTexturedCubeInstanceData {
 		model_matrix: [[f32; 4]; 4],
+		/// The offset is in the array of 2D points, so 1 rank per vec2<f32>.
+		texture_mapping_point_offset: u32,
 	}
 
 	impl PartTexturedCubeInstanceData {
-		pub(crate) fn new(pos: cgmath::Point3<f32>) -> PartTexturedCubeInstanceData {
+		pub(crate) fn new(
+			pos: cgmath::Point3<f32>,
+			texture_mapping_point_offset: u32,
+		) -> PartTexturedCubeInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
 			let model_matrix = cgmath::conv::array4x4(model_matrix);
-			PartTexturedCubeInstanceData { model_matrix }
+			PartTexturedCubeInstanceData { model_matrix, texture_mapping_point_offset }
 		}
 
 		pub(crate) fn to_pod(&self) -> PartInstancePod {
@@ -132,6 +137,7 @@ pub(crate) mod textured_cubes {
 				model_matrix_2_of_4: self.model_matrix[1],
 				model_matrix_3_of_4: self.model_matrix[2],
 				model_matrix_4_of_4: self.model_matrix[3],
+				texture_mapping_point_offset: self.texture_mapping_point_offset,
 			}
 		}
 	}

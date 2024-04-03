@@ -30,14 +30,16 @@ pub(crate) struct PartInstancePod {
 	pub(crate) model_matrix_2_of_4: [f32; 4],
 	pub(crate) model_matrix_3_of_4: [f32; 4],
 	pub(crate) model_matrix_4_of_4: [f32; 4],
+	pub(crate) texture_mapping_point_offset: u32,
 }
 impl PartInstancePod {
-	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 4] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
 		vertex_attr_array![
 			2 => Float32x4,
 			3 => Float32x4,
 			4 => Float32x4,
 			5 => Float32x4,
+			6 => Uint32,
 		]
 	}
 }

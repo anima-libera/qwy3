@@ -8,6 +8,7 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
+	@location(6) texture_mapping_point_offset: u32,
 };
 
 struct VertexOutput {
@@ -35,7 +36,8 @@ fn vertex_shader_main(
 		instance_input.model_matrix_4_of_4,
 	);
 
-	var coords_in_atlas = uniform_coords_in_atlas_array[vertex_index];
+	var coords_in_atlas =
+		uniform_coords_in_atlas_array[instance_input.texture_mapping_point_offset + vertex_index];
 
 	var vertex_output: VertexOutput;
 	vertex_output.screen_position =
