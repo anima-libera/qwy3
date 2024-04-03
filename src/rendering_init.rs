@@ -92,6 +92,8 @@ pub(crate) struct RenderPipelinesAndBindGroups {
 	pub(crate) block_shadow_bind_group: wgpu::BindGroup,
 	pub(crate) block_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) block_bind_group: wgpu::BindGroup,
+	pub(crate) part_textured_shadow_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) part_textured_shadow_bind_group: wgpu::BindGroup,
 	pub(crate) part_textured_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) part_textured_bind_group: wgpu::BindGroup,
 	pub(crate) simple_line_render_pipeline: wgpu::RenderPipeline,
@@ -157,6 +159,20 @@ pub(crate) fn init_rendering_stuff(
 		window_surface_format,
 		z_buffer_format,
 	);
+
+	let (part_textured_shadow_render_pipeline, part_textured_shadow_bind_group) =
+		shaders::part_textured_shadow::render_pipeline_and_bind_group(
+			&device,
+			shaders::part_textured_shadow::BindingThingies {
+				sun_camera_single_matrix_thingy: all_binding_thingies.sun_camera_single_matrix_thingy,
+				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
+				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
+				fog_center_position_thingy: all_binding_thingies.fog_center_position_thingy,
+				fog_inf_sup_radiuses_thingy: all_binding_thingies.fog_inf_sup_radiuses_thingy,
+				coords_in_atlas_array_thingy: all_binding_thingies.coords_in_atlas_array_thingy,
+			},
+			shadow_map_format,
+		);
 
 	let (part_textured_render_pipeline, part_textured_bind_group) =
 		shaders::part_textured::render_pipeline_and_bind_group(
@@ -227,6 +243,8 @@ pub(crate) fn init_rendering_stuff(
 		block_shadow_bind_group,
 		block_render_pipeline,
 		block_bind_group,
+		part_textured_shadow_render_pipeline,
+		part_textured_shadow_bind_group,
 		part_textured_render_pipeline,
 		part_textured_bind_group,
 		simple_line_render_pipeline,

@@ -60,7 +60,7 @@ fn vertex_shader_main(
 
 @fragment
 fn fragment_shader_main(the: VertexOutput) -> @location(0) vec4<f32> {
-	// TODO: There is a lot of code duplication between here and `blocks.wgsl`,
+	// TODO: There is a lot of code duplication between here and `block.wgsl`,
 	// we have to factorize!
 
 	var not_in_shadow = 1.0;
