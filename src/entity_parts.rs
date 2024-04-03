@@ -1,8 +1,16 @@
+use std::{
+	collections::{hash_map::Entry, HashMap},
+	sync::Arc,
+};
+
 use cgmath::EuclideanSpace;
+use rustc_hash::FxHashMap;
 use wgpu::util::DeviceExt;
 
 use crate::{
+	block_types::{BlockType, BlockTypeId, BlockTypeTable},
 	coords::{AxisOrientation, NonOrientedAxis, OrientedAxis},
+	rendering_init::BindingThingy,
 	shaders::part_textured::{PartInstancePod, PartVertexPod},
 };
 
@@ -94,6 +102,63 @@ struct Mesh {
 	buffer: wgpu::Buffer,
 }
 
+pub(crate) struct TextureMappingTable {
+	/// Maps a block type to the offset (in `vec2<f32>`s) of the texture mapping of the block type.
+	blocks: FxHashMap<BlockTypeId, u32>,
+	/// Next offset in the Wgpu buffer, in bytes.
+	next_offset_in_buffer_in_bytes: u32,
+	/// Next offset in `vec2<f32>`s to be given to instances.
+	next_offset_in_points: u32,
+}
+
+pub(crate) struct CubeTextureMappingOffset(u32);
+
+impl TextureMappingTable {
+	pub(crate) fn new() -> TextureMappingTable {
+		TextureMappingTable {
+			blocks: HashMap::default(),
+			next_offset_in_buffer_in_bytes: 0,
+			next_offset_in_points: 0,
+		}
+	}
+
+	/// Get an offset in the array of texture mappings, specifically for a textured cube part,
+	/// and with the textures of a block. The resulting offset may be given to an instance of
+	/// the textured cube model. If the requested texture mapping is not in the table, it is added.
+	/// Returns `None` if given a `block_type_id` that does not correspond to a solid block.
+	pub(crate) fn get_offset_of_block(
+		&mut self,
+		block_type_id: BlockTypeId,
+		block_type_table: &Arc<BlockTypeTable>,
+		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
+	) -> Option<CubeTextureMappingOffset> {
+		let entry = self.blocks.entry(block_type_id);
+		match entry {
+			Entry::Occupied(occupied) => Some(CubeTextureMappingOffset(*occupied.get())),
+			Entry::Vacant(vacant) => {
+				let texture_coords_on_atlas = match block_type_table.get(block_type_id)? {
+					BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
+					_ => return None,
+				};
+				let mappings = textured_cubes::texture_mappings_for_cube(texture_coords_on_atlas);
+				let data = bytemuck::cast_slice(&mappings);
+				let data_offset = self.next_offset_in_buffer_in_bytes;
+				queue.write_buffer(
+					&coords_in_atlas_array_thingy.resource,
+					data_offset as u64,
+					data,
+				);
+				self.next_offset_in_buffer_in_bytes += data.len() as u32;
+				let offset_in_points = self.next_offset_in_points;
+				self.next_offset_in_points += mappings.len() as u32;
+				vacant.insert(offset_in_points);
+				Some(CubeTextureMappingOffset(offset_in_points))
+			},
+		}
+	}
+}
+
 pub(crate) mod textured_cubes {
 	use crate::shaders::Vector2Pod;
 
@@ -124,11 +189,14 @@ pub(crate) mod textured_cubes {
 	impl PartTexturedCubeInstanceData {
 		pub(crate) fn new(
 			pos: cgmath::Point3<f32>,
-			texture_mapping_point_offset: u32,
+			texture_mapping_point_offset: CubeTextureMappingOffset,
 		) -> PartTexturedCubeInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
 			let model_matrix = cgmath::conv::array4x4(model_matrix);
-			PartTexturedCubeInstanceData { model_matrix, texture_mapping_point_offset }
+			PartTexturedCubeInstanceData {
+				model_matrix,
+				texture_mapping_point_offset: texture_mapping_point_offset.0,
+			}
 		}
 
 		pub(crate) fn to_pod(&self) -> PartInstancePod {

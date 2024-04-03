@@ -822,7 +822,20 @@ pub fn init_and_run_game_loop() {
 
 			// TEST
 			for i in 0..10 {
-				let texture_mapping_point_offset = if i < 5 { 0 } else { 6 * 3 * 2 };
+				let block_id = if i < 5 {
+					game.block_type_table.kinda_leaf_id()
+				} else {
+					game.block_type_table.generated_test_id(rand::thread_rng().gen_range(0..10))
+				};
+				let texture_mapping_point_offset = game
+					.texture_mapping_table
+					.get_offset_of_block(
+						block_id,
+						&game.block_type_table,
+						&game.coords_in_atlas_array_thingy,
+						&game.queue,
+					)
+					.unwrap();
 				game.part_tables.textured_cubes.add_instance(
 					PartTexturedCubeInstanceData::new(
 						cgmath::point3(

@@ -13,7 +13,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
-	entity_parts::{textured_cubes::texture_mappings_for_cube, PartTables},
+	entity_parts::{PartTables, TextureMappingTable},
 	font::{self, Font},
 	lang,
 	line_meshes::SimpleLineMesh,
@@ -39,7 +39,6 @@ use crate::{
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use wgpu::BufferAddress;
 
 #[derive(Serialize, Deserialize)]
 struct StateSavable {
@@ -128,6 +127,8 @@ pub(crate) struct Game {
 	pub(crate) only_save_modified_chunks: bool,
 	pub(crate) max_fps: Option<i32>,
 	pub(crate) part_tables: PartTables,
+	pub(crate) coords_in_atlas_array_thingy: BindingThingy<wgpu::Buffer>,
+	pub(crate) texture_mapping_table: TextureMappingTable,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -482,18 +483,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let part_tables = PartTables::new(&device);
 
 	let coords_in_atlas_array_thingy = init_coords_in_atlas_array_thingy(Arc::clone(&device));
-	{
-		// TEST for one texture mapping
-		let mappings = texture_mappings_for_cube(cgmath::point2(16 * 3, 0));
-		let data = bytemuck::cast_slice(&mappings);
-		queue.write_buffer(&coords_in_atlas_array_thingy.resource, 0, data);
-
-		// TEST for a second texture mapping
-		let new_offest = data.len() as BufferAddress;
-		let mappings = texture_mappings_for_cube(cgmath::point2(16 * 4, 0));
-		let data = bytemuck::cast_slice(&mappings);
-		queue.write_buffer(&coords_in_atlas_array_thingy.resource, new_offest, data);
-	}
+	let texture_mapping_table = TextureMappingTable::new();
 
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
@@ -685,6 +675,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		only_save_modified_chunks,
 		max_fps,
 		part_tables,
+		coords_in_atlas_array_thingy,
+		texture_mapping_table,
 
 		worker_tasks,
 		pool,
