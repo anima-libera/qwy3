@@ -170,6 +170,8 @@ pub(crate) fn init_rendering_stuff(
 				sun_camera_matrices_thingy: all_binding_thingies.sun_camera_matrices_thingy,
 				shadow_map_view_thingy: all_binding_thingies.shadow_map_view_thingy,
 				shadow_map_sampler_thingy: all_binding_thingies.shadow_map_sampler_thingy,
+				fog_center_position_thingy: all_binding_thingies.fog_center_position_thingy,
+				fog_inf_sup_radiuses_thingy: all_binding_thingies.fog_inf_sup_radiuses_thingy,
 			},
 			window_surface_format,
 			z_buffer_format,

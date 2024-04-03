@@ -53,6 +53,8 @@ pub(crate) struct BindingThingies<'a> {
 	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
+	pub(crate) fog_center_position_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub(crate) fn render_pipeline_and_bind_group(
@@ -84,6 +86,8 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.sun_camera_matrices_thingy.layout_entry(5, S::FRAGMENT),
 			binding_thingies.shadow_map_view_thingy.layout_entry(6, S::FRAGMENT),
 			binding_thingies.shadow_map_sampler_thingy.layout_entry(7, S::FRAGMENT),
+			binding_thingies.fog_center_position_thingy.layout_entry(8, S::FRAGMENT),
+			binding_thingies.fog_inf_sup_radiuses_thingy.layout_entry(9, S::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -98,6 +102,8 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.sun_camera_matrices_thingy.bind_group_entry(5),
 			binding_thingies.shadow_map_view_thingy.bind_group_entry(6),
 			binding_thingies.shadow_map_sampler_thingy.bind_group_entry(7),
+			binding_thingies.fog_center_position_thingy.bind_group_entry(8),
+			binding_thingies.fog_inf_sup_radiuses_thingy.bind_group_entry(9),
 		],
 	});
 
