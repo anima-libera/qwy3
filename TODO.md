@@ -76,8 +76,7 @@
 ## Entities
 
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
-- Rendering of entity parts with instanced rendering of a few models and tables of transformation matrices, see the TODO at the end of `entities.rs`.
-- Falling blocks (WIP).
+- Make blocks place themselves on a face of a placed block instead of sometimes on an edge or even a corner.
 - Particles, like when breaking blocks.
 - Animals >w< or something.
 

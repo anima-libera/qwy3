@@ -45,6 +45,7 @@ Advice:
 - Removing and placing blocks.
 - Saving/loading to/from disk, named saves.
 - AABB vs voxels collision resolution.
+- Entities (falling blocks for now) that get saved/loaded, fast rendering.
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.
 - Fog effect (blocks in the distance fading in the skybox).
