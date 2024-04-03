@@ -52,6 +52,11 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> PartTable<T> {
 		self.cpu_to_gpu_update_required_for_new_instances = true;
 	}
 
+	pub(crate) fn set_instance(&mut self, index: usize, instance: T) {
+		self.cpu_to_gpu_update_required_for_instances = true;
+		self.instance_table[index] = instance;
+	}
+
 	fn cup_to_gpu_update_if_required(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
 		if self.cpu_to_gpu_update_required_for_new_instances {
 			// TODO: Double size like Vec instead of just reallocating for the new instances.
@@ -111,6 +116,7 @@ pub(crate) struct TextureMappingTable {
 	next_offset_in_points: u32,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct CubeTextureMappingOffset(u32);
 
 impl TextureMappingTable {

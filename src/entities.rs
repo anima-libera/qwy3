@@ -209,10 +209,3 @@ pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
 	pub(crate) new_chunk: ChunkCoords,
 	pub(crate) entity: Entity,
 }
-
-// TODO:
-// Have a few meshes of a few shapes like a cube and all (start with the cube).
-// Have one table of data per such mesh, data would be like textures, transformation matrix, etc.
-// Each entity can have a list of parts, each part having its own entry in a table of data
-//   so that like an entity can be made of shapes and texture and move each shape separately.
-// Render these with instanced rendering.

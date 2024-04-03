@@ -847,6 +847,19 @@ pub fn init_and_run_game_loop() {
 					)
 					.to_pod(),
 				);
+
+				game.part_tables.textured_cubes.set_instance(
+					i,
+					PartTexturedCubeInstanceData::new(
+						cgmath::point3(
+							rand::thread_rng().gen_range(-30.0..-10.0),
+							rand::thread_rng().gen_range(0.0..30.0),
+							rand::thread_rng().gen_range(0.0..30.0),
+						),
+						texture_mapping_point_offset,
+					)
+					.to_pod(),
+				);
 			}
 
 			game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
