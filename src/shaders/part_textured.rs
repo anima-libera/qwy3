@@ -49,6 +49,10 @@ pub(crate) struct BindingThingies<'a> {
 	pub(crate) atlas_texture_view_thingy: &'a BindingThingy<wgpu::TextureView>,
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
+	pub(crate) shadow_map_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 }
 
 pub(crate) fn render_pipeline_and_bind_group(
@@ -76,6 +80,10 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.atlas_texture_view_thingy.layout_entry(1, S::FRAGMENT),
 			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 			binding_thingies.coords_in_atlas_array_thingy.layout_entry(3, S::VERTEX),
+			binding_thingies.sun_light_direction_thingy.layout_entry(4, S::VERTEX),
+			binding_thingies.sun_camera_matrices_thingy.layout_entry(5, S::FRAGMENT),
+			binding_thingies.shadow_map_view_thingy.layout_entry(6, S::FRAGMENT),
+			binding_thingies.shadow_map_sampler_thingy.layout_entry(7, S::FRAGMENT),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -86,6 +94,10 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.atlas_texture_view_thingy.bind_group_entry(1),
 			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
 			binding_thingies.coords_in_atlas_array_thingy.bind_group_entry(3),
+			binding_thingies.sun_light_direction_thingy.bind_group_entry(4),
+			binding_thingies.sun_camera_matrices_thingy.bind_group_entry(5),
+			binding_thingies.shadow_map_view_thingy.bind_group_entry(6),
+			binding_thingies.shadow_map_sampler_thingy.bind_group_entry(7),
 		],
 	});
 
