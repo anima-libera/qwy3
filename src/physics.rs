@@ -4,7 +4,7 @@ use crate::{
 	coords::{AlignedBox, AxisOrientation, BlockCoords, NonOrientedAxis, OrientedAxis},
 };
 
-use std::{sync::Arc, time::Duration};
+use std::{cmp::Ordering, sync::Arc, time::Duration};
 
 /// Represents an `AlignedBox`-shaped object that has physics or something like that.
 #[derive(Clone)]
@@ -93,39 +93,72 @@ impl AlignedPhysBox {
 		self.motion.z -= self.gravity_factor * 0.35 * dt.as_secs_f32();
 		self.motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
 
-		// Inspired from Minecraft's algorithm described at https://www.mcpk.wiki/wiki/Collisions
-
+		// We handle the motion axis by axis.
+		// For each axis, we apply the motion then deal with collisions if any.
+		// The idea of proceeding that way was inspired from Minecraft's algorithm described at
+		// https://www.mcpk.wiki/wiki/Collisions
 		for axis in [NonOrientedAxis::Z, NonOrientedAxis::X, NonOrientedAxis::Y] {
-			let mut next_aligned_box = self.aligned_box.clone();
-			next_aligned_box.pos[axis.index()] = self.new_box_pos[axis.index()];
-			let next_block_span = next_aligned_box.overlapping_block_coords_span();
-			for orientation in AxisOrientation::iter_over_the_two_possible_orientations() {
-				let oriented_axis = OrientedAxis { axis, orientation };
-				let sign = orientation.sign() as f32;
-				let axis_i = axis.index();
-				if (next_aligned_box.pos[axis_i] - self.aligned_box.pos[axis_i]) * sign <= 0.0 {
-					continue;
-				}
-				let blocks_on_side = next_block_span.side(oriented_axis);
-				for coords in blocks_on_side.iter() {
-					if is_opaque(coords) {
-						// There is a collision to be solved.
-						if self.motion[axis_i] * sign > 0.0 {
-							self.motion[axis_i] = 0.0;
-						}
-						let mut player_side = next_aligned_box.pos;
-						player_side[axis_i] += (next_aligned_box.dims[axis_i] / 2.0 + 0.001) * sign;
-						player_side = player_side.map(|x| x.round() - 0.001 * sign);
-						let mut new_pos = next_aligned_box.pos;
-						new_pos[axis_i] =
-							player_side[axis_i] - (0.5 + next_aligned_box.dims[axis_i] / 2.0) * sign;
-						next_aligned_box.pos = new_pos;
-						break;
-					}
-				}
-			}
+			let axis_i = axis.index();
+			let old_pos_coord = self.aligned_box.pos[axis_i];
 
-			self.aligned_box = next_aligned_box;
+			// Apply the motion along the considered axis.
+			self.aligned_box.pos[axis_i] = self.new_box_pos[axis_i];
+
+			// The motion along the considered axis goes in either of the two possible orientations
+			// of the axis (positiveward or negativeward), here we get that orientation for the
+			// currently considered axis.
+			let position_comparison =
+				self.aligned_box.pos[axis_i].partial_cmp(&old_pos_coord).unwrap();
+			let orientation = match position_comparison {
+				Ordering::Equal => {
+					// There is no motion along the considered axis,
+					// so nothing to do for the current axis.
+					continue;
+				},
+				Ordering::Greater => AxisOrientation::Positivewards,
+				Ordering::Less => AxisOrientation::Negativewards,
+			};
+			let sign = orientation.sign() as f32;
+			let oriented_axis = OrientedAxis { axis, orientation };
+
+			// The hitbox overlaps with some blocks (a rectangukar 3D span of blocks) (solid or not).
+			// We get that block span to have a list of block to check for collisions, as the hitbox
+			// can only collide with blocks that overlap with it.
+			let next_block_span = self.aligned_box.overlapping_block_coords_span();
+			// We only look at the blocks at one side of that span, the side the hitbox is moving
+			// towards.
+			let blocks_on_side = next_block_span.side(oriented_axis);
+			// If any of these blocks is solid, the it means that the hitbox is moving towards a
+			// solid block that overlaps with it, thus there is a collision.
+			let collision = blocks_on_side.iter().any(is_opaque);
+			if collision {
+				// There is a collision to be solved.
+
+				// Stop the motion, at least the component of which resulted in the collision.
+				if self.motion[axis_i] * sign > 0.0 {
+					self.motion[axis_i] = 0.0;
+				}
+
+				// Also, move the hitbox out of the colliding block, the moving happens along
+				// the currently considered axis only.
+
+				// First we get the coordinate (along the considered axis) of the colliding side
+				// of the hitbox.
+				let hitbox_side_coord =
+					self.aligned_box.pos[axis_i] + (self.aligned_box.dims[axis_i] / 2.0) * sign;
+				// We apply rounding to move this side to the block center (for now) and also
+				// include a very small margin to influence some roundings (hacky fix >.<).
+				let hitbox_side_coord_rounded_with_margin =
+					(hitbox_side_coord + 0.001 * sign).round() - 0.001 * sign;
+				// Move the side to the colliding block side instead of its center.
+				// Note: Block centers are at integer coordinates (thus the rounding above)
+				// and moving 0.5 along an axis brings the point to a side of a block.
+				let hitbox_side_coord_solved = hitbox_side_coord_rounded_with_margin - 0.5 * sign;
+				// Move the hitbox's position to make its side be at the coordinate we just got.
+				let pos_coord_solved =
+					hitbox_side_coord_solved - (self.aligned_box.dims[axis_i] / 2.0) * sign;
+				self.aligned_box.pos[axis_i] = pos_coord_solved;
+			}
 		}
 		self.new_box_pos = self.aligned_box.pos;
 
