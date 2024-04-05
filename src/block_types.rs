@@ -17,6 +17,15 @@ impl BlockType {
 	pub(crate) fn is_air(&self) -> bool {
 		matches!(self, BlockType::Air)
 	}
+
+	pub(crate) fn texture_coords_on_atlas(&self) -> Option<cgmath::Point2<i32>> {
+		match self {
+			BlockType::Solid { texture_coords_on_atlas } => Some(*texture_coords_on_atlas),
+			BlockType::XShaped { texture_coords_on_atlas } => Some(*texture_coords_on_atlas),
+			BlockType::Air => None,
+			BlockType::Text => None,
+		}
+	}
 }
 
 pub(crate) struct BlockTypeTable {

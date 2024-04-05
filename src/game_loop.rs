@@ -13,7 +13,9 @@ use crate::{
 	rendering_init::{make_z_buffer_texture_view, update_atlas_texture, update_skybox_texture},
 	shaders::{Vector2Pod, Vector3Pod},
 	skybox::SkyboxMesh,
-	unsorted::{Action, Control, ControlEvent, SimpleTextureMesh, WhichCameraToUse, WorkerTask},
+	unsorted::{
+		Action, Control, ControlEvent, RectInAtlas, SimpleTextureMesh, WhichCameraToUse, WorkerTask,
+	},
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
 };
 
@@ -363,10 +365,19 @@ pub fn init_and_run_game_loop() {
 				game.widget_tree_root.find_label_content(WidgetLabel::ItemHeld)
 			{
 				if let Some(held_block) = &game.player_held_block {
-					let held_block_id = held_block.type_id.value;
-					let text = format!("Holding block of id {held_block_id}");
-					let settings = font::TextRenderingSettings::with_scale(3.0);
-					*item_held_widget = Widget::new_simple_text(text, settings);
+					let held_block_id = held_block.type_id;
+					if let Some(texture_coords_on_atlas) =
+						game.block_type_table.get(held_block_id).unwrap().texture_coords_on_atlas()
+					{
+						let rect_in_atlas = RectInAtlas {
+							texture_rect_in_atlas_xy: texture_coords_on_atlas.map(|x| x as f32)
+								* (1.0 / 512.0),
+							texture_rect_in_atlas_wh: cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+						};
+						*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 3.0);
+					} else {
+						*item_held_widget = Widget::Nothing;
+					}
 				} else {
 					*item_held_widget = Widget::Nothing;
 				}

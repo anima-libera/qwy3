@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use cgmath::EuclideanSpace;
 
+use crate::unsorted::{RectInAtlas, SimpleTextureMesh};
 use crate::{
 	font,
 	shaders::{simple_line::SimpleLineVertexPod, simple_texture_2d::SimpleTextureVertexPod},
@@ -84,6 +85,10 @@ pub(crate) enum Widget {
 		text: String,
 		settings: font::TextRenderingSettings,
 	},
+	SimpleTexture {
+		rect_in_atlas: RectInAtlas,
+		scale: f32,
+	},
 	/// Loading bar for the face counter of some skybox generation.
 	FaceCounter {
 		settings: font::TextRenderingSettings,
@@ -137,6 +142,10 @@ impl Widget {
 
 	pub(crate) fn new_simple_text(text: String, settings: font::TextRenderingSettings) -> Widget {
 		Widget::SimpleText { text, settings }
+	}
+
+	pub(crate) fn new_simple_texture(rect_in_atlas: RectInAtlas, scale: f32) -> Widget {
+		Widget::SimpleTexture { rect_in_atlas, scale }
 	}
 
 	pub(crate) fn new_face_counter(
@@ -219,6 +228,7 @@ impl Widget {
 		match self {
 			Widget::Nothing => {},
 			Widget::SimpleText { .. } => {},
+			Widget::SimpleTexture { .. } => {},
 			Widget::FaceCounter { .. } => {},
 			Widget::Label { sub_widget, .. } => sub_widget.for_each_rec(f),
 			Widget::Margins { sub_widget, .. } => sub_widget.for_each_rec(f),
@@ -236,6 +246,7 @@ impl Widget {
 		match self {
 			Widget::Nothing => None,
 			Widget::SimpleText { .. } => None,
+			Widget::SimpleTexture { .. } => None,
 			Widget::FaceCounter { .. } => None,
 			Widget::Label { label, .. } if *label == label_to_find => Some(self),
 			Widget::Label { sub_widget, .. } => sub_widget.find_label(label_to_find),
@@ -295,6 +306,9 @@ impl Widget {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
 			Widget::SimpleText { text, settings } => {
 				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
+			},
+			Widget::SimpleTexture { rect_in_atlas, scale } => {
+				rect_in_atlas.texture_rect_in_atlas_wh * *scale
 			},
 			Widget::FaceCounter { settings, .. } => font.dimensions_of_text(
 				window_width,
@@ -360,6 +374,17 @@ impl Widget {
 					top_left,
 					settings.clone(),
 					text,
+				);
+				meshes.add_simple_texture_vertices(simple_texture_vertices);
+			},
+			Widget::SimpleTexture { rect_in_atlas, scale } => {
+				let dimensions = rect_in_atlas.texture_rect_in_atlas_wh * *scale;
+				let simple_texture_vertices = SimpleTextureMesh::vertices_for_rect(
+					top_left,
+					dimensions,
+					rect_in_atlas.texture_rect_in_atlas_xy,
+					rect_in_atlas.texture_rect_in_atlas_wh,
+					[1.0, 1.0, 1.0],
 				);
 				meshes.add_simple_texture_vertices(simple_texture_vertices);
 			},
