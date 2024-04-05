@@ -10,7 +10,7 @@ use crate::{
 	block_types::BlockTypeTable,
 	camera::{CameraOrthographicSettings, CameraPerspectiveSettings},
 	chunk_loading::LoadingManager,
-	chunks::ChunkGrid,
+	chunks::{Block, ChunkGrid},
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
 	entity_parts::{PartTables, TextureMappingTable},
@@ -129,6 +129,7 @@ pub(crate) struct Game {
 	pub(crate) part_tables: PartTables,
 	pub(crate) coords_in_atlas_array_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) texture_mapping_table: TextureMappingTable,
+	pub(crate) player_held_block: Option<Block>,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -401,6 +402,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_physics = true;
 	let enable_display_phys_box = false;
 
+	let player_held_block = None;
+
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
 
@@ -574,6 +577,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 					"test (stays below log)".to_string(),
 					font::TextRenderingSettings::with_scale(3.0),
 				),
+				Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
 			],
 			5.0,
 		)),
@@ -679,6 +683,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		part_tables,
 		coords_in_atlas_array_thingy,
 		texture_mapping_table,
+		player_held_block,
 
 		worker_tasks,
 		pool,

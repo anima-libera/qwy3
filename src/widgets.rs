@@ -75,6 +75,7 @@ impl InterfaceMeshesVertices {
 pub(crate) enum WidgetLabel {
 	GeneralDebugInfo,
 	LogLineList,
+	ItemHeld,
 }
 
 pub(crate) enum Widget {

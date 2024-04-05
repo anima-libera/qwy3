@@ -52,6 +52,12 @@ pub(crate) struct BlockView<'a> {
 	pub(crate) data: Option<&'a BlockData>,
 }
 
+impl<'a> BlockView<'a> {
+	pub(crate) fn as_owned_block(&self) -> Block {
+		Block { type_id: self.type_id, data: self.data.cloned() }
+	}
+}
+
 /// The blocks of a chunk.
 ///
 /// If no non-air block is ever placed in a `ChunkBlocks` then it never allocates memory.

@@ -227,22 +227,29 @@ pub fn init_and_run_game_loop() {
 						},
 						(Action::PlaceBlockAtTarget, true) => {
 							if let Some((_, coords)) = game.targeted_block_coords {
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									coords,
-									//game.block_type_table.ground_id().into(),
-									Block {
+								let block_to_place =
+									game.player_held_block.take().unwrap_or_else(|| Block {
 										type_id: game.block_type_table.text_id(),
 										data: Some(BlockData::Text("Jaaj".to_string())),
-									},
-								);
+									});
+
+								game
+									.chunk_grid
+									.set_block_and_request_updates_to_meshes(coords, block_to_place);
 							}
 						},
 						(Action::RemoveBlockAtTarget, true) => {
 							if let Some((coords, _)) = game.targeted_block_coords {
+								let broken_block =
+									game.chunk_grid.get_block(coords).unwrap().as_owned_block();
 								game.chunk_grid.set_block_and_request_updates_to_meshes(
 									coords,
 									game.block_type_table.air_id().into(),
 								);
+
+								if !game.block_type_table.get(broken_block.type_id).unwrap().is_air() {
+									game.player_held_block = Some(broken_block);
+								}
 							}
 						},
 						(Action::ToggleDisplayInterface, true) => {
@@ -349,6 +356,20 @@ pub fn init_and_run_game_loop() {
 					{random_message}"
 				);
 				*general_debug_info_widget = Widget::new_simple_text(text, settings);
+			}
+
+			// Item held info.
+			if let Some(item_held_widget) =
+				game.widget_tree_root.find_label_content(WidgetLabel::ItemHeld)
+			{
+				if let Some(held_block) = &game.player_held_block {
+					let held_block_id = held_block.type_id.value;
+					let text = format!("Holding block of id {held_block_id}");
+					let settings = font::TextRenderingSettings::with_scale(3.0);
+					*item_held_widget = Widget::new_simple_text(text, settings);
+				} else {
+					*item_held_widget = Widget::Nothing;
+				}
 			}
 
 			// Command line handling.
