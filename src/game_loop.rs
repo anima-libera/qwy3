@@ -291,26 +291,38 @@ pub fn init_and_run_game_loop() {
 							);
 						},
 						(Action::ThrowBlock, true) => {
-							for _ in 0..30 {
-								let block = Block {
-									type_id: game
-										.block_type_table
-										.generated_test_id(rand::thread_rng().gen_range(0..10)),
-									data: None,
-								};
-
-								let mut motion = game.camera_direction.to_vec3();
-								motion.x +=
-									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
-								motion.y +=
-									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
-								motion.z +=
-									rand::thread_rng().gen_range(-1.0..1.0) * 0.1 * 144.0 * dt.as_secs_f32();
-
+							if let Some(block_to_throw) = game.player_held_block.take() {
+								let motion = game.camera_direction.to_vec3();
 								game.chunk_grid.add_entity(
-									Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
+									Entity::new_block(
+										block_to_throw,
+										game.player_phys.aligned_box().pos,
+										motion,
+									),
 									game.save.as_ref(),
-								)
+								);
+							} else {
+								for _ in 0..30 {
+									let block = Block {
+										type_id: game
+											.block_type_table
+											.generated_test_id(rand::thread_rng().gen_range(0..10)),
+										data: None,
+									};
+
+									let mut motion = game.camera_direction.to_vec3();
+									motion.x += rand::thread_rng().gen_range(-1.0..1.0)
+										* 0.1 * 144.0 * dt.as_secs_f32();
+									motion.y += rand::thread_rng().gen_range(-1.0..1.0)
+										* 0.1 * 144.0 * dt.as_secs_f32();
+									motion.z += rand::thread_rng().gen_range(-1.0..1.0)
+										* 0.1 * 144.0 * dt.as_secs_f32();
+
+									game.chunk_grid.add_entity(
+										Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
+										game.save.as_ref(),
+									);
+								}
 							}
 						},
 						(Action::ToggleDisplayChunksWithEntitiesAsBoxes, true) => {
