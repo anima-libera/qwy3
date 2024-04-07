@@ -141,6 +141,8 @@ pub fn init_and_run_game_loop() {
 			let dt = now - game.time_from_last_iteration;
 			game.time_from_last_iteration = now;
 
+			game.world_time += dt;
+
 			// Perform actions triggered by controls.
 			for control_event in game.controls_to_trigger.iter() {
 				let pressed = control_event.pressed;
@@ -356,10 +358,11 @@ pub fn init_and_run_game_loop() {
 				let (entity_count, chunk_entity_count) =
 					game.chunk_grid.count_entities_and_chunks_that_have_entities();
 				let seed = game.world_gen_seed;
+				let world_time = game.world_time.as_secs_f32();
 				let random_message = game.random_message;
 				let settings = font::TextRenderingSettings::with_scale(3.0);
 				let text = format!(
-					"fps: {fps}\n\
+					"fps: {fps:.1}\n\
 					chunks loaded: {chunk_count}\n\
 					blocks loaded: {block_count}\n\
 					chunks meshed: {chunk_meshed_count}\n\
@@ -367,6 +370,7 @@ pub fn init_and_run_game_loop() {
 					chunk with entities: {chunk_entity_count}\n\
 					player coords: {player_block_coords_str}\n\
 					seed: {seed}\n\
+					world time: {world_time:.0}s\n\
 					{random_message}"
 				);
 				*general_debug_info_widget = Widget::new_simple_text(text, settings);
@@ -796,7 +800,7 @@ pub fn init_and_run_game_loop() {
 				}
 			}
 
-			game.sun_position_in_sky.angle_horizontal += (TAU / 150.0) * dt.as_secs_f32();
+			game.sun_position_in_sky.angle_horizontal = (TAU / 150.0) * game.world_time.as_secs_f32();
 
 			let sun_camera_view_projection_matrices: Vec<_> = game
 				.sun_cameras

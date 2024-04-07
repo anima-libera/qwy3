@@ -3,6 +3,7 @@ use std::{
 	f32::consts::TAU,
 	io::{Read, Write},
 	sync::{atomic::AtomicI32, Arc},
+	time::Duration,
 };
 
 use crate::{
@@ -130,6 +131,7 @@ pub(crate) struct Game {
 	pub(crate) coords_in_atlas_array_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) texture_mapping_table: TextureMappingTable,
 	pub(crate) player_held_block: Option<Block>,
+	pub(crate) world_time: Duration,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -406,6 +408,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
+
+	let world_time = Duration::from_secs_f32(0.0);
 
 	let sun_cameras = vec![
 		CameraOrthographicSettings {
@@ -684,6 +688,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		coords_in_atlas_array_thingy,
 		texture_mapping_table,
 		player_held_block,
+		world_time,
 
 		worker_tasks,
 		pool,
