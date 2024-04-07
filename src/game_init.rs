@@ -49,6 +49,7 @@ struct StateSavable {
 	only_save_modified_chunks: bool,
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
+	world_time: Duration,
 }
 
 pub(crate) fn save_savable_state(game: &Game) {
@@ -61,6 +62,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		only_save_modified_chunks: game.only_save_modified_chunks,
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
+		world_time: game.world_time,
 	};
 	let data = rmp_serde::encode::to_vec(&savable).unwrap();
 	state_file.write_all(&data).unwrap();
@@ -409,7 +411,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
 
-	let world_time = Duration::from_secs_f32(0.0);
+	let world_time =
+		saved_state.as_ref().map_or(Duration::from_secs_f32(0.0), |state| state.world_time);
 
 	let sun_cameras = vec![
 		CameraOrthographicSettings {
