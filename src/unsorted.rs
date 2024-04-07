@@ -1,6 +1,7 @@
 //! TODO: Move everything in here to more appropriate modules!
 
 use cgmath::ElementWise;
+use clap::ValueEnum;
 use std::sync::{atomic::AtomicI32, Arc};
 use wgpu::util::DeviceExt;
 
@@ -248,7 +249,7 @@ pub(crate) struct RectInAtlas {
 	pub(crate) texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum PlayingMode {
 	/// Playing the game and facing its challenges without cheating being allowed by the game.
 	Play,

@@ -193,6 +193,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		fog_margin,
 		save_name,
 		only_save_modified_chunks,
+		playing_mode,
 		test_lang,
 	} = cmdline::parse_command_line_arguments();
 
@@ -410,8 +411,6 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		AlignedPhysBox::new(AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() });
 	let enable_physics = true;
 	let enable_display_phys_box = false;
-
-	let playing_mode = PlayingMode::Play;
 
 	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
 

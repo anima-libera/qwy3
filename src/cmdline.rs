@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use crate::world_gen::WhichWorldGenerator;
+use crate::{unsorted::PlayingMode, world_gen::WhichWorldGenerator};
 
 #[derive(Parser)]
 #[command(color = clap::ColorChoice::Auto)]
@@ -80,6 +80,17 @@ pub(crate) struct CommandLineSettings {
 	/// Only save modified chunks (smaller save size, but no faster load time).
 	#[arg(long = "only-modified")]
 	pub(crate) only_save_modified_chunks: bool,
+
+	/// Selection of the playing mode, `free` or `play`.
+	#[arg(
+		long = "mode",
+		short = 'm',
+		value_enum,
+		default_value_t = PlayingMode::Free,
+		value_name = "PLAYING_MODE",
+		hide_possible_values = true,
+	)]
+	pub(crate) playing_mode: PlayingMode,
 
 	/// Runs a specific Qwy Script test instead of running the game.
 	#[arg(long)]
