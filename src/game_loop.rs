@@ -292,7 +292,7 @@ pub fn init_and_run_game_loop() {
 						},
 						(Action::ThrowBlock, true) => {
 							if let Some(block_to_throw) = game.player_held_block.take() {
-								let motion = game.camera_direction.to_vec3();
+								let motion = game.camera_direction.to_vec3() * 0.5;
 								game.chunk_grid.add_entity(
 									Entity::new_block(
 										block_to_throw,

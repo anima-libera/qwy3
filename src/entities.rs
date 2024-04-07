@@ -136,6 +136,7 @@ impl Entity {
 										queue,
 									)
 									.unwrap();
+								// TODO: Handle the throwing of non-solid blocks.
 								*textured_cube_part_index = Some(
 									part_tables.textured_cubes.add_instance(
 										PartTexturedCubeInstanceData::new(
