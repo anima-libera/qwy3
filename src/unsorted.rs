@@ -247,3 +247,11 @@ pub(crate) struct RectInAtlas {
 	pub(crate) texture_rect_in_atlas_xy: cgmath::Point2<f32>,
 	pub(crate) texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PlayingMode {
+	/// Playing the game and facing its challenges without cheating being allowed by the game.
+	Play,
+	/// Free from the limitations of the `Play` mode.
+	Free,
+}

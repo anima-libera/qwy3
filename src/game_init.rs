@@ -33,7 +33,9 @@ use crate::{
 		SkyboxFaces,
 	},
 	threadpool,
-	unsorted::{Action, Control, ControlEvent, CurrentWorkerTasks, WhichCameraToUse, WorkerTask},
+	unsorted::{
+		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
+	},
 	widgets::{Widget, WidgetLabel},
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
@@ -136,6 +138,7 @@ pub(crate) struct Game {
 	pub(crate) texture_mapping_table: TextureMappingTable,
 	pub(crate) player_held_block: Option<Block>,
 	pub(crate) world_time: Duration,
+	pub(crate) playing_mode: PlayingMode,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -407,6 +410,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		AlignedPhysBox::new(AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() });
 	let enable_physics = true;
 	let enable_display_phys_box = false;
+
+	let playing_mode = PlayingMode::Play;
 
 	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
 
@@ -694,6 +699,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		texture_mapping_table,
 		player_held_block,
 		world_time,
+		playing_mode,
 
 		worker_tasks,
 		pool,

@@ -14,7 +14,8 @@ use crate::{
 	shaders::{Vector2Pod, Vector3Pod},
 	skybox::SkyboxMesh,
 	unsorted::{
-		Action, Control, ControlEvent, RectInAtlas, SimpleTextureMesh, WhichCameraToUse, WorkerTask,
+		Action, Control, ControlEvent, PlayingMode, RectInAtlas, SimpleTextureMesh, WhichCameraToUse,
+		WorkerTask,
 	},
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
 };
@@ -118,19 +119,23 @@ pub fn init_and_run_game_loop() {
 		},
 
 		Event::DeviceEvent { event: winit::event::DeviceEvent::MouseWheel { delta }, .. } => {
-			// Wheel moves the player along the vertical axis.
-			// Useful when physics are disabled.
-			let (dx, dy) = match delta {
-				MouseScrollDelta::LineDelta(horizontal, vertical) => (horizontal, vertical),
-				MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
-			};
-			let sensitivity = 0.01;
-			let direction_left_or_right =
-				game.camera_direction.to_horizontal().add_to_horizontal_angle(TAU / 4.0 * dx.signum());
-			let mut pos = game.player_phys.aligned_box().pos;
-			pos.z -= dy * sensitivity;
-			pos += direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
-			game.player_phys.impose_new_pos(pos);
+			if game.playing_mode == PlayingMode::Free {
+				// Wheel moves the player along the vertical axis.
+				// Useful when physics are disabled.
+				let (dx, dy) = match delta {
+					MouseScrollDelta::LineDelta(horizontal, vertical) => (horizontal, vertical),
+					MouseScrollDelta::PixelDelta(position) => (position.x as f32, position.y as f32),
+				};
+				let sensitivity = 0.01;
+				let direction_left_or_right = game
+					.camera_direction
+					.to_horizontal()
+					.add_to_horizontal_angle(TAU / 4.0 * dx.signum());
+				let mut pos = game.player_phys.aligned_box().pos;
+				pos.z -= dy * sensitivity;
+				pos += direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
+				game.player_phys.impose_new_pos(pos);
+			}
 		},
 
 		Event::AboutToWait => {
@@ -164,7 +169,9 @@ pub fn init_and_run_game_loop() {
 							game.player_phys.jump();
 						},
 						(Action::TogglePhysics, true) => {
-							game.enable_physics = !game.enable_physics;
+							if game.playing_mode == PlayingMode::Free {
+								game.enable_physics = !game.enable_physics;
+							}
 						},
 						(Action::ToggleWorldGeneration, true) => {
 							game.enable_world_generation = !game.enable_world_generation;
@@ -212,46 +219,55 @@ pub fn init_and_run_game_loop() {
 							dbg!(player_bottom);
 						},
 						(Action::PlaceOrRemoveBlockUnderPlayer, true) => {
-							let player_bottom = game.player_phys.aligned_box().pos
-								- cgmath::Vector3::<f32>::unit_z()
-									* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1);
-							let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
-							let player_bottom_block_opt =
-								game.chunk_grid.get_block(player_bottom_block_coords);
-							if let Some(block) = player_bottom_block_opt {
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									player_bottom_block_coords,
-									if game.block_type_table.get(block.type_id).unwrap().is_opaque() {
-										game.block_type_table.air_id().into()
-									} else {
-										game.block_type_table.ground_id().into()
-									},
-								);
+							if game.playing_mode == PlayingMode::Free {
+								let player_bottom = game.player_phys.aligned_box().pos
+									- cgmath::Vector3::<f32>::unit_z()
+										* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1);
+								let player_bottom_block_coords = player_bottom.map(|x| x.round() as i32);
+								let player_bottom_block_opt =
+									game.chunk_grid.get_block(player_bottom_block_coords);
+								if let Some(block) = player_bottom_block_opt {
+									game.chunk_grid.set_block_and_request_updates_to_meshes(
+										player_bottom_block_coords,
+										if game.block_type_table.get(block.type_id).unwrap().is_opaque() {
+											game.block_type_table.air_id().into()
+										} else {
+											game.block_type_table.ground_id().into()
+										},
+									);
+								}
 							}
 						},
 						(Action::PlaceBlockAtTarget, true) => {
 							if let Some((_, coords)) = game.targeted_block_coords {
-								let block_to_place =
-									game.player_held_block.take().unwrap_or_else(|| Block {
+								let block_to_place = game.player_held_block.take().or_else(|| {
+									(game.playing_mode == PlayingMode::Free).then(|| Block {
 										type_id: game.block_type_table.text_id(),
 										data: Some(BlockData::Text("Jaaj".to_string())),
-									});
-
-								game
-									.chunk_grid
-									.set_block_and_request_updates_to_meshes(coords, block_to_place);
+									})
+								});
+								if let Some(block_to_place) = block_to_place {
+									game
+										.chunk_grid
+										.set_block_and_request_updates_to_meshes(coords, block_to_place);
+								}
 							}
 						},
 						(Action::RemoveBlockAtTarget, true) => {
-							if let Some((coords, _)) = game.targeted_block_coords {
-								let broken_block =
-									game.chunk_grid.get_block(coords).unwrap().as_owned_block();
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									coords,
-									game.block_type_table.air_id().into(),
-								);
-
-								if !game.block_type_table.get(broken_block.type_id).unwrap().is_air() {
+							if let Some((coords_take, coords_place)) = game.targeted_block_coords {
+								let block_to_place_back = game.player_held_block.take();
+								if let Some(block_to_place_back) = block_to_place_back {
+									game.chunk_grid.set_block_and_request_updates_to_meshes(
+										coords_place,
+										block_to_place_back,
+									);
+								} else {
+									let broken_block =
+										game.chunk_grid.get_block(coords_take).unwrap().as_owned_block();
+									game.chunk_grid.set_block_and_request_updates_to_meshes(
+										coords_take,
+										game.block_type_table.air_id().into(),
+									);
 									game.player_held_block = Some(broken_block);
 								}
 							}
@@ -303,7 +319,7 @@ pub fn init_and_run_game_loop() {
 									),
 									game.save.as_ref(),
 								);
-							} else {
+							} else if game.playing_mode == PlayingMode::Free {
 								for _ in 0..30 {
 									let block = Block {
 										type_id: game
