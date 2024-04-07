@@ -50,6 +50,7 @@ struct StateSavable {
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
 	world_time: Duration,
+	player_held_block: Option<Block>,
 }
 
 pub(crate) fn save_savable_state(game: &Game) {
@@ -63,6 +64,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
 		world_time: game.world_time,
+		player_held_block: game.player_held_block.clone(),
 	};
 	let data = rmp_serde::encode::to_vec(&savable).unwrap();
 	state_file.write_all(&data).unwrap();
@@ -406,7 +408,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_physics = true;
 	let enable_display_phys_box = false;
 
-	let player_held_block = None;
+	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
 
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
