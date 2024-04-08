@@ -81,7 +81,7 @@ fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
 			},
 		}
 	}
-	positive_fract(f32::cos(hasher.finish() as f32))
+	f32::cos(hasher.finish() as f32) * 0.5 + 0.5
 }
 
 fn raw_noise_rec(xs: &mut [CoordOrChannel], min_coord_index: usize) -> f32 {
