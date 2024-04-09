@@ -77,6 +77,7 @@ pub(crate) enum WidgetLabel {
 	GeneralDebugInfo,
 	LogLineList,
 	ItemHeld,
+	HealthBar,
 }
 
 pub(crate) enum Widget {

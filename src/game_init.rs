@@ -139,6 +139,7 @@ pub(crate) struct Game {
 	pub(crate) player_held_block: Option<Block>,
 	pub(crate) world_time: Duration,
 	pub(crate) playing_mode: PlayingMode,
+	pub(crate) player_health: Option<u32>,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -414,6 +415,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
 
+	let player_health = (playing_mode == PlayingMode::Play).then_some(5);
+
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
 
@@ -590,6 +593,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 					"test (stays below log)".to_string(),
 					font::TextRenderingSettings::with_scale(3.0),
 				),
+				Widget::new_labeled_nothing(WidgetLabel::HealthBar),
 				Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
 			],
 			5.0,
@@ -699,6 +703,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		player_held_block,
 		world_time,
 		playing_mode,
+		player_health,
 
 		worker_tasks,
 		pool,

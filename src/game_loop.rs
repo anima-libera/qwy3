@@ -392,6 +392,27 @@ pub fn init_and_run_game_loop() {
 				*general_debug_info_widget = Widget::new_simple_text(text, settings);
 			}
 
+			// Health bar info.
+			if let Some(health_bar_widget) =
+				game.widget_tree_root.find_label_content(WidgetLabel::HealthBar)
+			{
+				if let Some(health) = &game.player_health {
+					let mut hearts = vec![];
+					for _i in 0..*health {
+						hearts.push(Widget::SimpleTexture {
+							rect_in_atlas: RectInAtlas {
+								texture_rect_in_atlas_xy: cgmath::point2(256.0, 32.0) / 512.0,
+								texture_rect_in_atlas_wh: cgmath::vec2(7.0, 7.0) / 512.0,
+							},
+							scale: 2.0,
+						});
+					}
+					*health_bar_widget = Widget::new_list(hearts, 3.0);
+				} else {
+					*health_bar_widget = Widget::Nothing;
+				}
+			}
+
 			// Item held info.
 			if let Some(item_held_widget) =
 				game.widget_tree_root.find_label_content(WidgetLabel::ItemHeld)
