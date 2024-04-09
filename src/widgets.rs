@@ -380,11 +380,21 @@ impl Widget {
 			},
 			Widget::SimpleTexture { rect_in_atlas, scale } => {
 				let dimensions = rect_in_atlas.texture_rect_in_atlas_wh * *scale;
+				// Add small inwards margins to the atlas rect to prevent the sampling from
+				// going outside the rect it was assigned (which would sometimes happen otherwise).
+				let fixed_rect_in_atlas = RectInAtlas {
+					texture_rect_in_atlas_xy: rect_in_atlas
+						.texture_rect_in_atlas_xy
+						.map(|x| x + 0.00001),
+					texture_rect_in_atlas_wh: rect_in_atlas
+						.texture_rect_in_atlas_wh
+						.map(|x| x - 0.00002),
+				};
 				let simple_texture_vertices = SimpleTextureMesh::vertices_for_rect(
 					top_left,
 					dimensions,
-					rect_in_atlas.texture_rect_in_atlas_xy,
-					rect_in_atlas.texture_rect_in_atlas_wh,
+					fixed_rect_in_atlas.texture_rect_in_atlas_xy,
+					fixed_rect_in_atlas.texture_rect_in_atlas_wh,
 					[1.0, 1.0, 1.0],
 				);
 				meshes.add_simple_texture_vertices(simple_texture_vertices);

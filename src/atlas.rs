@@ -34,7 +34,7 @@ impl Atlas {
 		image.copy_from(&font_image, 0, 32).unwrap();
 
 		// Spritesheet
-		let mut spritesheet_image =
+		let spritesheet_image =
 			image::load_from_memory(include_bytes!("../assets/spritesheet.png")).unwrap();
 		image.copy_from(&spritesheet_image, 256, 32).unwrap();
 
