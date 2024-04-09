@@ -133,7 +133,14 @@ pub(crate) enum Widget {
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
+		orientation: WidgetListOrientation,
 	},
+}
+
+#[derive(PartialEq, Eq)]
+pub(crate) enum WidgetListOrientation {
+	Bottomward,
+	Rightward,
 }
 
 impl Widget {
@@ -192,8 +199,12 @@ impl Widget {
 		Widget::DisappearWhenComplete { sub_widget, completed_time: None, delay_before_disappearing }
 	}
 
-	pub(crate) fn new_list(sub_widgets: Vec<Widget>, interspace: f32) -> Widget {
-		Widget::List { sub_widgets, interspace }
+	pub(crate) fn new_list(
+		sub_widgets: Vec<Widget>,
+		interspace: f32,
+		orientation: WidgetListOrientation,
+	) -> Widget {
+		Widget::List { sub_widgets, interspace, orientation }
 	}
 
 	pub(crate) fn pop_while_smoothly_closing_space(
@@ -335,12 +346,18 @@ impl Widget {
 			Widget::DisappearWhenComplete { sub_widget, .. } => {
 				sub_widget.dimensions(font, window_width)
 			},
-			Widget::List { sub_widgets, interspace } => {
+			Widget::List { sub_widgets, interspace, orientation } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
-					dimensions.y += sub_dimensions.y;
-					dimensions.x = dimensions.x.max(sub_dimensions.x);
+					if *orientation == WidgetListOrientation::Bottomward {
+						dimensions.y += sub_dimensions.y;
+						dimensions.x = dimensions.x.max(sub_dimensions.x);
+					} else if *orientation == WidgetListOrientation::Rightward {
+						dimensions.x += sub_dimensions.x;
+						dimensions.y = dimensions.y.max(sub_dimensions.y);
+					}
+
 					// Now we add the interspaces between the current sub widget and the
 					// next sub widget.
 					// If the current or next (or both) sub widgets have not fully arrived
@@ -350,7 +367,11 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						dimensions.y += interspace * ratio * (2.0 / window_width);
+						if *orientation == WidgetListOrientation::Bottomward {
+							dimensions.y += interspace * ratio * (2.0 / window_width);
+						} else if *orientation == WidgetListOrientation::Rightward {
+							dimensions.x += interspace * ratio * (2.0 / window_width);
+						}
 					}
 				}
 				dimensions
@@ -463,7 +484,7 @@ impl Widget {
 					draw_debug_boxes,
 				);
 			},
-			Widget::List { sub_widgets, interspace } => {
+			Widget::List { sub_widgets, interspace, orientation } => {
 				let mut top_left = top_left;
 				for i in 0..sub_widgets.len() {
 					sub_widgets[i].generate_mesh_vertices(
@@ -475,7 +496,11 @@ impl Widget {
 					);
 
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
-					top_left.y -= sub_dimensions.y;
+					if *orientation == WidgetListOrientation::Bottomward {
+						top_left.y -= sub_dimensions.y;
+					} else if *orientation == WidgetListOrientation::Rightward {
+						top_left.x += sub_dimensions.x;
+					}
 
 					// Now we add the interspaces between the current sub widget and the
 					// next sub widget.
@@ -486,7 +511,11 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						top_left.y -= interspace * ratio * (2.0 / window_width);
+						if *orientation == WidgetListOrientation::Bottomward {
+							top_left.y -= interspace * ratio * (2.0 / window_width);
+						} else if *orientation == WidgetListOrientation::Rightward {
+							top_left.x += interspace * ratio * (2.0 / window_width);
+						}
 					}
 				}
 			},

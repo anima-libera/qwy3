@@ -36,7 +36,7 @@ use crate::{
 	unsorted::{
 		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
 	},
-	widgets::{Widget, WidgetLabel},
+	widgets::{Widget, WidgetLabel, WidgetListOrientation},
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
 
@@ -587,7 +587,11 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				),
 				Widget::new_label(
 					WidgetLabel::LogLineList,
-					Box::new(Widget::new_list(vec![], 5.0)),
+					Box::new(Widget::new_list(
+						vec![],
+						5.0,
+						WidgetListOrientation::Bottomward,
+					)),
 				),
 				Widget::new_simple_text(
 					"test (stays below log)".to_string(),
@@ -597,6 +601,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 				Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
 			],
 			5.0,
+			WidgetListOrientation::Bottomward,
 		)),
 	);
 
