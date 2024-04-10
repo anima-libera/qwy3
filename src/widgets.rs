@@ -1,3 +1,6 @@
+//! Here are defined the various widgets and their rendering.
+//! This is the foundations of the interface and its layout.
+
 use std::collections::HashMap;
 use std::sync::atomic::{self, AtomicI32};
 use std::sync::Arc;
@@ -11,69 +14,9 @@ use crate::{
 	shaders::{simple_line::SimpleLineVertexPod, simple_texture_2d::SimpleTextureVertexPod},
 };
 
-fn simple_line_vertices_for_rect(
-	top_left: cgmath::Point3<f32>,
-	dimensions: cgmath::Vector2<f32>,
-	color: [f32; 3],
-) -> Vec<SimpleLineVertexPod> {
-	let mut vertices = vec![];
-	let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
-	let b = top_left + cgmath::vec3(dimensions.x, 0.0, 0.0);
-	let c = top_left + cgmath::vec3(0.0, -dimensions.y, 0.0);
-	let d = top_left + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
-	vertices.push(SimpleLineVertexPod { position: a.into(), color });
-	vertices.push(SimpleLineVertexPod { position: b.into(), color });
-	vertices.push(SimpleLineVertexPod { position: b.into(), color });
-	vertices.push(SimpleLineVertexPod { position: d.into(), color });
-	vertices.push(SimpleLineVertexPod { position: d.into(), color });
-	vertices.push(SimpleLineVertexPod { position: c.into(), color });
-	vertices.push(SimpleLineVertexPod { position: c.into(), color });
-	vertices.push(SimpleLineVertexPod { position: a.into(), color });
-	vertices
-}
-
-fn simple_line_vertices_for_diamond(
-	center: cgmath::Point3<f32>,
-	dimensions: cgmath::Vector2<f32>,
-	color: [f32; 3],
-) -> Vec<SimpleLineVertexPod> {
-	let mut vertices = vec![];
-	let a = center + cgmath::vec3(0.0, dimensions.y, 0.0) / 2.0;
-	let b = center + cgmath::vec3(dimensions.x, 0.0, 0.0) / 2.0;
-	let c = center + cgmath::vec3(0.0, -dimensions.y, 0.0) / 2.0;
-	let d = center + cgmath::vec3(-dimensions.x, 0.0, 0.0) / 2.0;
-	vertices.push(SimpleLineVertexPod { position: a.into(), color });
-	vertices.push(SimpleLineVertexPod { position: b.into(), color });
-	vertices.push(SimpleLineVertexPod { position: b.into(), color });
-	vertices.push(SimpleLineVertexPod { position: c.into(), color });
-	vertices.push(SimpleLineVertexPod { position: c.into(), color });
-	vertices.push(SimpleLineVertexPod { position: d.into(), color });
-	vertices.push(SimpleLineVertexPod { position: d.into(), color });
-	vertices.push(SimpleLineVertexPod { position: a.into(), color });
-	vertices
-}
-
-/// Vertices for mutliple meshes used to render the interface.
-/// Widgets can draw themselves by adding vertices in here.
-pub(crate) struct InterfaceMeshesVertices {
-	pub(crate) simple_texture_vertices: Vec<SimpleTextureVertexPod>,
-	pub(crate) simple_line_vertices: Vec<SimpleLineVertexPod>,
-}
-
-impl InterfaceMeshesVertices {
-	pub(crate) fn new() -> InterfaceMeshesVertices {
-		InterfaceMeshesVertices { simple_texture_vertices: vec![], simple_line_vertices: vec![] }
-	}
-
-	pub(crate) fn add_simple_texture_vertices(&mut self, mut vertices: Vec<SimpleTextureVertexPod>) {
-		self.simple_texture_vertices.append(&mut vertices);
-	}
-
-	fn add_simple_line_vertices(&mut self, mut vertices: Vec<SimpleLineVertexPod>) {
-		self.simple_line_vertices.append(&mut vertices);
-	}
-}
-
+/// A label widget is a simple wrapper that marks its content with a `WidgetLabel` variant.
+/// This allows some interface-related code to find a specific widget related to a specific
+/// part of the interface, no matter how it moves around in the mess of the widget tree.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WidgetLabel {
 	GeneralDebugInfo,
@@ -82,6 +25,15 @@ pub(crate) enum WidgetLabel {
 	HealthBar,
 }
 
+/// A node in the tree that makes the interface.
+/// One such node can be some visual content, like some text or an image; or it can also
+/// contain an other widget, or even multiple other widgets, and alter their position or layout.
+///
+/// The important methods for widget drawing are the `dimensions` method that computes the
+/// widget bounding box dimensions, and the `generate_mesh_vertices` method that draws the widget
+/// in a mesh ready to be rendered. Both of these are recursive, as widgets that contain other
+/// sub widgets ofter have to adapt to them, to stretch, etc. and the sub widgets ofter have to
+/// listen to their container that tells them where to be, etc.
 pub(crate) enum Widget {
 	Nothing,
 	SimpleText {
@@ -132,18 +84,28 @@ pub(crate) enum Widget {
 		completed_time: Option<std::time::Instant>,
 		delay_before_disappearing: std::time::Duration,
 	},
+	/// A wrapper around an ordered sequence of widgets that are arranged in a line.
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
 		orientation: ListOrientation,
 		alignment: ListAlignment,
 	},
+	/// A wrapper whose size is fixed and that can contain a number of widget placed at certain
+	/// positions inside the box (like top left, or like center, etc.).
 	Box {
 		dimensions: BoxDimensions,
 		sub_widgets: FxHashMap<BoxContentPlacement, Widget>,
 	},
 }
 
+/// The list widget displays its sequence of sub widgets in a line.
+/// The orientation of that line is described with this enum.
+///
+/// For example, `Bottomward` would
+/// dictate the list to be vertical, with its first element at the top and its last at the bottom,
+/// `Leftward` would dictate the list to be horizontal with its first element on the right and
+/// its last element on the left, etc.
 #[allow(dead_code)] // It will surely be used later!
 pub(crate) enum ListOrientation {
 	Bottomward,
@@ -160,6 +122,14 @@ impl ListOrientation {
 	}
 }
 
+/// The list widget displays its sequence of sub widgets in a line, vaguely, but what happens
+/// if its sub widgets are not all of the same size and thus cannot all be neatly aligned?
+/// This enum decides weather to align all the sub widgets to one of their sides, or to align
+/// their centers.
+///
+/// Note that aligning to a side depends on the vertical or horizontal orientation of the list,
+/// for example `LeftOrTop` would align to the left is the list is vertical and it would align
+/// to the top if the list is horizontal.
 pub(crate) enum ListAlignment {
 	LeftOrTop,
 	Center,
@@ -169,12 +139,14 @@ pub(crate) enum ListAlignment {
 pub(crate) enum BoxDimensions {
 	/// The box has the size of the whole window/screen.
 	Screen,
+	// Note that others dimensions will come, when needed.
 }
 
 #[derive(PartialEq, Eq, Hash)]
 pub(crate) enum BoxContentPlacement {
 	TopLeft,
 	BottomRight,
+	// TODO: Add the other 7 (out of 9) obvious points.
 }
 
 impl Widget {
@@ -408,6 +380,11 @@ impl Widget {
 				sub_widget.dimensions(font, window_dimensions)
 			},
 			Widget::List { sub_widgets, interspace, orientation, .. } => {
+				// Now, the list dimensions.
+				// The dimensions depend on the horizontality/verticality of the orientation,
+				// but despite that there is not much going on, we just see how wide and heigh
+				// would all the sub widgets be, we also account for the spaces between them.
+
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
@@ -423,7 +400,7 @@ impl Widget {
 					}
 
 					// Now we add the interspaces between the current sub widget and the
-					// next sub widget.
+					// next sub widget (if any).
 					// If the current or next (or both) sub widgets have not fully arrived
 					// then the interspace should also not be fully developped (so that everything
 					// in the list make space in a smooth manner, even the interspaces).
@@ -492,6 +469,8 @@ impl Widget {
 			},
 			Widget::FaceCounter { settings, counter } => {
 				let counter_value = counter.load(atomic::Ordering::Relaxed);
+				// TODO: Make something cooler!
+				// For now it is just some text that changes to represent a loading bar >_<.
 				let mut text = String::new();
 				text += &"skybox generation: ";
 				text.push('[');
@@ -555,6 +534,12 @@ impl Widget {
 				);
 			},
 			Widget::List { sub_widgets, interspace, orientation, alignment } => {
+				// Now the drawing of a list, with delicate attention to all its parameters.
+
+				// We start at a position near where the first widget of the list will appear,
+				// and move toward a position near where the last widget of the list will appear.
+				// This depends on the orientation of the list (which may make us start far from the
+				// top left and move toward it).
 				let dimensions = self.dimensions(font, window_dimensions);
 				let mut top_left = match orientation {
 					ListOrientation::Bottomward | ListOrientation::Rightward => top_left,
@@ -562,13 +547,23 @@ impl Widget {
 					ListOrientation::Leftward => top_left + cgmath::vec3(dimensions.x, 0.0, 0.0),
 				};
 
+				// Now, we iterate over the sub widgets in order, draw one and move to the position
+				// of the next sub widget, etc.
+				// When moving toward the top left instead of away from it, it is easier to proceed
+				// in a way that require to draw the iterated-over sub widget after moving instead of
+				// before moving, hence the `generate_sub_widget_before_moving` variable.
 				let generate_sub_widget_before_moving = match orientation {
 					ListOrientation::Bottomward | ListOrientation::Rightward => true,
 					ListOrientation::Topward | ListOrientation::Leftward => false,
 				};
-
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
+
+					// Depending on the alignment of the list, the sub widget is moved along
+					// a direction perpendicular to the list orientation.
+					// For example, if the list is oriented `Bottomward`, and the alignment is
+					// `RightOrBottom`, then the 'or bottom' part of the alignment is ignored and
+					// the sub widget is moved so that its right side touches the right of the list.
 					let sub_offset = match (alignment, orientation.is_vertical()) {
 						(ListAlignment::LeftOrTop, _) => cgmath::vec2(0.0, 0.0),
 						(ListAlignment::RightOrBottom, false) => {
@@ -596,6 +591,8 @@ impl Widget {
 						);
 					}
 
+					// Move over the sub widget, to get to the position of the next sub widget
+					// (or to the position of the current sub widget if we draw after moving).
 					match orientation {
 						ListOrientation::Bottomward => {
 							top_left.y -= sub_dimensions.y;
@@ -693,4 +690,67 @@ impl Widget {
 			));
 		}
 	}
+}
+
+/// Vertices for mutliple meshes used to render the interface.
+/// Widgets can draw themselves by adding vertices in here.
+pub(crate) struct InterfaceMeshesVertices {
+	pub(crate) simple_texture_vertices: Vec<SimpleTextureVertexPod>,
+	pub(crate) simple_line_vertices: Vec<SimpleLineVertexPod>,
+}
+
+impl InterfaceMeshesVertices {
+	pub(crate) fn new() -> InterfaceMeshesVertices {
+		InterfaceMeshesVertices { simple_texture_vertices: vec![], simple_line_vertices: vec![] }
+	}
+
+	pub(crate) fn add_simple_texture_vertices(&mut self, mut vertices: Vec<SimpleTextureVertexPod>) {
+		self.simple_texture_vertices.append(&mut vertices);
+	}
+
+	fn add_simple_line_vertices(&mut self, mut vertices: Vec<SimpleLineVertexPod>) {
+		self.simple_line_vertices.append(&mut vertices);
+	}
+}
+
+fn simple_line_vertices_for_rect(
+	top_left: cgmath::Point3<f32>,
+	dimensions: cgmath::Vector2<f32>,
+	color: [f32; 3],
+) -> Vec<SimpleLineVertexPod> {
+	let mut vertices = vec![];
+	let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
+	let b = top_left + cgmath::vec3(dimensions.x, 0.0, 0.0);
+	let c = top_left + cgmath::vec3(0.0, -dimensions.y, 0.0);
+	let d = top_left + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices
+}
+
+fn simple_line_vertices_for_diamond(
+	center: cgmath::Point3<f32>,
+	dimensions: cgmath::Vector2<f32>,
+	color: [f32; 3],
+) -> Vec<SimpleLineVertexPod> {
+	let mut vertices = vec![];
+	let a = center + cgmath::vec3(0.0, dimensions.y, 0.0) / 2.0;
+	let b = center + cgmath::vec3(dimensions.x, 0.0, 0.0) / 2.0;
+	let c = center + cgmath::vec3(0.0, -dimensions.y, 0.0) / 2.0;
+	let d = center + cgmath::vec3(-dimensions.x, 0.0, 0.0) / 2.0;
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: b.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: c.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: d.into(), color });
+	vertices.push(SimpleLineVertexPod { position: a.into(), color });
+	vertices
 }
