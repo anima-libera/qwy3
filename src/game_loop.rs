@@ -358,30 +358,32 @@ pub fn init_and_run_game_loop() {
 
 			let mut interface_meshes_vertices = InterfaceMeshesVertices::new();
 
-			// Top left info.
-			if let Some(general_debug_info_widget) =
-				game.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
+			// TODO: Move all this interface related stuff to its own module.
 			{
-				let fps = 1.0 / dt.as_secs_f32();
-				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
-				let block_count = chunk_count * game.cd.number_of_blocks();
-				let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
-				let player_block_coords = (game.player_phys.aligned_box().pos
-					- cgmath::Vector3::<f32>::unit_z()
-						* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1))
-					.map(|x| x.round() as i32);
-				let player_block_coords_str = {
-					let cgmath::Point3 { x, y, z } = player_block_coords;
-					format!("{x},{y},{z}")
-				};
-				let (entity_count, chunk_entity_count) =
-					game.chunk_grid.count_entities_and_chunks_that_have_entities();
-				let seed = game.world_gen_seed;
-				let world_time = game.world_time.as_secs_f32();
-				let random_message = game.random_message;
-				let settings = font::TextRenderingSettings::with_scale(3.0);
-				let text = format!(
-					"fps: {fps:.1}\n\
+				// Top left info.
+				if let Some(general_debug_info_widget) =
+					game.interface.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
+				{
+					let fps = 1.0 / dt.as_secs_f32();
+					let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
+					let block_count = chunk_count * game.cd.number_of_blocks();
+					let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
+					let player_block_coords = (game.player_phys.aligned_box().pos
+						- cgmath::Vector3::<f32>::unit_z()
+							* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1))
+						.map(|x| x.round() as i32);
+					let player_block_coords_str = {
+						let cgmath::Point3 { x, y, z } = player_block_coords;
+						format!("{x},{y},{z}")
+					};
+					let (entity_count, chunk_entity_count) =
+						game.chunk_grid.count_entities_and_chunks_that_have_entities();
+					let seed = game.world_gen_seed;
+					let world_time = game.world_time.as_secs_f32();
+					let random_message = game.random_message;
+					let settings = font::TextRenderingSettings::with_scale(3.0);
+					let text = format!(
+						"fps: {fps:.1}\n\
 					chunks loaded: {chunk_count}\n\
 					blocks loaded: {block_count}\n\
 					chunks meshed: {chunk_meshed_count}\n\
@@ -391,195 +393,171 @@ pub fn init_and_run_game_loop() {
 					seed: {seed}\n\
 					world time: {world_time:.0}s\n\
 					{random_message}"
-				);
-				*general_debug_info_widget = Widget::new_simple_text(text, settings);
-			}
-
-			// Health bar info.
-			if let Some(health_bar_widget) =
-				game.widget_tree_root.find_label_content(WidgetLabel::HealthBar)
-			{
-				if let Some(health) = &game.player_health {
-					let mut hearts = vec![];
-					for _i in 0..*health {
-						hearts.push(Widget::SimpleTexture {
-							rect_in_atlas: RectInAtlas {
-								texture_rect_in_atlas_xy: cgmath::point2(256.0, 32.0) / 512.0,
-								texture_rect_in_atlas_wh: cgmath::vec2(7.0, 7.0) / 512.0,
-							},
-							scale: 2.0,
-						});
-					}
-					*health_bar_widget = Widget::new_list(
-						hearts,
-						3.0,
-						ListOrientationAndAlignment::Horizontal(
-							ListOrientationHorizontal::RightToLeft,
-							ListAlignmentHorizontal::Center,
-						),
 					);
-				} else {
-					*health_bar_widget = Widget::Nothing;
+					*general_debug_info_widget = Widget::new_simple_text(text, settings);
 				}
-			}
 
-			// Item held info.
-			if let Some(item_held_widget) =
-				game.widget_tree_root.find_label_content(WidgetLabel::ItemHeld)
-			{
-				if let Some(held_block) = &game.player_held_block {
-					let held_block_id = held_block.type_id;
-					if let Some(texture_coords_on_atlas) =
-						game.block_type_table.get(held_block_id).unwrap().texture_coords_on_atlas()
-					{
-						let rect_in_atlas = RectInAtlas {
-							texture_rect_in_atlas_xy: texture_coords_on_atlas.map(|x| x as f32)
-								* (1.0 / 512.0),
-							texture_rect_in_atlas_wh: cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
-						};
-						*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 3.0);
+				// Health bar info.
+				game.interface.update_health_bar(game.player_health);
+
+				// Item held info.
+				if let Some(item_held_widget) =
+					game.interface.widget_tree_root.find_label_content(WidgetLabel::ItemHeld)
+				{
+					if let Some(held_block) = &game.player_held_block {
+						let held_block_id = held_block.type_id;
+						if let Some(texture_coords_on_atlas) =
+							game.block_type_table.get(held_block_id).unwrap().texture_coords_on_atlas()
+						{
+							let rect_in_atlas = RectInAtlas {
+								texture_rect_in_atlas_xy: texture_coords_on_atlas.map(|x| x as f32)
+									* (1.0 / 512.0),
+								texture_rect_in_atlas_wh: cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
+							};
+							*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 3.0);
+						} else {
+							*item_held_widget = Widget::Nothing;
+						}
 					} else {
 						*item_held_widget = Widget::Nothing;
 					}
-				} else {
-					*item_held_widget = Widget::Nothing;
-				}
-			}
-
-			// Command line handling.
-			if game.command_confirmed {
-				let text = game.command_line_content.clone();
-
-				let mut log = lang::Log::new();
-				let res = lang::run(&text, &mut lang::Context::with_builtins(), &mut log);
-
-				let text = if let Err(error) = res {
-					format!("{error:?}")
-				} else {
-					let lines: Vec<_> = log
-						.log_items
-						.into_iter()
-						.map(|item| match item {
-							LogItem::Text(text) => text,
-						})
-						.collect();
-					lines.join("\n")
-				};
-
-				let widget = if text.is_empty() {
-					let scale = rand::thread_rng().gen_range(1..=3) as f32;
-					let settings = font::TextRenderingSettings::with_scale(scale);
-					let text = "uwu test".to_string();
-					Widget::new_simple_text(text, settings)
-				} else {
-					let settings = font::TextRenderingSettings::with_scale(3.0);
-					Widget::new_simple_text(text, settings)
-				};
-
-				if let Some(Widget::List { sub_widgets, .. }) =
-					game.widget_tree_root.find_label_content(WidgetLabel::LogLineList)
-				{
-					sub_widgets.push(Widget::new_smoothly_incoming(
-						cgmath::point2(0.0, 0.0),
-						std::time::Instant::now(),
-						std::time::Duration::from_secs_f32(1.0),
-						Box::new(widget),
-					));
-
-					if sub_widgets.iter().filter(|widget| !widget.is_diappearing()).count() > 25 {
-						let window_dimensions = cgmath::vec2(
-							game.window_surface_config.width as f32,
-							game.window_surface_config.height as f32,
-						);
-						sub_widgets
-							.iter_mut()
-							.find(|widget| !widget.is_diappearing())
-							.expect("we just checked that there are at least some amout of them")
-							.pop_while_smoothly_closing_space(
-								std::time::Instant::now(),
-								std::time::Duration::from_secs_f32(1.0),
-								&game.font,
-								window_dimensions,
-							);
-					}
 				}
 
-				game.command_line_content.clear();
-				game.command_confirmed = false;
-			}
-			{
-				let carret_blinking_speed = 1.5;
-				let carret_blinking_visibility_ratio = 0.5;
-				let carret_text_representation = "█";
-				let carret_visible = game.typing_in_command_line
-					&& game.last_command_line_interaction.is_some_and(|time| {
-						(time.elapsed().as_secs_f32() * carret_blinking_speed).fract()
-							< carret_blinking_visibility_ratio
-					});
-				let window_width = game.window_surface_config.width as f32;
-				let command_line_content = game.command_line_content.as_str();
-				let command_line_content_with_carret =
-					command_line_content.to_string() + carret_text_representation;
-				let settings = font::TextRenderingSettings::with_scale(4.0);
-				let dimensions = game.font.dimensions_of_text(
-					window_width,
-					settings.clone(),
-					command_line_content_with_carret.as_str(),
-				);
-				let y = 0.0 + dimensions.y / 2.0;
-				let x = 0.0 - dimensions.x / 2.0;
-				// Somehow this makes it pixel perfect, somehow?
-				let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
-				let text_displayed = if carret_visible {
-					command_line_content_with_carret.as_str()
-				} else {
-					command_line_content
-				};
-				let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
-					window_width,
-					cgmath::point3(x, y, 0.5),
-					settings,
-					text_displayed,
-				);
-				interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
-			}
+				// Command line handling.
+				if game.command_confirmed {
+					let text = game.command_line_content.clone();
 
-			// Interface widget tree.
-			{
-				let window_dimensions = cgmath::vec2(
-					game.window_surface_config.width as f32,
-					game.window_surface_config.height as f32,
-				);
+					let mut log = lang::Log::new();
+					let res = lang::run(&text, &mut lang::Context::with_builtins(), &mut log);
 
-				game.widget_tree_root.for_each_rec(&mut |widget| {
-					if let Widget::DisappearWhenComplete {
-						sub_widget,
-						completed_time,
-						delay_before_disappearing,
-					} = widget
+					let text = if let Err(error) = res {
+						format!("{error:?}")
+					} else {
+						let lines: Vec<_> = log
+							.log_items
+							.into_iter()
+							.map(|item| match item {
+								LogItem::Text(text) => text,
+							})
+							.collect();
+						lines.join("\n")
+					};
+
+					let widget = if text.is_empty() {
+						let scale = rand::thread_rng().gen_range(1..=3) as f32;
+						let settings = font::TextRenderingSettings::with_scale(scale);
+						let text = "uwu test".to_string();
+						Widget::new_simple_text(text, settings)
+					} else {
+						let settings = font::TextRenderingSettings::with_scale(3.0);
+						Widget::new_simple_text(text, settings)
+					};
+
+					if let Some(Widget::List { sub_widgets, .. }) =
+						game.interface.widget_tree_root.find_label_content(WidgetLabel::LogLineList)
 					{
-						if sub_widget.is_completed() && completed_time.is_none() {
-							*completed_time = Some(std::time::Instant::now());
-						} else if completed_time.is_some_and(|completed_time| {
-							completed_time.elapsed() > *delay_before_disappearing
-						}) {
-							widget.pop_while_smoothly_closing_space(
-								std::time::Instant::now(),
-								std::time::Duration::from_secs_f32(0.5),
-								&game.font,
-								window_dimensions,
+						sub_widgets.push(Widget::new_smoothly_incoming(
+							cgmath::point2(0.0, 0.0),
+							std::time::Instant::now(),
+							std::time::Duration::from_secs_f32(1.0),
+							Box::new(widget),
+						));
+
+						if sub_widgets.iter().filter(|widget| !widget.is_diappearing()).count() > 25 {
+							let window_dimensions = cgmath::vec2(
+								game.window_surface_config.width as f32,
+								game.window_surface_config.height as f32,
 							);
+							sub_widgets
+								.iter_mut()
+								.find(|widget| !widget.is_diappearing())
+								.expect("we just checked that there are at least some amout of them")
+								.pop_while_smoothly_closing_space(
+									std::time::Instant::now(),
+									std::time::Duration::from_secs_f32(1.0),
+									&game.font,
+									window_dimensions,
+								);
 						}
 					}
-				});
 
-				game.widget_tree_root.generate_mesh_vertices(
-					cgmath::point3(-1.0, window_dimensions.y / window_dimensions.x, 0.5),
-					&mut interface_meshes_vertices,
-					&game.font,
-					window_dimensions,
-					game.enable_interface_draw_debug_boxes,
-				);
+					game.command_line_content.clear();
+					game.command_confirmed = false;
+				}
+				{
+					let carret_blinking_speed = 1.5;
+					let carret_blinking_visibility_ratio = 0.5;
+					let carret_text_representation = "█";
+					let carret_visible = game.typing_in_command_line
+						&& game.last_command_line_interaction.is_some_and(|time| {
+							(time.elapsed().as_secs_f32() * carret_blinking_speed).fract()
+								< carret_blinking_visibility_ratio
+						});
+					let window_width = game.window_surface_config.width as f32;
+					let command_line_content = game.command_line_content.as_str();
+					let command_line_content_with_carret =
+						command_line_content.to_string() + carret_text_representation;
+					let settings = font::TextRenderingSettings::with_scale(4.0);
+					let dimensions = game.font.dimensions_of_text(
+						window_width,
+						settings.clone(),
+						command_line_content_with_carret.as_str(),
+					);
+					let y = 0.0 + dimensions.y / 2.0;
+					let x = 0.0 - dimensions.x / 2.0;
+					// Somehow this makes it pixel perfect, somehow?
+					let x = (x * (window_width * 8.0) - 0.5).floor() / (window_width * 8.0);
+					let text_displayed = if carret_visible {
+						command_line_content_with_carret.as_str()
+					} else {
+						command_line_content
+					};
+					let simple_texture_vertices = game.font.simple_texture_vertices_from_text(
+						window_width,
+						cgmath::point3(x, y, 0.5),
+						settings,
+						text_displayed,
+					);
+					interface_meshes_vertices.add_simple_texture_vertices(simple_texture_vertices);
+				}
+
+				// Interface widget tree.
+				{
+					let window_dimensions = cgmath::vec2(
+						game.window_surface_config.width as f32,
+						game.window_surface_config.height as f32,
+					);
+
+					game.interface.widget_tree_root.for_each_rec(&mut |widget| {
+						if let Widget::DisappearWhenComplete {
+							sub_widget,
+							completed_time,
+							delay_before_disappearing,
+						} = widget
+						{
+							if sub_widget.is_completed() && completed_time.is_none() {
+								*completed_time = Some(std::time::Instant::now());
+							} else if completed_time.is_some_and(|completed_time| {
+								completed_time.elapsed() > *delay_before_disappearing
+							}) {
+								widget.pop_while_smoothly_closing_space(
+									std::time::Instant::now(),
+									std::time::Duration::from_secs_f32(0.5),
+									&game.font,
+									window_dimensions,
+								);
+							}
+						}
+					});
+
+					game.interface.widget_tree_root.generate_mesh_vertices(
+						cgmath::point3(-1.0, window_dimensions.y / window_dimensions.x, 0.5),
+						&mut interface_meshes_vertices,
+						&game.font,
+						window_dimensions,
+						game.enable_interface_draw_debug_boxes,
+					);
+				}
 			}
 
 			// Recieve task results from workers.

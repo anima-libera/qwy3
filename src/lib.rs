@@ -14,6 +14,7 @@ mod entity_parts;
 mod font;
 mod game_init;
 mod game_loop;
+mod interface;
 mod lang;
 mod line_meshes;
 mod noise;

@@ -16,6 +16,7 @@ use crate::{
 	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
 	entity_parts::{PartTables, TextureMappingTable},
 	font::{self, Font},
+	interface::Interface,
 	lang,
 	line_meshes::SimpleLineMesh,
 	physics::AlignedPhysBox,
@@ -36,10 +37,7 @@ use crate::{
 	unsorted::{
 		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
 	},
-	widgets::{
-		BoxContentPlacement, BoxDimensions, ListAlignmentVertical, ListOrientationAndAlignment,
-		ListOrientationVertical, Widget, WidgetLabel,
-	},
+	widgets::Widget,
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
 
@@ -124,7 +122,7 @@ pub(crate) struct Game {
 	pub(crate) world_generator: Arc<dyn WorldGenerator + Sync + Send>,
 	pub(crate) which_world_generator: WhichWorldGenerator,
 	pub(crate) world_gen_seed: i32,
-	pub(crate) widget_tree_root: Widget,
+	pub(crate) interface: Interface,
 	pub(crate) enable_interface_draw_debug_boxes: bool,
 	pub(crate) skybox_cubemap_texture: wgpu::Texture,
 	pub(crate) fog_center_position_thingy: BindingThingy<wgpu::Buffer>,
@@ -574,101 +572,34 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_display_chunks_with_entities_as_boxes = false;
 	let enable_display_entity_boxes = false;
 
-	let mut widget_tree_root = Widget::new_box(BoxDimensions::Screen)
-		.set_a_box_sub_widget(
-			BoxContentPlacement::TopLeft,
-			Widget::new_margins(
-				(5.0, 5.0, 0.0, 0.0),
-				Box::new(Widget::new_list(
-					vec![
-						Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo),
-						Widget::new_smoothly_incoming(
-							cgmath::point2(1.0, 0.0),
-							std::time::Instant::now(),
-							std::time::Duration::from_secs_f32(1.0),
-							Box::new(Widget::new_simple_text(
-								"nyoom >w<".to_string(),
-								font::TextRenderingSettings::with_scale(3.0),
-							)),
-						),
-						Widget::new_label(
-							WidgetLabel::LogLineList,
-							Box::new(Widget::new_list(
-								vec![],
-								5.0,
-								ListOrientationAndAlignment::Vertical(
-									ListOrientationVertical::TopToBottom,
-									ListAlignmentVertical::Left,
-								),
-							)),
-						),
-						Widget::new_simple_text(
-							"test (stays below log)".to_string(),
-							font::TextRenderingSettings::with_scale(3.0),
-						),
-					],
-					5.0,
-					ListOrientationAndAlignment::Vertical(
-						ListOrientationVertical::TopToBottom,
-						ListAlignmentVertical::Left,
-					),
-				)),
-			),
-		)
-		.set_a_box_sub_widget(
-			BoxContentPlacement::BottomRight,
-			Widget::new_margins(
-				(0.0, 0.0, 5.0, 5.0),
-				Box::new(Widget::new_list(
-					vec![
-						Widget::new_labeled_nothing(WidgetLabel::HealthBar),
-						Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
-					],
-					5.0,
-					ListOrientationAndAlignment::Vertical(
-						ListOrientationVertical::BottomToTop,
-						ListAlignmentVertical::Right,
-					),
-				)),
-			),
-		);
+	let mut interface = Interface::new();
 
 	if let Some(face_counter) = face_counter {
-		if let Some(Widget::List { sub_widgets, .. }) =
-			widget_tree_root.find_label_content(WidgetLabel::LogLineList)
-		{
-			sub_widgets.push(Widget::new_disappear_when_complete(
-				std::time::Duration::from_secs_f32(2.0),
-				Box::new(Widget::new_face_counter(
-					font::TextRenderingSettings::with_scale(3.0),
-					face_counter,
-				)),
-			));
-		}
+		interface.log_widget(Widget::new_disappear_when_complete(
+			std::time::Duration::from_secs_f32(2.0),
+			Box::new(Widget::new_face_counter(
+				font::TextRenderingSettings::with_scale(3.0),
+				face_counter,
+			)),
+		));
 	}
 
 	if let Some(save) = save.as_ref() {
-		if let Some(Widget::List { sub_widgets, .. }) =
-			widget_tree_root.find_label_content(WidgetLabel::LogLineList)
-		{
-			let settings = font::TextRenderingSettings::with_scale(2.0);
-			let save_name = &save.name;
-			let save_path = save.main_directory.display();
-			sub_widgets.push(Widget::new_simple_text(
-				format!("Save \"{save_name}\""),
-				settings.clone(),
-			));
-			sub_widgets.push(Widget::new_simple_text(
-				format!("Save path \"{save_path}\""),
-				settings,
-			));
-		}
-	} else if let Some(Widget::List { sub_widgets, .. }) =
-		widget_tree_root.find_label_content(WidgetLabel::LogLineList)
-	{
+		let settings = font::TextRenderingSettings::with_scale(2.0);
+		let save_name = &save.name;
+		let save_path = save.main_directory.display();
+		interface.log_widget(Widget::new_simple_text(
+			format!("Save \"{save_name}\""),
+			settings.clone(),
+		));
+		interface.log_widget(Widget::new_simple_text(
+			format!("Save path \"{save_path}\""),
+			settings,
+		));
+	} else {
 		let mut settings = font::TextRenderingSettings::with_scale(3.0);
 		settings.color = [0.4, 0.0, 0.0];
-		sub_widgets.push(Widget::new_simple_text(
+		interface.log_widget(Widget::new_simple_text(
 			"No save, nothing will persist".to_string(),
 			settings.clone(),
 		));
@@ -718,7 +649,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		world_generator,
 		which_world_generator,
 		world_gen_seed,
-		widget_tree_root,
+		interface,
 		enable_interface_draw_debug_boxes,
 		skybox_cubemap_texture,
 		fog_center_position_thingy,
