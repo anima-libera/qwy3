@@ -17,10 +17,7 @@ use crate::{
 		Action, Control, ControlEvent, PlayingMode, RectInAtlas, SimpleTextureMesh, WhichCameraToUse,
 		WorkerTask,
 	},
-	widgets::{
-		InterfaceMeshesVertices, ListAlignmentHorizontal, ListOrientationAndAlignment,
-		ListOrientationHorizontal, Widget, WidgetLabel,
-	},
+	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
 };
 
 use cgmath::{point3, InnerSpace, MetricSpace};
