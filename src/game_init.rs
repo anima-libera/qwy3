@@ -36,7 +36,7 @@ use crate::{
 	unsorted::{
 		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
 	},
-	widgets::{Widget, WidgetLabel, WidgetListOrientation},
+	widgets::{BoxContentPlacement, BoxDimensions, Widget, WidgetLabel, WidgetListOrientation},
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
 
@@ -571,39 +571,55 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let enable_display_chunks_with_entities_as_boxes = false;
 	let enable_display_entity_boxes = false;
 
-	let mut widget_tree_root = Widget::new_margins(
-		(5.0, 5.0, 0.0, 0.0),
-		Box::new(Widget::new_list(
-			vec![
-				Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo),
-				Widget::new_smoothly_incoming(
-					cgmath::point2(1.0, 0.0),
-					std::time::Instant::now(),
-					std::time::Duration::from_secs_f32(1.0),
-					Box::new(Widget::new_simple_text(
-						"nyoom >w<".to_string(),
-						font::TextRenderingSettings::with_scale(3.0),
-					)),
-				),
-				Widget::new_label(
-					WidgetLabel::LogLineList,
-					Box::new(Widget::new_list(
-						vec![],
-						5.0,
-						WidgetListOrientation::Bottomward,
-					)),
-				),
-				Widget::new_simple_text(
-					"test (stays below log)".to_string(),
-					font::TextRenderingSettings::with_scale(3.0),
-				),
-				Widget::new_labeled_nothing(WidgetLabel::HealthBar),
-				Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
-			],
-			5.0,
-			WidgetListOrientation::Bottomward,
-		)),
-	);
+	let mut widget_tree_root = Widget::new_box(BoxDimensions::Screen)
+		.set_a_box_sub_widget(
+			BoxContentPlacement::TopLeft,
+			Widget::new_margins(
+				(5.0, 5.0, 0.0, 0.0),
+				Box::new(Widget::new_list(
+					vec![
+						Widget::new_labeled_nothing(WidgetLabel::GeneralDebugInfo),
+						Widget::new_smoothly_incoming(
+							cgmath::point2(1.0, 0.0),
+							std::time::Instant::now(),
+							std::time::Duration::from_secs_f32(1.0),
+							Box::new(Widget::new_simple_text(
+								"nyoom >w<".to_string(),
+								font::TextRenderingSettings::with_scale(3.0),
+							)),
+						),
+						Widget::new_label(
+							WidgetLabel::LogLineList,
+							Box::new(Widget::new_list(
+								vec![],
+								5.0,
+								WidgetListOrientation::Bottomward,
+							)),
+						),
+						Widget::new_simple_text(
+							"test (stays below log)".to_string(),
+							font::TextRenderingSettings::with_scale(3.0),
+						),
+					],
+					5.0,
+					WidgetListOrientation::Bottomward,
+				)),
+			),
+		)
+		.set_a_box_sub_widget(
+			BoxContentPlacement::BottomRight,
+			Widget::new_margins(
+				(0.0, 0.0, 5.0, 5.0),
+				Box::new(Widget::new_list(
+					vec![
+						Widget::new_labeled_nothing(WidgetLabel::HealthBar),
+						Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
+					],
+					5.0,
+					WidgetListOrientation::Bottomward,
+				)),
+			),
+		);
 
 	if let Some(face_counter) = face_counter {
 		if let Some(Widget::List { sub_widgets, .. }) =

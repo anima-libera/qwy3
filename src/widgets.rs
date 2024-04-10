@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::sync::atomic::{self, AtomicI32};
 use std::sync::Arc;
 
 use cgmath::EuclideanSpace;
+use rustc_hash::FxHashMap;
 
 use crate::unsorted::{RectInAtlas, SimpleTextureMesh};
 use crate::{
@@ -135,12 +137,27 @@ pub(crate) enum Widget {
 		interspace: f32,
 		orientation: WidgetListOrientation,
 	},
+	Box {
+		dimensions: BoxDimensions,
+		sub_widgets: FxHashMap<BoxContentPlacement, Widget>,
+	},
 }
 
 #[derive(PartialEq, Eq)]
 pub(crate) enum WidgetListOrientation {
 	Bottomward,
 	Rightward,
+}
+
+pub(crate) enum BoxDimensions {
+	/// The box has the size of the whole window/screen.
+	Screen,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub(crate) enum BoxContentPlacement {
+	TopLeft,
+	BottomRight,
 }
 
 impl Widget {
@@ -207,15 +224,31 @@ impl Widget {
 		Widget::List { sub_widgets, interspace, orientation }
 	}
 
+	pub(crate) fn new_box(dimensions: BoxDimensions) -> Widget {
+		Widget::Box { dimensions, sub_widgets: HashMap::default() }
+	}
+	pub(crate) fn set_a_box_sub_widget(
+		self,
+		placement: BoxContentPlacement,
+		sub_widget: Widget,
+	) -> Widget {
+		if let Widget::Box { dimensions, mut sub_widgets } = self {
+			sub_widgets.insert(placement, sub_widget);
+			Widget::Box { dimensions, sub_widgets }
+		} else {
+			panic!("Expected a box widget");
+		}
+	}
+
 	pub(crate) fn pop_while_smoothly_closing_space(
 		&mut self,
 		animation_start_time: std::time::Instant,
 		animation_duration: std::time::Duration,
 		font: &font::Font,
-		window_width: f32,
+		window_dimensions: cgmath::Vector2<f32>,
 	) -> Widget {
 		let mut widget = Widget::SmoothlyDisappearingEmptySpace {
-			start_dimensions: self.dimensions(font, window_width),
+			start_dimensions: self.dimensions(font, window_dimensions),
 			animation_start_time,
 			animation_duration,
 		};
@@ -250,6 +283,9 @@ impl Widget {
 			Widget::List { sub_widgets, .. } => {
 				sub_widgets.iter_mut().for_each(|sub_widget| sub_widget.for_each_rec(f))
 			},
+			Widget::Box { sub_widgets, .. } => {
+				sub_widgets.values_mut().for_each(|sub_widget| sub_widget.for_each_rec(f))
+			},
 		};
 	}
 
@@ -268,6 +304,9 @@ impl Widget {
 			Widget::DisappearWhenComplete { sub_widget, .. } => sub_widget.find_label(label_to_find),
 			Widget::List { sub_widgets, .. } => {
 				sub_widgets.iter_mut().find_map(|sub_widget| sub_widget.find_label(label_to_find))
+			},
+			Widget::Box { sub_widgets, .. } => {
+				sub_widgets.values_mut().find_map(|sub_widget| sub_widget.find_label(label_to_find))
 			},
 		}
 	}
@@ -313,30 +352,34 @@ impl Widget {
 	}
 
 	/// Returns the dimensions of the widget, already corrected to wgsl coords space.
-	fn dimensions(&self, font: &font::Font, window_width: f32) -> cgmath::Vector2<f32> {
+	fn dimensions(
+		&self,
+		font: &font::Font,
+		window_dimensions: cgmath::Vector2<f32>,
+	) -> cgmath::Vector2<f32> {
 		match self {
 			Widget::Nothing => cgmath::vec2(0.0, 0.0),
 			Widget::SimpleText { text, settings } => {
-				font.dimensions_of_text(window_width, settings.clone(), text.as_str())
+				font.dimensions_of_text(window_dimensions.x, settings.clone(), text.as_str())
 			},
 			Widget::SimpleTexture { rect_in_atlas, scale } => {
 				rect_in_atlas.texture_rect_in_atlas_wh * *scale
 			},
 			Widget::FaceCounter { settings, .. } => font.dimensions_of_text(
-				window_width,
+				window_dimensions.x,
 				settings.clone(),
 				"skybox generation: [██████] 6/6",
 			),
-			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_width),
+			Widget::Label { sub_widget, .. } => sub_widget.dimensions(font, window_dimensions),
 			Widget::Margins { sub_widget, margin_left, margin_top, margin_right, margin_bottom } => {
-				let sub_dimensions = sub_widget.dimensions(font, window_width);
+				let sub_dimensions = sub_widget.dimensions(font, window_dimensions);
 				sub_dimensions
 					+ cgmath::vec2(margin_left + margin_right, margin_top + margin_bottom)
-						* (2.0 / window_width)
+						* (2.0 / window_dimensions.x)
 			},
 			Widget::SmoothlyIncoming { sub_widget, .. } => {
 				let ratio = self.existence_ratio();
-				let sub_dimensions = sub_widget.dimensions(font, window_width);
+				let sub_dimensions = sub_widget.dimensions(font, window_dimensions);
 				sub_dimensions * ratio
 			},
 			Widget::SmoothlyDisappearingEmptySpace { start_dimensions, .. } => {
@@ -344,12 +387,12 @@ impl Widget {
 				start_dimensions * ratio
 			},
 			Widget::DisappearWhenComplete { sub_widget, .. } => {
-				sub_widget.dimensions(font, window_width)
+				sub_widget.dimensions(font, window_dimensions)
 			},
 			Widget::List { sub_widgets, interspace, orientation } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
-					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
+					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
 					if *orientation == WidgetListOrientation::Bottomward {
 						dimensions.y += sub_dimensions.y;
 						dimensions.x = dimensions.x.max(sub_dimensions.x);
@@ -368,13 +411,16 @@ impl Widget {
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
 						if *orientation == WidgetListOrientation::Bottomward {
-							dimensions.y += interspace * ratio * (2.0 / window_width);
+							dimensions.y += interspace * ratio * (2.0 / window_dimensions.x);
 						} else if *orientation == WidgetListOrientation::Rightward {
-							dimensions.x += interspace * ratio * (2.0 / window_width);
+							dimensions.x += interspace * ratio * (2.0 / window_dimensions.x);
 						}
 					}
 				}
 				dimensions
+			},
+			Widget::Box { dimensions, .. } => match dimensions {
+				BoxDimensions::Screen => window_dimensions * (2.0 / window_dimensions.x),
 			},
 		}
 	}
@@ -385,14 +431,14 @@ impl Widget {
 		top_left: cgmath::Point3<f32>,
 		meshes: &mut InterfaceMeshesVertices,
 		font: &font::Font,
-		window_width: f32,
+		window_dimensions: cgmath::Vector2<f32>,
 		draw_debug_boxes: bool,
 	) {
 		match self {
 			Widget::Nothing => {},
 			Widget::SimpleText { settings, text, .. } => {
 				let simple_texture_vertices = font.simple_texture_vertices_from_text(
-					window_width,
+					window_dimensions.x,
 					top_left,
 					settings.clone(),
 					text,
@@ -435,7 +481,7 @@ impl Widget {
 				text.push(' ');
 				text += &format!("{counter_value}/6");
 				let simple_texture_vertices = font.simple_texture_vertices_from_text(
-					window_width,
+					window_dimensions.x,
 					top_left,
 					settings.clone(),
 					&text,
@@ -447,18 +493,18 @@ impl Widget {
 					top_left,
 					meshes,
 					font,
-					window_width,
+					window_dimensions,
 					draw_debug_boxes,
 				);
 			},
 			Widget::Margins { sub_widget, margin_left, margin_top, .. } => {
-				let sub_top_left =
-					top_left + cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_width);
+				let sub_top_left = top_left
+					+ cgmath::vec3(*margin_left, -*margin_top, 0.0) * (2.0 / window_dimensions.x);
 				sub_widget.generate_mesh_vertices(
 					sub_top_left,
 					meshes,
 					font,
-					window_width,
+					window_dimensions,
 					draw_debug_boxes,
 				);
 			},
@@ -470,7 +516,7 @@ impl Widget {
 					cgmath::Point3::<f32>::from_vec(current_top_left),
 					meshes,
 					font,
-					window_width,
+					window_dimensions,
 					draw_debug_boxes,
 				);
 			},
@@ -480,7 +526,7 @@ impl Widget {
 					top_left,
 					meshes,
 					font,
-					window_width,
+					window_dimensions,
 					draw_debug_boxes,
 				);
 			},
@@ -491,11 +537,11 @@ impl Widget {
 						top_left,
 						meshes,
 						font,
-						window_width,
+						window_dimensions,
 						draw_debug_boxes,
 					);
 
-					let sub_dimensions = sub_widgets[i].dimensions(font, window_width);
+					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
 					if *orientation == WidgetListOrientation::Bottomward {
 						top_left.y -= sub_dimensions.y;
 					} else if *orientation == WidgetListOrientation::Rightward {
@@ -512,11 +558,29 @@ impl Widget {
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
 						if *orientation == WidgetListOrientation::Bottomward {
-							top_left.y -= interspace * ratio * (2.0 / window_width);
+							top_left.y -= interspace * ratio * (2.0 / window_dimensions.x);
 						} else if *orientation == WidgetListOrientation::Rightward {
-							top_left.x += interspace * ratio * (2.0 / window_width);
+							top_left.x += interspace * ratio * (2.0 / window_dimensions.x);
 						}
 					}
+				}
+			},
+			Widget::Box { sub_widgets, .. } => {
+				let dimensions = self.dimensions(font, window_dimensions);
+				for (position, sub_widget) in sub_widgets.iter() {
+					let sub_dimensions = sub_widget.dimensions(font, window_dimensions);
+					let sub_offset = match position {
+						BoxContentPlacement::TopLeft => cgmath::vec2(0.0, 0.0),
+						BoxContentPlacement::BottomRight => dimensions - sub_dimensions,
+					};
+					let sub_top_left = top_left + cgmath::vec3(sub_offset.x, -sub_offset.y, 0.0);
+					sub_widget.generate_mesh_vertices(
+						sub_top_left,
+						meshes,
+						font,
+						window_dimensions,
+						draw_debug_boxes,
+					);
 				}
 			},
 		}
@@ -526,7 +590,7 @@ impl Widget {
 			const DEBUG_HITBOXES_COLOR: [f32; 3] = [1.0, 0.0, 0.0];
 			const DEBUG_HITBOXES_DIAMOND_COLOR: [f32; 3] = [0.0, 0.0, 1.0];
 
-			let dimensions = self.dimensions(font, window_width);
+			let dimensions = self.dimensions(font, window_dimensions);
 			let mut top_left = top_left;
 			top_left.z = 0.0;
 			meshes.add_simple_line_vertices(simple_line_vertices_for_rect(
@@ -537,7 +601,7 @@ impl Widget {
 
 			meshes.add_simple_line_vertices(simple_line_vertices_for_diamond(
 				top_left,
-				cgmath::vec2(6.0, 6.0) * (2.0 / window_width),
+				cgmath::vec2(6.0, 6.0) * (2.0 / window_dimensions.x),
 				DEBUG_HITBOXES_DIAMOND_COLOR,
 			));
 		}

@@ -477,7 +477,10 @@ pub fn init_and_run_game_loop() {
 					));
 
 					if sub_widgets.iter().filter(|widget| !widget.is_diappearing()).count() > 25 {
-						let window_width = game.window_surface_config.width as f32;
+						let window_dimensions = cgmath::vec2(
+							game.window_surface_config.width as f32,
+							game.window_surface_config.height as f32,
+						);
 						sub_widgets
 							.iter_mut()
 							.find(|widget| !widget.is_diappearing())
@@ -486,7 +489,7 @@ pub fn init_and_run_game_loop() {
 								std::time::Instant::now(),
 								std::time::Duration::from_secs_f32(1.0),
 								&game.font,
-								window_width,
+								window_dimensions,
 							);
 					}
 				}
@@ -533,8 +536,10 @@ pub fn init_and_run_game_loop() {
 
 			// Interface widget tree.
 			{
-				let window_width = game.window_surface_config.width as f32;
-				let window_height = game.window_surface_config.height as f32;
+				let window_dimensions = cgmath::vec2(
+					game.window_surface_config.width as f32,
+					game.window_surface_config.height as f32,
+				);
 
 				game.widget_tree_root.for_each_rec(&mut |widget| {
 					if let Widget::DisappearWhenComplete {
@@ -552,17 +557,17 @@ pub fn init_and_run_game_loop() {
 								std::time::Instant::now(),
 								std::time::Duration::from_secs_f32(0.5),
 								&game.font,
-								window_width,
+								window_dimensions,
 							);
 						}
 					}
 				});
 
 				game.widget_tree_root.generate_mesh_vertices(
-					cgmath::point3(-1.0, window_height / window_width, 0.5),
+					cgmath::point3(-1.0, window_dimensions.y / window_dimensions.x, 0.5),
 					&mut interface_meshes_vertices,
 					&game.font,
-					window_width,
+					window_dimensions,
 					game.enable_interface_draw_debug_boxes,
 				);
 			}
