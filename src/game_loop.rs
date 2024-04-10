@@ -407,7 +407,7 @@ pub fn init_and_run_game_loop() {
 							scale: 2.0,
 						});
 					}
-					*health_bar_widget = Widget::new_list(hearts, 3.0, WidgetListOrientation::Rightward);
+					*health_bar_widget = Widget::new_list(hearts, 3.0, WidgetListOrientation::Leftward);
 				} else {
 					*health_bar_widget = Widget::Nothing;
 				}

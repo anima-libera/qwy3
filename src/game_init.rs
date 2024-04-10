@@ -616,7 +616,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 						Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
 					],
 					5.0,
-					WidgetListOrientation::Bottomward,
+					WidgetListOrientation::Topward,
 				)),
 			),
 		);
