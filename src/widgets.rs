@@ -135,7 +135,8 @@ pub(crate) enum Widget {
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
-		orientation: WidgetListOrientation,
+		orientation: ListOrientation,
+		alignment: ListAlignment,
 	},
 	Box {
 		dimensions: BoxDimensions,
@@ -144,12 +145,25 @@ pub(crate) enum Widget {
 }
 
 #[allow(dead_code)] // It will surely be used later!
-#[derive(PartialEq, Eq)]
-pub(crate) enum WidgetListOrientation {
+pub(crate) enum ListOrientation {
 	Bottomward,
 	Topward,
 	Rightward,
 	Leftward,
+}
+impl ListOrientation {
+	fn is_vertical(&self) -> bool {
+		match self {
+			ListOrientation::Bottomward | ListOrientation::Topward => true,
+			ListOrientation::Rightward | ListOrientation::Leftward => false,
+		}
+	}
+}
+
+pub(crate) enum ListAlignment {
+	LeftOrTop,
+	Center,
+	RightOrBottom,
 }
 
 pub(crate) enum BoxDimensions {
@@ -222,9 +236,10 @@ impl Widget {
 	pub(crate) fn new_list(
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
-		orientation: WidgetListOrientation,
+		orientation: ListOrientation,
+		alignment: ListAlignment,
 	) -> Widget {
-		Widget::List { sub_widgets, interspace, orientation }
+		Widget::List { sub_widgets, interspace, orientation, alignment }
 	}
 
 	pub(crate) fn new_box(dimensions: BoxDimensions) -> Widget {
@@ -392,16 +407,16 @@ impl Widget {
 			Widget::DisappearWhenComplete { sub_widget, .. } => {
 				sub_widget.dimensions(font, window_dimensions)
 			},
-			Widget::List { sub_widgets, interspace, orientation } => {
+			Widget::List { sub_widgets, interspace, orientation, .. } => {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
-					match *orientation {
-						WidgetListOrientation::Bottomward | WidgetListOrientation::Topward => {
+					match orientation {
+						ListOrientation::Bottomward | ListOrientation::Topward => {
 							dimensions.y += sub_dimensions.y;
 							dimensions.x = dimensions.x.max(sub_dimensions.x);
 						},
-						WidgetListOrientation::Rightward | WidgetListOrientation::Leftward => {
+						ListOrientation::Rightward | ListOrientation::Leftward => {
 							dimensions.x += sub_dimensions.x;
 							dimensions.y = dimensions.y.max(sub_dimensions.y);
 						},
@@ -416,11 +431,11 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						match *orientation {
-							WidgetListOrientation::Bottomward | WidgetListOrientation::Topward => {
+						match orientation {
+							ListOrientation::Bottomward | ListOrientation::Topward => {
 								dimensions.y += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							WidgetListOrientation::Rightward | WidgetListOrientation::Leftward => {
+							ListOrientation::Rightward | ListOrientation::Leftward => {
 								dimensions.x += interspace * ratio * (2.0 / window_dimensions.x);
 							},
 						}
@@ -539,23 +554,41 @@ impl Widget {
 					draw_debug_boxes,
 				);
 			},
-			Widget::List { sub_widgets, interspace, orientation } => {
+			Widget::List { sub_widgets, interspace, orientation, alignment } => {
 				let dimensions = self.dimensions(font, window_dimensions);
-				let mut top_left = match *orientation {
-					WidgetListOrientation::Bottomward | WidgetListOrientation::Rightward => top_left,
-					WidgetListOrientation::Topward => top_left + cgmath::vec3(0.0, -dimensions.y, 0.0),
-					WidgetListOrientation::Leftward => top_left + cgmath::vec3(dimensions.x, 0.0, 0.0),
+				let mut top_left = match orientation {
+					ListOrientation::Bottomward | ListOrientation::Rightward => top_left,
+					ListOrientation::Topward => top_left + cgmath::vec3(0.0, -dimensions.y, 0.0),
+					ListOrientation::Leftward => top_left + cgmath::vec3(dimensions.x, 0.0, 0.0),
 				};
 
-				let generate_sub_widget_before_moving = match *orientation {
-					WidgetListOrientation::Bottomward | WidgetListOrientation::Rightward => true,
-					WidgetListOrientation::Topward | WidgetListOrientation::Leftward => false,
+				let generate_sub_widget_before_moving = match orientation {
+					ListOrientation::Bottomward | ListOrientation::Rightward => true,
+					ListOrientation::Topward | ListOrientation::Leftward => false,
 				};
 
 				for i in 0..sub_widgets.len() {
+					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
+					let sub_offset = match (alignment, orientation.is_vertical()) {
+						(ListAlignment::LeftOrTop, _) => cgmath::vec2(0.0, 0.0),
+						(ListAlignment::RightOrBottom, false) => {
+							cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y)
+						},
+						(ListAlignment::RightOrBottom, true) => {
+							cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0)
+						},
+						(ListAlignment::Center, false) => {
+							cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y) / 2.0
+						},
+						(ListAlignment::Center, true) => {
+							cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0) / 2.0
+						},
+					}
+					.extend(0.0);
+
 					if generate_sub_widget_before_moving {
 						sub_widgets[i].generate_mesh_vertices(
-							top_left,
+							top_left + sub_offset,
 							meshes,
 							font,
 							window_dimensions,
@@ -563,24 +596,23 @@ impl Widget {
 						);
 					}
 
-					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
-					match *orientation {
-						WidgetListOrientation::Bottomward => {
+					match orientation {
+						ListOrientation::Bottomward => {
 							top_left.y -= sub_dimensions.y;
 						},
-						WidgetListOrientation::Topward => {
+						ListOrientation::Topward => {
 							top_left.y += sub_dimensions.y;
 						},
-						WidgetListOrientation::Rightward => {
+						ListOrientation::Rightward => {
 							top_left.x += sub_dimensions.x;
 						},
-						WidgetListOrientation::Leftward => {
+						ListOrientation::Leftward => {
 							top_left.x -= sub_dimensions.x;
 						},
 					}
 
 					// Now we add the interspaces between the current sub widget and the
-					// next sub widget.
+					// next sub widget (or previous sub widget if we draw after moving).
 					// If the current or next (or both) sub widgets have not fully arrived
 					// then the interspace should also not be fully developped (so that everything
 					// in the list make space in a smooth manner, even the interspaces).
@@ -593,17 +625,17 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[other_index as usize].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						match *orientation {
-							WidgetListOrientation::Bottomward => {
+						match orientation {
+							ListOrientation::Bottomward => {
 								top_left.y -= interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							WidgetListOrientation::Topward => {
+							ListOrientation::Topward => {
 								top_left.y += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							WidgetListOrientation::Rightward => {
+							ListOrientation::Rightward => {
 								top_left.x += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							WidgetListOrientation::Leftward => {
+							ListOrientation::Leftward => {
 								top_left.x -= interspace * ratio * (2.0 / window_dimensions.x);
 							},
 						}
@@ -611,7 +643,7 @@ impl Widget {
 
 					if !generate_sub_widget_before_moving {
 						sub_widgets[i].generate_mesh_vertices(
-							top_left,
+							top_left + sub_offset,
 							meshes,
 							font,
 							window_dimensions,
