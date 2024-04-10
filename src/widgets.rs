@@ -28,6 +28,7 @@ pub(crate) enum WidgetLabel {
 /// A node in the tree that makes the interface.
 /// One such node can be some visual content, like some text or an image; or it can also
 /// contain an other widget, or even multiple other widgets, and alter their position or layout.
+/// Some animations are even supported via widgets.
 ///
 /// The important methods for widget drawing are the `dimensions` method that computes the
 /// widget bounding box dimensions, and the `generate_mesh_vertices` method that draws the widget
@@ -88,8 +89,7 @@ pub(crate) enum Widget {
 	List {
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
-		orientation: ListOrientation,
-		alignment: ListAlignment,
+		orientation_and_alignment: ListOrientationAndAlignment,
 	},
 	/// A wrapper whose size is fixed and that can contain a number of widget placed at certain
 	/// positions inside the box (like top left, or like center, etc.).
@@ -100,41 +100,44 @@ pub(crate) enum Widget {
 }
 
 /// The list widget displays its sequence of sub widgets in a line.
-/// The orientation of that line is described with this enum.
+/// Is this line vertical or horizontal?
+/// In which of the two possible orientations is oriented the line?
+/// To what side are aligned the sub widgets? Or are they aligned to the center?
+/// This enum dictates the answer to these questions.
 ///
-/// For example, `Bottomward` would
-/// dictate the list to be vertical, with its first element at the top and its last at the bottom,
-/// `Leftward` would dictate the list to be horizontal with its first element on the right and
-/// its last element on the left, etc.
-#[allow(dead_code)] // It will surely be used later!
-pub(crate) enum ListOrientation {
-	Bottomward,
-	Topward,
-	Rightward,
-	Leftward,
+/// The alignment is attached to the orientation because depending on the
+/// horizontality/verticality of the orientation, some alignments do not make sense.
+pub(crate) enum ListOrientationAndAlignment {
+	Vertical(ListOrientationVertical, ListAlignmentVertical),
+	Horizontal(ListOrientationHorizontal, ListAlignmentHorizontal),
 }
-impl ListOrientation {
-	fn is_vertical(&self) -> bool {
-		match self {
-			ListOrientation::Bottomward | ListOrientation::Topward => true,
-			ListOrientation::Rightward | ListOrientation::Leftward => false,
-		}
-	}
+pub(crate) enum ListOrientationVertical {
+	TopToBottom,
+	BottomToTop,
+}
+#[allow(dead_code)] // It will surely be used later!
+pub(crate) enum ListOrientationHorizontal {
+	LeftToRight,
+	RightToLeft,
+}
+#[allow(dead_code)] // It will surely be used later!
+pub(crate) enum ListAlignmentVertical {
+	Left,
+	Center,
+	Right,
+}
+#[allow(dead_code)] // It will surely be used later!
+pub(crate) enum ListAlignmentHorizontal {
+	Top,
+	Center,
+	Bottom,
 }
 
-/// The list widget displays its sequence of sub widgets in a line, vaguely, but what happens
-/// if its sub widgets are not all of the same size and thus cannot all be neatly aligned?
-/// This enum decides weather to align all the sub widgets to one of their sides, or to align
-/// their centers.
-///
-/// Note that aligning to a side depends on the vertical or horizontal orientation of the list,
-/// for example `LeftOrTop` would align to the left is the list is vertical and it would align
-/// to the top if the list is horizontal.
-pub(crate) enum ListAlignment {
-	LeftOrTop,
-	Center,
-	RightOrBottom,
-}
+use ListAlignmentHorizontal as LiAliH;
+use ListAlignmentVertical as LiAliV;
+use ListOrientationAndAlignment as LiOriAndAli;
+use ListOrientationHorizontal as LiOriH;
+use ListOrientationVertical as LiOriV;
 
 pub(crate) enum BoxDimensions {
 	/// The box has the size of the whole window/screen.
@@ -208,10 +211,9 @@ impl Widget {
 	pub(crate) fn new_list(
 		sub_widgets: Vec<Widget>,
 		interspace: f32,
-		orientation: ListOrientation,
-		alignment: ListAlignment,
+		orientation_and_alignment: ListOrientationAndAlignment,
 	) -> Widget {
-		Widget::List { sub_widgets, interspace, orientation, alignment }
+		Widget::List { sub_widgets, interspace, orientation_and_alignment }
 	}
 
 	pub(crate) fn new_box(dimensions: BoxDimensions) -> Widget {
@@ -379,7 +381,7 @@ impl Widget {
 			Widget::DisappearWhenComplete { sub_widget, .. } => {
 				sub_widget.dimensions(font, window_dimensions)
 			},
-			Widget::List { sub_widgets, interspace, orientation, .. } => {
+			Widget::List { sub_widgets, interspace, orientation_and_alignment } => {
 				// Now, the list dimensions.
 				// The dimensions depend on the horizontality/verticality of the orientation,
 				// but despite that there is not much going on, we just see how wide and heigh
@@ -388,12 +390,12 @@ impl Widget {
 				let mut dimensions = cgmath::vec2(0.0f32, 0.0f32);
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
-					match orientation {
-						ListOrientation::Bottomward | ListOrientation::Topward => {
+					match orientation_and_alignment {
+						LiOriAndAli::Vertical(_, _) => {
 							dimensions.y += sub_dimensions.y;
 							dimensions.x = dimensions.x.max(sub_dimensions.x);
 						},
-						ListOrientation::Rightward | ListOrientation::Leftward => {
+						LiOriAndAli::Horizontal(_, _) => {
 							dimensions.x += sub_dimensions.x;
 							dimensions.y = dimensions.y.max(sub_dimensions.y);
 						},
@@ -408,11 +410,11 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[i + 1].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						match orientation {
-							ListOrientation::Bottomward | ListOrientation::Topward => {
+						match orientation_and_alignment {
+							LiOriAndAli::Vertical(_, _) => {
 								dimensions.y += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							ListOrientation::Rightward | ListOrientation::Leftward => {
+							LiOriAndAli::Horizontal(_, _) => {
 								dimensions.x += interspace * ratio * (2.0 / window_dimensions.x);
 							},
 						}
@@ -533,7 +535,7 @@ impl Widget {
 					draw_debug_boxes,
 				);
 			},
-			Widget::List { sub_widgets, interspace, orientation, alignment } => {
+			Widget::List { sub_widgets, interspace, orientation_and_alignment } => {
 				// Now the drawing of a list, with delicate attention to all its parameters.
 
 				// We start at a position near where the first widget of the list will appear,
@@ -541,42 +543,43 @@ impl Widget {
 				// This depends on the orientation of the list (which may make us start far from the
 				// top left and move toward it).
 				let dimensions = self.dimensions(font, window_dimensions);
-				let mut top_left = match orientation {
-					ListOrientation::Bottomward | ListOrientation::Rightward => top_left,
-					ListOrientation::Topward => top_left + cgmath::vec3(0.0, -dimensions.y, 0.0),
-					ListOrientation::Leftward => top_left + cgmath::vec3(dimensions.x, 0.0, 0.0),
+				let top_left_offset = match orientation_and_alignment {
+					LiOriAndAli::Vertical(LiOriV::TopToBottom, _)
+					| LiOriAndAli::Horizontal(LiOriH::LeftToRight, _) => cgmath::vec2(0.0, 0.0),
+					LiOriAndAli::Vertical(LiOriV::BottomToTop, _) => cgmath::vec2(0.0, -dimensions.y),
+					LiOriAndAli::Horizontal(LiOriH::RightToLeft, _) => cgmath::vec2(dimensions.x, 0.0),
 				};
+				let mut top_left = top_left + top_left_offset.extend(0.0);
 
 				// Now, we iterate over the sub widgets in order, draw one and move to the position
 				// of the next sub widget, etc.
 				// When moving toward the top left instead of away from it, it is easier to proceed
 				// in a way that require to draw the iterated-over sub widget after moving instead of
 				// before moving, hence the `generate_sub_widget_before_moving` variable.
-				let generate_sub_widget_before_moving = match orientation {
-					ListOrientation::Bottomward | ListOrientation::Rightward => true,
-					ListOrientation::Topward | ListOrientation::Leftward => false,
+				let generate_sub_widget_before_moving = match orientation_and_alignment {
+					LiOriAndAli::Vertical(LiOriV::TopToBottom, _)
+					| LiOriAndAli::Horizontal(LiOriH::LeftToRight, _) => true,
+					LiOriAndAli::Vertical(LiOriV::BottomToTop, _)
+					| LiOriAndAli::Horizontal(LiOriH::RightToLeft, _) => false,
 				};
 				for i in 0..sub_widgets.len() {
 					let sub_dimensions = sub_widgets[i].dimensions(font, window_dimensions);
 
 					// Depending on the alignment of the list, the sub widget is moved along
 					// a direction perpendicular to the list orientation.
-					// For example, if the list is oriented `Bottomward`, and the alignment is
-					// `RightOrBottom`, then the 'or bottom' part of the alignment is ignored and
-					// the sub widget is moved so that its right side touches the right of the list.
-					let sub_offset = match (alignment, orientation.is_vertical()) {
-						(ListAlignment::LeftOrTop, _) => cgmath::vec2(0.0, 0.0),
-						(ListAlignment::RightOrBottom, false) => {
-							cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y)
+					// For example, if the list is oriented `TopToBottom`, and the alignment is
+					// `Right`, then the sub widget is moved so that
+					// its right side touches the right of the list.
+					let sub_offset = match orientation_and_alignment {
+						LiOriAndAli::Vertical(_, alignment) => match alignment {
+							LiAliV::Left => cgmath::vec2(0.0, 0.0),
+							LiAliV::Center => cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0) / 2.0,
+							LiAliV::Right => cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0),
 						},
-						(ListAlignment::RightOrBottom, true) => {
-							cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0)
-						},
-						(ListAlignment::Center, false) => {
-							cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y) / 2.0
-						},
-						(ListAlignment::Center, true) => {
-							cgmath::vec2(dimensions.x - sub_dimensions.x, 0.0) / 2.0
+						LiOriAndAli::Horizontal(_, alignment) => match alignment {
+							LiAliH::Top => cgmath::vec2(0.0, 0.0),
+							LiAliH::Center => cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y) / 2.0,
+							LiAliH::Bottom => cgmath::vec2(0.0, -dimensions.y + sub_dimensions.y),
 						},
 					}
 					.extend(0.0);
@@ -593,17 +596,17 @@ impl Widget {
 
 					// Move over the sub widget, to get to the position of the next sub widget
 					// (or to the position of the current sub widget if we draw after moving).
-					match orientation {
-						ListOrientation::Bottomward => {
+					match orientation_and_alignment {
+						LiOriAndAli::Vertical(LiOriV::TopToBottom, _) => {
 							top_left.y -= sub_dimensions.y;
 						},
-						ListOrientation::Topward => {
+						LiOriAndAli::Vertical(LiOriV::BottomToTop, _) => {
 							top_left.y += sub_dimensions.y;
 						},
-						ListOrientation::Rightward => {
+						LiOriAndAli::Horizontal(LiOriH::LeftToRight, _) => {
 							top_left.x += sub_dimensions.x;
 						},
-						ListOrientation::Leftward => {
+						LiOriAndAli::Horizontal(LiOriH::RightToLeft, _) => {
 							top_left.x -= sub_dimensions.x;
 						},
 					}
@@ -622,17 +625,17 @@ impl Widget {
 						let current_sub_ratio = sub_widgets[i].existence_ratio();
 						let next_sub_ratio = sub_widgets[other_index as usize].existence_ratio();
 						let ratio = current_sub_ratio * next_sub_ratio;
-						match orientation {
-							ListOrientation::Bottomward => {
+						match orientation_and_alignment {
+							LiOriAndAli::Vertical(LiOriV::TopToBottom, _) => {
 								top_left.y -= interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							ListOrientation::Topward => {
+							LiOriAndAli::Vertical(LiOriV::BottomToTop, _) => {
 								top_left.y += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							ListOrientation::Rightward => {
+							LiOriAndAli::Horizontal(LiOriH::LeftToRight, _) => {
 								top_left.x += interspace * ratio * (2.0 / window_dimensions.x);
 							},
-							ListOrientation::Leftward => {
+							LiOriAndAli::Horizontal(LiOriH::RightToLeft, _) => {
 								top_left.x -= interspace * ratio * (2.0 / window_dimensions.x);
 							},
 						}

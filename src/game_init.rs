@@ -37,7 +37,8 @@ use crate::{
 		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
 	},
 	widgets::{
-		BoxContentPlacement, BoxDimensions, ListAlignment, ListOrientation, Widget, WidgetLabel,
+		BoxContentPlacement, BoxDimensions, ListAlignmentVertical, ListOrientationAndAlignment,
+		ListOrientationVertical, Widget, WidgetLabel,
 	},
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
@@ -595,8 +596,10 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 							Box::new(Widget::new_list(
 								vec![],
 								5.0,
-								ListOrientation::Bottomward,
-								ListAlignment::LeftOrTop,
+								ListOrientationAndAlignment::Vertical(
+									ListOrientationVertical::TopToBottom,
+									ListAlignmentVertical::Left,
+								),
 							)),
 						),
 						Widget::new_simple_text(
@@ -605,8 +608,10 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 						),
 					],
 					5.0,
-					ListOrientation::Bottomward,
-					ListAlignment::LeftOrTop,
+					ListOrientationAndAlignment::Vertical(
+						ListOrientationVertical::TopToBottom,
+						ListAlignmentVertical::Left,
+					),
 				)),
 			),
 		)
@@ -620,8 +625,10 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 						Widget::new_labeled_nothing(WidgetLabel::ItemHeld),
 					],
 					5.0,
-					ListOrientation::Topward,
-					ListAlignment::RightOrBottom,
+					ListOrientationAndAlignment::Vertical(
+						ListOrientationVertical::BottomToTop,
+						ListAlignmentVertical::Right,
+					),
 				)),
 			),
 		);
