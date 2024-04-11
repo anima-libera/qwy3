@@ -1,3 +1,5 @@
+//! The entities and a part of their handling by the chunks.
+
 use std::{
 	io::{Read, Write},
 	sync::Arc,
@@ -19,6 +21,21 @@ use crate::{
 	shaders::part_textured::PartTexturedInstancePod,
 };
 
+/// In the world there are two sorts of things: static blocks and entities.
+/// Despite the constraint that an entity must have a position, it can be anything.
+/// Entities can have parts (via `PartHandler`s) which are instances of models of simple shapes,
+/// this is how they are rendered.
+/// Entities are saved and loaded just like blocks, no loss, no random despawn.
+///
+/// Each entity must have a position so that it is in (exactly) one chunk (instead of in
+/// multiple chunks at once, or everywhere, or nowhere at all). This makes some matters so much
+/// simpler than if we allowed entities to not have a precise position. It allows the chunk to
+/// be saved/loaded or generated with their entities, it allows entities to only be simulated if
+/// they are in loaded chunks, etc. If something cannot be given a position, then it should not
+/// be implemented as an entity and it should be something else.
+///
+/// An entity can move around and exit its chunk, it will be transfered to its new chunk
+/// automatically, and will wait for the chunk loading (if it was not already loaded).
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Entity {
 	pos: cgmath::Point3<f32>,
@@ -92,6 +109,7 @@ impl Entity {
 		}
 	}
 
+	/// If an entity "does stuff", then it probably happens here.
 	// TODO: Bundle part-managing arguments in a struct.
 	#[allow(clippy::too_many_arguments)]
 	fn apply_one_physics_step(
@@ -156,6 +174,11 @@ impl Entity {
 		}
 	}
 
+	/// Called when an entity is not loaded anymore (be it deleted or simply unloaded (and saved)).
+	/// This is not always deletion, on-death effects should not be triggered here.
+	///
+	/// The entity parts should be deleted here (or they will "leak" and remain
+	/// visible and unmoving where they are until the game is closed).
 	fn handle_unloading_or_deletion(self, part_tables: &mut PartTables) {
 		match self.typed {
 			EntityTyped::Block { part_handler, .. } => {
@@ -166,6 +189,7 @@ impl Entity {
 	}
 }
 
+/// The entities of a chunk.
 pub(crate) struct ChunkEntities {
 	pub(crate) coords_span: ChunkCoordsSpan,
 	savable: ChunkEntitiesSavable,
@@ -226,11 +250,14 @@ impl ChunkEntities {
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
+				// The entity was flagged for deletion and is now deletd.
 				entity.take().unwrap().handle_unloading_or_deletion(part_tables);
 				false
 			} else {
 				let entity_chunk_coords = entity.as_ref().unwrap().chunk_coords(chunk_grid.cd());
 				if entity_chunk_coords != self.coords_span.chunk_coords {
+					// The entity moved out of this chunk and is sent away into transit
+					// in order to be transfered to its new chunk.
 					changes_of_chunk.push(ChunkEntitiesPhysicsStepChangeOfChunk {
 						new_chunk: entity_chunk_coords,
 						entity: entity.take().unwrap(),
@@ -243,6 +270,7 @@ impl ChunkEntities {
 		});
 	}
 
+	/// Tells the entities that they are being unloaded.
 	pub(crate) fn handle_unloading(self, part_tables: &mut PartTables) {
 		for entity in self.savable.entities.into_iter() {
 			entity.unwrap().handle_unloading_or_deletion(part_tables);
@@ -286,7 +314,14 @@ impl ChunkEntities {
 	}
 }
 
+/// Entity in transit to a new chunk.
+///
+/// If an entity moves out of its chunk during its physics step, then it must be transfered
+/// to its new chunk. This transfer is done in two steps: first the entity is taken out of the
+/// chunk it exited and is put in a `ChunkEntitiesPhysicsStepChangeOfChunk`, alongside the coords
+/// of its new chunk. Then, after all the entites have had their physics step, the entities in
+/// transit are placed in their new chunk.
 pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
-	pub(crate) new_chunk: ChunkCoords,
 	pub(crate) entity: Entity,
+	pub(crate) new_chunk: ChunkCoords,
 }

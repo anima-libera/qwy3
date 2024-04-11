@@ -88,6 +88,7 @@
 
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
 - Make blocks place themselves on a face of a placed block instead of sometimes on an edge or even a corner.
+- Support the throwing of X-shaped blocks.
 - Particles, like when breaking blocks.
 - Animals >w< or something.
 
@@ -116,6 +117,10 @@
   - Opened via magic and/or found in the world.
   - A surface streched along a small flat hole with the same flat hole shape and the same blocks on the edges at the other end, so that the transition is unnoticeable. It should just look and feel like a hole that lead to elsewhere than what is actually behind the hole if we look behind.
   - Chunks must load on the other side as well, and entities that are near or overlapping the portal must be carefully handled so that it looks and feel good.
+
+## Saves
+
+- Make the saves be more resistant to panics. For now, even the `StateSavable` is lost if the game panics before being closed for the first time in a save. Loaded entities are lost on a panic. Changes made to the blocks of the loaded chunks are lost on a panic. This is too fragile and may lead to lots of frustration.
 
 ## Multiplayer
 

@@ -1,3 +1,5 @@
+//! Manager of a table that must be able to allocate and free elements and can grow and shrink.
+
 /// Manages the knowledge of which entry is allocated or free in a table,
 /// in a way that grantees an amortized O(1) allocation, at the cost of worst case O(n) freeing.
 /// The freeing won't be that bad in practice if the memory is not fragmented in a
@@ -220,6 +222,8 @@ impl TableAllocator {
 		self.length = new_length;
 	}
 
+	/// Communicates to the allocator that it now has a new smaller length.
+	/// Panics if the removed space was not free.
 	pub(crate) fn length_shriked_to(&mut self, new_length: usize) {
 		// Check if we can really shrink to `new_length`.
 		assert!(new_length < self.length);
