@@ -320,7 +320,7 @@ pub fn init_and_run_game_loop() {
 									game.save.as_ref(),
 								);
 							} else if game.playing_mode == PlayingMode::Free {
-								for _ in 0..30 {
+								for _ in 0..300 {
 									let block = Block {
 										type_id: game
 											.block_type_table
@@ -329,12 +329,17 @@ pub fn init_and_run_game_loop() {
 									};
 
 									let mut motion = game.camera_direction.to_vec3();
-									motion.x += rand::thread_rng().gen_range(-1.0..1.0)
-										* 0.1 * 144.0 * dt.as_secs_f32();
-									motion.y += rand::thread_rng().gen_range(-1.0..1.0)
-										* 0.1 * 144.0 * dt.as_secs_f32();
-									motion.z += rand::thread_rng().gen_range(-1.0..1.0)
-										* 0.1 * 144.0 * dt.as_secs_f32();
+									let perturbation = loop {
+										let perturbation = cgmath::vec3(
+											rand::thread_rng().gen_range(-1.0..1.0),
+											rand::thread_rng().gen_range(-1.0..1.0),
+											rand::thread_rng().gen_range(-1.0..1.0),
+										);
+										if perturbation.magnitude() <= 1.0 {
+											break perturbation;
+										}
+									};
+									motion += perturbation * 0.1 * 144.0 * dt.as_secs_f32();
 
 									game.chunk_grid.add_entity(
 										Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
@@ -687,7 +692,7 @@ pub fn init_and_run_game_loop() {
 
 			// Walking.
 			let walking_vector = {
-				let walking_factor = if game.enable_physics { 12.0 } else { 35.0 } * dt.as_secs_f32();
+				let walking_factor = if game.enable_physics { 12.0 } else { 50.0 } * dt.as_secs_f32();
 				let walking_forward_factor = if game.walking_forward { 1 } else { 0 }
 					+ if game.walking_backward { -1 } else { 0 };
 				let walking_rightward_factor = if game.walking_rightward { 1 } else { 0 }
