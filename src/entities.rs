@@ -29,6 +29,9 @@ enum EntityTyped {
 		#[serde(skip)]
 		textured_cube_part_index: Option<usize>,
 	},
+	/// Turns off warnings about irrefutability of patterns.
+	/// Can be removed when an other type is added.
+	_DummyOtherType,
 }
 
 impl Entity {
@@ -58,6 +61,7 @@ impl Entity {
 			EntityTyped::Block { .. } => {
 				Some(AlignedBox { pos: self.pos, dims: cgmath::vec3(1.0, 1.0, 1.0) })
 			},
+			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
@@ -96,13 +100,14 @@ impl Entity {
 		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) {
-		match &mut self.typed {
-			EntityTyped::Block { block, motion, .. } => {
-				self.pos += *motion * 144.0 * dt.as_secs_f32();
-				motion.z -= 1.0 * 0.35 * dt.as_secs_f32();
-				*motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
+		match self.typed {
+			EntityTyped::Block { .. } => {
+				if let EntityTyped::Block { motion, .. } = &mut self.typed {
+					self.pos += *motion * 144.0 * dt.as_secs_f32();
+					motion.z -= 1.0 * 0.35 * dt.as_secs_f32();
+					*motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
+				}
 
-				let block = block.clone(); // TODO: Don't clone this here, this is a waste.
 				let collides = self.collides_with_blocks(chunk_grid, block_type_table);
 				if collides {
 					let coords = self.pos.map(|x| x.round() as i32);
@@ -111,46 +116,46 @@ impl Entity {
 					let is_loaded = chunk_grid.is_loaded(chunk_coords);
 
 					if is_loaded {
+						let block = if let EntityTyped::Block { block, .. } = &self.typed {
+							block.clone()
+						} else {
+							unreachable!()
+						};
 						chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
 						self.to_delete = true;
 					}
 				}
 
-				// Re borrow due to borrow cheking shenanigans.
-				// TODO: Fix this borrowing mess!
-				match &mut self.typed {
-					EntityTyped::Block { block, textured_cube_part_index, .. } => {
-						// Manage the part.
-						if !self.to_delete {
-							if let Some(textured_cube_part_index) = textured_cube_part_index {
-								part_tables.textured_cubes.set_instance_model_matrix(
-									*textured_cube_part_index,
-									&cgmath::Matrix4::<f32>::from_translation(self.pos.to_vec()),
-								);
-							} else {
-								let texture_mapping_point_offset = texture_mapping_table
-									.get_offset_of_block(
-										block.type_id,
-										block_type_table,
-										coords_in_atlas_array_thingy,
-										queue,
-									)
-									.unwrap();
-								// TODO: Handle the throwing of non-solid blocks.
-								*textured_cube_part_index = Some(
-									part_tables.textured_cubes.add_instance(
-										PartTexturedCubeInstanceData::new(
-											self.pos,
-											texture_mapping_point_offset,
-										)
-										.to_pod(),
-									),
-								);
-							}
-						}
-					},
+				if let EntityTyped::Block { block, textured_cube_part_index, .. } = &mut self.typed {
+					// Manage the part.
+					if let Some(textured_cube_part_index) = textured_cube_part_index {
+						// The part already exists and just has to be moved.
+						part_tables.textured_cubes.set_instance_model_matrix(
+							*textured_cube_part_index,
+							&cgmath::Matrix4::<f32>::from_translation(self.pos.to_vec()),
+						);
+					} else {
+						// The part does not exist and has to be created.
+						let texture_mapping_point_offset = texture_mapping_table
+							.get_offset_of_block(
+								block.type_id,
+								block_type_table,
+								coords_in_atlas_array_thingy,
+								queue,
+							)
+							.unwrap();
+						// TODO: Handle the throwing of non-solid blocks.
+						*textured_cube_part_index = Some(
+							part_tables.textured_cubes.add_instance(
+								PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
+									.to_pod(),
+							),
+						);
+					}
 				}
 			},
+
+			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
@@ -161,6 +166,7 @@ impl Entity {
 					part_tables.textured_cubes.delete_instance(textured_cube_part_index);
 				}
 			},
+			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 }
