@@ -14,6 +14,7 @@
 //!   - the model mesh (one per part table).
 //!   - the instance table (one per part table).
 //!   - the texturing data table (`coords_in_atlas_array_thingy`, shared between the part tables).
+//!
 //! One part table has one model and all the instances of that model.
 
 use std::{
@@ -31,6 +32,7 @@ use crate::{
 	coords::{AxisOrientation, NonOrientedAxis, OrientedAxis},
 	rendering_init::BindingThingy,
 	shaders::part_textured::{PartTexturedInstancePod, PartVertexPod},
+	table_allocator::{AllocationDecision, TableAllocator},
 };
 
 /// Handler to an entity part instance of type `T` which may or may not have been allocated yet.
@@ -155,6 +157,8 @@ pub(crate) struct PartTable<T: PartInstance> {
 	instance_table: Vec<T>,
 	/// The GPU-side buffer that is given the data from `instance_table`.
 	instance_table_buffer: wgpu::Buffer,
+	/// The allocator that manages the allocation and freeing of the instances.
+	instance_table_allocator: TableAllocator,
 	/// If an instance is modified, then the new data must be sent to the GPU.
 	cpu_to_gpu_update_required_for_instances: bool,
 	/// If the size of the instance table was modified, the buffer must be recreated to fit.
@@ -164,24 +168,45 @@ pub(crate) struct PartTable<T: PartInstance> {
 
 impl<T: PartInstance> PartTable<T> {
 	pub(crate) fn allocate_instance(&mut self, instance: T) -> usize {
-		let index = self.instance_table.len();
-		self.instance_table.push(instance);
-		self.cpu_to_gpu_update_required_for_instances = true;
-		self.cpu_to_gpu_update_required_for_new_instances = true;
-		index
+		match self.instance_table_allocator.allocate_one() {
+			AllocationDecision::AllocateIndex(index) => {
+				self.instance_table[index] = instance;
+				self.cpu_to_gpu_update_required_for_instances = true;
+				index
+			},
+			AllocationDecision::NeedsBiggerBuffer => {
+				let growing_factor = 1.25;
+				let new_length = (self.instance_table.len() as f32 * growing_factor) as usize + 4;
+				self.instance_table.resize(new_length, T::zeroed());
+				self.instance_table_allocator.length_increased_to(new_length);
+				let AllocationDecision::AllocateIndex(index) =
+					self.instance_table_allocator.allocate_one()
+				else {
+					unreachable!("The length of the table increased by at least 4, there must be room");
+				};
+				self.instance_table[index] = instance;
+				self.cpu_to_gpu_update_required_for_instances = true;
+				self.cpu_to_gpu_update_required_for_new_instances = true;
+				index
+				// TODO: This does not even require unsafe to make it faster.
+				// Actually, what really needs manual resizing is the wgpu buffer, not the rust vec.
+				// We could decide that the wgpu buffer has the size of the allocator and
+				// let the vec manage its size independently. That would require to make the allocator
+				// allocate at the beginning of the last interval instead of at the end of it (to
+				// make it worth it).
+			},
+		}
 	}
 
 	pub(crate) fn delete_instance(&mut self, index: usize) {
-		// TODO: Reuse the now available index for a future instance creation.
+		self.instance_table_allocator.free_one(index);
 		self.instance_table[index] = T::zeroed();
 		self.cpu_to_gpu_update_required_for_instances = true;
 	}
 
 	fn cup_to_gpu_update_if_required(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
 		if self.cpu_to_gpu_update_required_for_new_instances {
-			// TODO: Double size like Vec instead of just reallocating for the new instances.
-			// NOTE: At least it only happens once per frame, so if a huge amount of entities is
-			// created in one frame then there will only be one such bufer recreation.
+			// TODO: See the TODO at the end of `allocate_instance`.
 			self.cpu_to_gpu_update_required_for_new_instances = false;
 			self.cpu_to_gpu_update_required_for_instances = false;
 			let name = self.name;
@@ -324,6 +349,7 @@ pub(crate) mod textured_cubes {
 				contents: &[],
 				usage: wgpu::BufferUsages::VERTEX,
 			}),
+			instance_table_allocator: TableAllocator::new(0),
 			cpu_to_gpu_update_required_for_instances: false,
 			cpu_to_gpu_update_required_for_new_instances: false,
 			name,

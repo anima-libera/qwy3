@@ -24,6 +24,7 @@ mod rendering_init;
 mod saves;
 mod shaders;
 mod skybox;
+mod table_allocator;
 mod texture_gen;
 mod threadpool;
 mod unsorted;
