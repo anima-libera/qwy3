@@ -95,6 +95,11 @@ impl TableAllocator {
 	/// Identifies the interval or the space between intervals where the given index lands.
 	fn where_index_lands(&self, index: usize) -> WhereIndexLands {
 		assert!(index < self.length);
+		if self.free_intervals.is_empty() {
+			return WhereIndexLands::BeforeInterval(1);
+		}
+
+		// Binary search, but we look both inside the intervals and inbetween the intervals.
 		let mut search_inf = 0;
 		let mut search_sup_excluded = self.free_intervals.len();
 		loop {
