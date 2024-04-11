@@ -135,7 +135,7 @@ impl TableAllocator {
 				let extends_before =
 					interval_before.is_some_and(|interval_before| interval_before.sup_excluded == index);
 				let extends_after =
-					interval_after.is_some_and(|interval_after| interval_after.inf == index);
+					interval_after.is_some_and(|interval_after| interval_after.inf - 1 == index);
 
 				if extends_before && extends_after {
 					// The now free index was just what was needed to merge the surrounding intervals.
