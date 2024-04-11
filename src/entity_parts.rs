@@ -1,5 +1,6 @@
 use std::{
 	collections::{hash_map::Entry, HashMap},
+	marker::PhantomData,
 	sync::Arc,
 };
 
@@ -13,6 +14,50 @@ use crate::{
 	rendering_init::BindingThingy,
 	shaders::part_textured::{PartInstancePod, PartVertexPod},
 };
+
+#[derive(Clone, Default)]
+pub(crate) enum PartHandler<T: PartInstance> {
+	#[default]
+	NotAllocatedYet,
+	Allocated {
+		index: usize,
+		_marker: PhantomData<T>,
+	},
+}
+
+impl<T: PartInstance> PartHandler<T> {
+	#[inline]
+	pub(crate) fn ensure_is_allocated(
+		&mut self,
+		part_table: &mut PartTable<T>,
+		init: impl FnOnce() -> T,
+	) {
+		if let PartHandler::NotAllocatedYet = self {
+			let instance = init();
+			let index = part_table.allocate_instance(instance);
+			*self = PartHandler::Allocated { index, _marker: PhantomData }
+		}
+	}
+
+	#[inline]
+	pub(crate) fn modify_instance(&mut self, part_table: &mut PartTable<T>, f: impl FnOnce(&mut T)) {
+		if let PartHandler::Allocated { index, .. } = self {
+			if let Some(instance) = part_table.instance_table.get_mut(*index) {
+				f(instance);
+				part_table.cpu_to_gpu_update_required_for_instances = true;
+			} else {
+				panic!("bug");
+			}
+		}
+	}
+
+	pub(crate) fn delete(self, part_table: &mut PartTable<T>) {
+		if let PartHandler::Allocated { index, .. } = self {
+			part_table.delete_instance(index);
+			part_table.cpu_to_gpu_update_required_for_instances = true;
+		}
+	}
+}
 
 pub(crate) struct PartTables {
 	pub(crate) textured_cubes: PartTable<PartInstancePod>,
@@ -50,7 +95,7 @@ pub(crate) struct PartTable<T: PartInstance> {
 }
 
 impl<T: PartInstance> PartTable<T> {
-	pub(crate) fn add_instance(&mut self, instance: T) -> usize {
+	pub(crate) fn allocate_instance(&mut self, instance: T) -> usize {
 		let index = self.instance_table.len();
 		self.instance_table.push(instance);
 		self.cpu_to_gpu_update_required_for_instances = true;
@@ -63,7 +108,7 @@ impl<T: PartInstance> PartTable<T> {
 		self.cpu_to_gpu_update_required_for_instances = true;
 	}
 
-	pub(crate) fn set_instance_model_matrix(
+	pub(crate) fn _set_instance_model_matrix(
 		&mut self,
 		index: usize,
 		model_matrix: &cgmath::Matrix4<f32>,

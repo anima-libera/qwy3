@@ -10,9 +10,13 @@ use crate::{
 	block_types::BlockTypeTable,
 	chunks::{Block, ChunkGrid},
 	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
-	entity_parts::{textured_cubes::PartTexturedCubeInstanceData, PartTables, TextureMappingTable},
+	entity_parts::{
+		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
+		TextureMappingTable,
+	},
 	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
+	shaders::part_textured::PartInstancePod,
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -27,7 +31,7 @@ enum EntityTyped {
 		block: Block,
 		motion: cgmath::Vector3<f32>,
 		#[serde(skip)]
-		textured_cube_part_index: Option<usize>,
+		part_handler: PartHandler<PartInstancePod>,
 	},
 	/// Turns off warnings about irrefutability of patterns.
 	/// Can be removed when an other type is added.
@@ -43,7 +47,7 @@ impl Entity {
 		Entity {
 			pos,
 			to_delete: false,
-			typed: EntityTyped::Block { block, motion, textured_cube_part_index: None },
+			typed: EntityTyped::Block { block, motion, part_handler: PartHandler::default() },
 		}
 	}
 
@@ -126,16 +130,8 @@ impl Entity {
 					}
 				}
 
-				if let EntityTyped::Block { block, textured_cube_part_index, .. } = &mut self.typed {
-					// Manage the part.
-					if let Some(textured_cube_part_index) = textured_cube_part_index {
-						// The part already exists and just has to be moved.
-						part_tables.textured_cubes.set_instance_model_matrix(
-							*textured_cube_part_index,
-							&cgmath::Matrix4::<f32>::from_translation(self.pos.to_vec()),
-						);
-					} else {
-						// The part does not exist and has to be created.
+				if let EntityTyped::Block { block, part_handler, .. } = &mut self.typed {
+					part_handler.ensure_is_allocated(&mut part_tables.textured_cubes, || {
 						let texture_mapping_point_offset = texture_mapping_table
 							.get_offset_of_block(
 								block.type_id,
@@ -144,14 +140,14 @@ impl Entity {
 								queue,
 							)
 							.unwrap();
-						// TODO: Handle the throwing of non-solid blocks.
-						*textured_cube_part_index = Some(
-							part_tables.textured_cubes.add_instance(
-								PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
-									.to_pod(),
-							),
-						);
-					}
+						PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset).to_pod()
+					});
+
+					part_handler.modify_instance(&mut part_tables.textured_cubes, |instance| {
+						instance.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(
+							self.pos.to_vec(),
+						));
+					});
 				}
 			},
 
@@ -161,10 +157,8 @@ impl Entity {
 
 	fn handle_unloading_or_deletion(self, part_tables: &mut PartTables) {
 		match self.typed {
-			EntityTyped::Block { textured_cube_part_index, .. } => {
-				if let Some(textured_cube_part_index) = textured_cube_part_index {
-					part_tables.textured_cubes.delete_instance(textured_cube_part_index);
-				}
+			EntityTyped::Block { part_handler, .. } => {
+				part_handler.delete(&mut part_tables.textured_cubes);
 			},
 			EntityTyped::_DummyOtherType => panic!(),
 		}
