@@ -32,7 +32,7 @@ use crate::{
 	coords::{AxisOrientation, NonOrientedAxis, OrientedAxis},
 	rendering_init::BindingThingy,
 	shaders::part_textured::{PartTexturedInstancePod, PartVertexPod},
-	table_allocator::{AllocationDecision, TableAllocator},
+	table_allocator::{AllocationDecision, FreeingAdvice, TableAllocator},
 };
 
 /// Handler to an entity part instance of type `T` which may or may not have been allocated yet.
@@ -162,7 +162,7 @@ pub(crate) struct PartTable<T: PartInstance> {
 	/// If an instance is modified, then the new data must be sent to the GPU.
 	cpu_to_gpu_update_required_for_instances: bool,
 	/// If the size of the instance table was modified, the buffer must be recreated to fit.
-	cpu_to_gpu_update_required_for_new_instances: bool,
+	cpu_to_gpu_update_required_for_buffer_length_change: bool,
 	name: &'static str,
 }
 
@@ -186,7 +186,7 @@ impl<T: PartInstance> PartTable<T> {
 				};
 				self.instance_table[index] = instance;
 				self.cpu_to_gpu_update_required_for_instances = true;
-				self.cpu_to_gpu_update_required_for_new_instances = true;
+				self.cpu_to_gpu_update_required_for_buffer_length_change = true;
 				index
 				// TODO: This does not even require unsafe to make it faster.
 				// Actually, what really needs manual resizing is the wgpu buffer, not the rust vec.
@@ -199,15 +199,24 @@ impl<T: PartInstance> PartTable<T> {
 	}
 
 	pub(crate) fn delete_instance(&mut self, index: usize) {
-		self.instance_table_allocator.free_one(index);
 		self.instance_table[index] = T::zeroed();
 		self.cpu_to_gpu_update_required_for_instances = true;
+		match self.instance_table_allocator.free_one(index) {
+			FreeingAdvice::NothingToDo => {},
+			FreeingAdvice::CanShortenToLengthOf(advised_new_smaller_length) => {
+				self.instance_table.resize_with(advised_new_smaller_length, || {
+					panic!("There should be no element creation, we only shrink")
+				});
+				self.cpu_to_gpu_update_required_for_buffer_length_change = true;
+				self.instance_table_allocator.length_shriked_to(advised_new_smaller_length);
+			},
+		}
 	}
 
 	fn cup_to_gpu_update_if_required(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-		if self.cpu_to_gpu_update_required_for_new_instances {
+		if self.cpu_to_gpu_update_required_for_buffer_length_change {
 			// TODO: See the TODO at the end of `allocate_instance`.
-			self.cpu_to_gpu_update_required_for_new_instances = false;
+			self.cpu_to_gpu_update_required_for_buffer_length_change = false;
 			self.cpu_to_gpu_update_required_for_instances = false;
 			let name = self.name;
 			self.instance_table_buffer =
@@ -349,9 +358,9 @@ pub(crate) mod textured_cubes {
 				contents: &[],
 				usage: wgpu::BufferUsages::VERTEX,
 			}),
-			instance_table_allocator: TableAllocator::new(0),
+			instance_table_allocator: TableAllocator::new(0, 2000),
 			cpu_to_gpu_update_required_for_instances: false,
-			cpu_to_gpu_update_required_for_new_instances: false,
+			cpu_to_gpu_update_required_for_buffer_length_change: false,
 			name,
 		}
 	}

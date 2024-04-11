@@ -3,7 +3,11 @@
 /// The freeing won't be that bad in practice if the memory is not fragmented in a
 /// severely unlucky way.
 pub(crate) struct TableAllocator {
+	/// Actual length of the table that we manage.
 	length: usize,
+	/// If the length is bigger than that, freeing will also look to see if the table
+	/// could be shortened.
+	ideal_max_length: usize,
 	/// The intervals of consecutive free entries by their indices.
 	/// If an index is in one of these intervals, then it corresponds to a free entry,
 	/// else it correspond to an allocated entry.
@@ -16,7 +20,7 @@ pub(crate) struct TableAllocator {
 	free_intervals: Vec<FreeInterval>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct FreeInterval {
 	inf: usize,
 	sup_excluded: usize,
@@ -38,7 +42,7 @@ impl PartialOrd for FreeInterval {
 
 impl FreeInterval {
 	fn length(self) -> usize {
-		self.sup_excluded - self.inf
+		(self.inf..self.sup_excluded).len()
 	}
 
 	fn contains(self, index: usize) -> bool {
@@ -52,10 +56,17 @@ pub(crate) enum AllocationDecision {
 	/// There is no more free slot, the allocator needs to be lengthened.
 	NeedsBiggerBuffer,
 }
+pub(crate) enum FreeingAdvice {
+	NothingToDo,
+	/// If the table is too big, freeing can notify us that we could just shorten the table
+	/// now that a big chunk of its end is free and could just be dropped.
+	CanShortenToLengthOf(usize),
+}
 
 impl TableAllocator {
-	pub(crate) fn new(length: usize) -> TableAllocator {
-		let mut table_allocator = TableAllocator { length: 0, free_intervals: vec![] };
+	pub(crate) fn new(length: usize, ideal_max_length: usize) -> TableAllocator {
+		let mut table_allocator =
+			TableAllocator { length: 0, ideal_max_length, free_intervals: vec![] };
 		if 0 < length {
 			table_allocator.length_increased_to(length);
 		}
@@ -124,7 +135,8 @@ impl TableAllocator {
 	}
 
 	/// Frees the given index (that must have been allocated before).
-	pub(crate) fn free_one(&mut self, index: usize) {
+	pub(crate) fn free_one(&mut self, index: usize) -> FreeingAdvice {
+		// Perform the freeing.
 		match self.where_index_lands(index) {
 			WhereIndexLands::InInterval(_interval_i) => panic!("Double free"),
 			WhereIndexLands::BeforeInterval(interval_after_i) => {
@@ -160,6 +172,32 @@ impl TableAllocator {
 				}
 			},
 		}
+
+		// See if we can and should advice the table holder to shrink the table or not.
+		if self.length > self.ideal_max_length {
+			if self
+				.free_intervals
+				.last()
+				.is_some_and(|last_interval| last_interval.sup_excluded == self.length)
+			{
+				// The table is bigger than ideal, and a chunk at the end is free.
+				let could_shrink_by = self.free_intervals.last().unwrap().length();
+				let is_not_worth_it_if_smaller_than =
+					((self.length - self.ideal_max_length) / 4).max(100);
+				if could_shrink_by < is_not_worth_it_if_smaller_than {
+					// The free portion at the end is too small to be worth reallocating.
+					FreeingAdvice::NothingToDo
+				} else {
+					// We can actually shrink by a good ammount. Let's tell the table holder!
+					let advised_new_smaller_length = self.length - could_shrink_by;
+					FreeingAdvice::CanShortenToLengthOf(advised_new_smaller_length)
+				}
+			} else {
+				FreeingAdvice::NothingToDo
+			}
+		} else {
+			FreeingAdvice::NothingToDo
+		}
 	}
 
 	/// Communicates to the allocator that it now has a new bigger length.
@@ -178,6 +216,31 @@ impl TableAllocator {
 			// The new portion is isolated from the previous last interval and will form
 			// and interval of its own.
 			self.free_intervals.push(FreeInterval { inf: self.length, sup_excluded: new_length });
+		}
+		self.length = new_length;
+	}
+
+	pub(crate) fn length_shriked_to(&mut self, new_length: usize) {
+		// Check if we can really shrink to `new_length`.
+		assert!(new_length < self.length);
+		let could_shrink_by = self
+			.free_intervals
+			.last()
+			.is_some_and(|last_interval| last_interval.sup_excluded == self.length)
+			.then(|| self.free_intervals.last().unwrap().length())
+			.expect("There is no free portion that touches the end");
+		let could_shrink_at_most_down_to = self.length - could_shrink_by;
+		assert!(
+			could_shrink_at_most_down_to <= new_length,
+			"Cannot shrink by that much"
+		);
+
+		// We can! Let's shrink.
+		self.free_intervals.last_mut().unwrap().sup_excluded = new_length;
+		let last_interval = self.free_intervals.last().unwrap();
+		if new_length <= last_interval.inf {
+			// The last interval gets dropped entirely by the shrinking.
+			self.free_intervals.pop();
 		}
 		self.length = new_length;
 	}
