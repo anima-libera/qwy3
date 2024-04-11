@@ -24,7 +24,7 @@ use cgmath::{point3, InnerSpace, MetricSpace};
 use rand::Rng;
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 
-/// Initializes the game and run the main game loop.
+/// Initializes the game and runs the main game loop.
 pub fn init_and_run_game_loop() {
 	let (mut game, event_loop) = init_game();
 

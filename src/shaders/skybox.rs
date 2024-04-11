@@ -11,7 +11,7 @@ pub(crate) struct SkyboxVertexPod {
 	pub(crate) position: [f32; 3],
 	/// 3D direction vector pointing from the origin to a point on the cubemap.
 	/// This is how `Cube`-dimensional cubemap textures are sampled.
-	/// See https://www.w3.org/TR/WGSL/#texture-dimensionality and related notions for more.
+	/// See <https://www.w3.org/TR/WGSL/#texture-dimensionality> and related notions for more.
 	pub(crate) coords_in_skybox_cubemap: [f32; 3],
 }
 impl SkyboxVertexPod {

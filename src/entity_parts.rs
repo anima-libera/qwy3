@@ -219,7 +219,7 @@ pub(crate) mod textured_cubes {
 
 	pub(crate) struct PartTexturedCubeInstanceData {
 		model_matrix: [[f32; 4]; 4],
-		/// The offset is in the array of 2D points, so 1 rank per vec2<f32>.
+		/// The offset is in the array of 2D points, so 1 rank per `vec2<f32>`.
 		texture_mapping_point_offset: u32,
 	}
 
