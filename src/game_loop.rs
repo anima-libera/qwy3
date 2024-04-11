@@ -386,15 +386,15 @@ pub fn init_and_run_game_loop() {
 					let settings = font::TextRenderingSettings::with_scale(3.0);
 					let text = format!(
 						"fps: {fps:.1}\n\
-					chunks loaded: {chunk_count}\n\
-					blocks loaded: {block_count}\n\
-					chunks meshed: {chunk_meshed_count}\n\
-					entities: {entity_count}\n\
-					chunk with entities: {chunk_entity_count}\n\
-					player coords: {player_block_coords_str}\n\
-					seed: {seed}\n\
-					world time: {world_time:.0}s\n\
-					{random_message}"
+						chunks loaded: {chunk_count}\n\
+						blocks loaded: {block_count}\n\
+						chunks meshed: {chunk_meshed_count}\n\
+						entities: {entity_count}\n\
+						chunk with entities: {chunk_entity_count}\n\
+						player coords: {player_block_coords_str}\n\
+						seed: {seed}\n\
+						world time: {world_time:.0}s\n\
+						{random_message}"
 					);
 					*general_debug_info_widget = Widget::new_simple_text(text, settings);
 				}
@@ -416,7 +416,7 @@ pub fn init_and_run_game_loop() {
 									* (1.0 / 512.0),
 								texture_rect_in_atlas_wh: cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
 							};
-							*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 3.0);
+							*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 6.0);
 						} else {
 							*item_held_widget = Widget::Nothing;
 						}

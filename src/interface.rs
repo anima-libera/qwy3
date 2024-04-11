@@ -93,12 +93,12 @@ impl Interface {
 							texture_rect_in_atlas_xy: cgmath::point2(256.0, 32.0) / 512.0,
 							texture_rect_in_atlas_wh: cgmath::vec2(7.0, 7.0) / 512.0,
 						},
-						scale: 2.0,
+						scale: 5.0,
 					});
 				}
 				*health_bar_widget = Widget::new_list(
 					hearts,
-					3.0,
+					6.0,
 					ListOrientationAndAlignment::Horizontal(
 						ListOrientationHorizontal::RightToLeft,
 						ListAlignmentHorizontal::Center,
