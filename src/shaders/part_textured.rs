@@ -20,19 +20,19 @@ impl PartVertexPod {
 	}
 }
 
-/// Instance type used for each entity part.
+/// Instance type used for each entity part that has texture mappings.
 #[derive(Copy, Clone, Debug)]
 /// Certified Plain Old Data (so it can be sent to the GPU as a uniform).
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable)]
-pub(crate) struct PartInstancePod {
+pub(crate) struct PartTexturedInstancePod {
 	pub(crate) model_matrix_1_of_4: [f32; 4],
 	pub(crate) model_matrix_2_of_4: [f32; 4],
 	pub(crate) model_matrix_3_of_4: [f32; 4],
 	pub(crate) model_matrix_4_of_4: [f32; 4],
 	pub(crate) texture_mapping_point_offset: u32,
 }
-impl PartInstancePod {
+impl PartTexturedInstancePod {
 	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
 		vertex_attr_array![
 			2 => Float32x4,
@@ -69,9 +69,9 @@ pub(crate) fn render_pipeline_and_bind_group(
 		attributes: &PartVertexPod::vertex_attributes(),
 	};
 	let part_instance_buffer_layout = wgpu::VertexBufferLayout {
-		array_stride: std::mem::size_of::<PartInstancePod>() as wgpu::BufferAddress,
+		array_stride: std::mem::size_of::<PartTexturedInstancePod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Instance,
-		attributes: &PartInstancePod::vertex_attributes(),
+		attributes: &PartTexturedInstancePod::vertex_attributes(),
 	};
 
 	use wgpu::ShaderStages as S;

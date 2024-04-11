@@ -1,3 +1,21 @@
+//! Entity parts handling.
+//!
+//! An entity part is an instanced model that is rendered with the world.
+//! An entity can have as many or as few parts as it desires.
+//!
+//! The parts are instanced, so there is one table of instances per model.
+//! The models can be simple shapes (such as a cube), or whatever.
+//!
+//! The models are not colored nor textured, this texturing is done per instance.
+//! But the actual texturing data for all the vertices of the model is not inside the instance,
+//! rather it is in a table of such data, and the instace points to the offset at which sits the
+//! texturing data it wants.
+//! Thus there are 3 Wgpu buffers:
+//!   - the model mesh (one per part table).
+//!   - the instance table (one per part table).
+//!   - the texturing data table (`coords_in_atlas_array_thingy`, shared between the part tables).
+//! One part table has one model and all the instances of that model.
+
 use std::{
 	collections::{hash_map::Entry, HashMap},
 	marker::PhantomData,
@@ -12,55 +30,89 @@ use crate::{
 	block_types::{BlockType, BlockTypeId, BlockTypeTable},
 	coords::{AxisOrientation, NonOrientedAxis, OrientedAxis},
 	rendering_init::BindingThingy,
-	shaders::part_textured::{PartInstancePod, PartVertexPod},
+	shaders::part_textured::{PartTexturedInstancePod, PartVertexPod},
 };
 
+/// Handler to an entity part instance of type `T` which may or may not have been allocated yet.
+/// Entities should use these to handle their parts.
+///
+/// Instead of being serialized and deserialized with the other entity data, it should be
+/// skipped by marking its field with `#[serde(skip)]`. These fields will be filled with their
+/// `Default` implementation, here it would be the `NotAllocatedYet` variant.
+///
+/// For this reason, entities should handle their part creations via
+/// `PartHandler::ensure_is_allocated` at each physics step so that their rendering is ensured
+/// (if the entities in question want these parts to be rendered at the moment),
+/// no matter how they are loaded. It works quite well!
+//
+// TODO: The variant discriminant doubles the size of the type. Make it smaller.
 #[derive(Clone, Default)]
 pub(crate) enum PartHandler<T: PartInstance> {
 	#[default]
 	NotAllocatedYet,
 	Allocated {
-		index: usize,
+		/// Index of the instance in the `instance_table` of the `PartTable<T>`.
+		index: u32,
+		/// Rust bullied me into putting that here >_<'
+		/// The handler does not "own" a `T` in the sense of owning things in Rust.
+		/// This should be harmless, but who knows, the documentation of `PhantomData` acts all
+		/// mysterious about what this really does to the compilation (but it can have an influence,
+		/// that was clear at least).
+		/// TODO: Look into it? (very low priority)
 		_marker: PhantomData<T>,
 	},
 }
 
 impl<T: PartInstance> PartHandler<T> {
+	/// If the handler does not refer to an allocated part instance yet,
+	/// then now it does and the newly allocated part instance is initialized by `initialize`.
 	#[inline]
 	pub(crate) fn ensure_is_allocated(
 		&mut self,
 		part_table: &mut PartTable<T>,
-		init: impl FnOnce() -> T,
+		initialize: impl FnOnce() -> T,
 	) {
 		if let PartHandler::NotAllocatedYet = self {
-			let instance = init();
-			let index = part_table.allocate_instance(instance);
+			let instance = initialize();
+			let index = part_table.allocate_instance(instance) as u32;
 			*self = PartHandler::Allocated { index, _marker: PhantomData }
 		}
 	}
 
+	/// If the handler refer to an allocated part instance,
+	/// then it is modified via `callback`.
 	#[inline]
-	pub(crate) fn modify_instance(&mut self, part_table: &mut PartTable<T>, f: impl FnOnce(&mut T)) {
+	pub(crate) fn modify_instance(
+		&mut self,
+		part_table: &mut PartTable<T>,
+		callback: impl FnOnce(&mut T),
+	) {
 		if let PartHandler::Allocated { index, .. } = self {
-			if let Some(instance) = part_table.instance_table.get_mut(*index) {
-				f(instance);
+			if let Some(instance) = part_table.instance_table.get_mut(*index as usize) {
+				callback(instance);
 				part_table.cpu_to_gpu_update_required_for_instances = true;
 			} else {
-				panic!("bug");
+				panic!("Bug: Out of bounds part instance index");
 			}
 		}
 	}
 
+	/// If the handler refered to an allocated instance,
+	/// then the instance is released from its existence.
 	pub(crate) fn delete(self, part_table: &mut PartTable<T>) {
 		if let PartHandler::Allocated { index, .. } = self {
-			part_table.delete_instance(index);
+			part_table.delete_instance(index as usize);
 			part_table.cpu_to_gpu_update_required_for_instances = true;
 		}
 	}
 }
 
+/// The tables of the tables of the parts.
+/// One part table holds a model mesh and all its instances.
+/// All these tables are gathered in here.
 pub(crate) struct PartTables {
-	pub(crate) textured_cubes: PartTable<PartInstancePod>,
+	pub(crate) textured_cubes: PartTable<PartTexturedInstancePod>,
+	// NOTE: Added tables should also be added to the output of `tables_for_rendering`.
 }
 
 impl PartTables {
@@ -76,20 +128,36 @@ impl PartTables {
 		self.textured_cubes.cup_to_gpu_update_if_required(device, queue);
 	}
 
-	pub(crate) fn tables_for_rendering(&self) -> [&dyn PartTableRendrable; 1] {
-		[&self.textured_cubes]
+	/// Returns an array of what is needed to render the parts of a table, for all the tables.
+	/// The rendering can just iterate over this output,
+	/// no change is needed on the rendering part even when new part tables are added.
+	pub(crate) fn tables_for_rendering(&self) -> [DataForPartTableRendering; 1] {
+		[self.textured_cubes.get_data_for_rendering()]
 	}
 }
 
+/// Trait that declares that a type can be the raw data of a part instance.
+/// There can be a `PartTable` of these.
 pub(crate) trait PartInstance: bytemuck::Pod + bytemuck::Zeroable {
+	/// Set the transform matrix of the instance.
 	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>);
 }
 
+/// A table of entity parts.
+/// One such table holds a model (mesh) and all the instances of that model.
+/// It also handles the syncing of this data with the GPU.
 pub(crate) struct PartTable<T: PartInstance> {
+	/// The mesh of the model for this table of instances.
 	mesh: Mesh,
+	/// The CPU-side table of all the instances for the model of this table.
+	/// As per `PartInstance`'s trait bounds requirements, all this data can be copied raw
+	/// to the GPU.
 	instance_table: Vec<T>,
+	/// The GPU-side buffer that is given the data from `instance_table`.
 	instance_table_buffer: wgpu::Buffer,
+	/// If an instance is modified, then the new data must be sent to the GPU.
 	cpu_to_gpu_update_required_for_instances: bool,
+	/// If the size of the instance table was modified, the buffer must be recreated to fit.
 	cpu_to_gpu_update_required_for_new_instances: bool,
 	name: &'static str,
 }
@@ -103,20 +171,6 @@ impl<T: PartInstance> PartTable<T> {
 		index
 	}
 
-	pub(crate) fn _set_instance(&mut self, index: usize, instance: T) {
-		self.instance_table[index] = instance;
-		self.cpu_to_gpu_update_required_for_instances = true;
-	}
-
-	pub(crate) fn _set_instance_model_matrix(
-		&mut self,
-		index: usize,
-		model_matrix: &cgmath::Matrix4<f32>,
-	) {
-		self.instance_table[index].set_model_matrix(model_matrix);
-		self.cpu_to_gpu_update_required_for_instances = true;
-	}
-
 	pub(crate) fn delete_instance(&mut self, index: usize) {
 		// TODO: Reuse the now available index for a future instance creation.
 		self.instance_table[index] = T::zeroed();
@@ -126,6 +180,8 @@ impl<T: PartInstance> PartTable<T> {
 	fn cup_to_gpu_update_if_required(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
 		if self.cpu_to_gpu_update_required_for_new_instances {
 			// TODO: Double size like Vec instead of just reallocating for the new instances.
+			// NOTE: At least it only happens once per frame, so if a huge amount of entities is
+			// created in one frame then there will only be one such bufer recreation.
 			self.cpu_to_gpu_update_required_for_new_instances = false;
 			self.cpu_to_gpu_update_required_for_instances = false;
 			let name = self.name;
@@ -144,20 +200,7 @@ impl<T: PartInstance> PartTable<T> {
 			);
 		}
 	}
-}
 
-pub(crate) struct DataForPartTableRendering<'a> {
-	pub(crate) mesh_vertices_count: u32,
-	pub(crate) mesh_vertex_buffer: &'a wgpu::Buffer,
-	pub(crate) instances_count: u32,
-	pub(crate) instance_buffer: &'a wgpu::Buffer,
-}
-
-pub(crate) trait PartTableRendrable {
-	fn get_data_for_rendering(&self) -> DataForPartTableRendering;
-}
-
-impl<T: PartInstance> PartTableRendrable for PartTable<T> {
 	fn get_data_for_rendering(&self) -> DataForPartTableRendering {
 		DataForPartTableRendering {
 			mesh_vertices_count: self.mesh.vertex_count,
@@ -168,20 +211,40 @@ impl<T: PartInstance> PartTableRendrable for PartTable<T> {
 	}
 }
 
+/// Just what is needed to render the instances of a part table.
+/// Note that this type is the same no matter the PartInstance type parameter
+/// of the part table it comes from.
+pub(crate) struct DataForPartTableRendering<'a> {
+	pub(crate) mesh_vertices_count: u32,
+	pub(crate) mesh_vertex_buffer: &'a wgpu::Buffer,
+	pub(crate) instances_count: u32,
+	pub(crate) instance_buffer: &'a wgpu::Buffer,
+}
+
+/// A mesh of a model. Its data is all on the GPU side.
 struct Mesh {
 	vertex_count: u32,
 	buffer: wgpu::Buffer,
 }
 
+/// The table in which are stored the texture mappings of the instances.
+/// A model for textured entity parts is not textured itself, instead each instance of that model
+/// points to its desired texture mappings in this table.
 pub(crate) struct TextureMappingTable {
 	/// Maps a block type to the offset (in `vec2<f32>`s) of the texture mapping of the block type.
-	blocks: FxHashMap<BlockTypeId, u32>,
+	blocks: FxHashMap<WhichTextureMapping, u32>,
 	/// Next offset in the Wgpu buffer, in bytes.
 	next_offset_in_buffer_in_bytes: u32,
 	/// Next offset in `vec2<f32>`s to be given to instances.
 	next_offset_in_points: u32,
 }
 
+#[derive(Hash, PartialEq, Eq)]
+enum WhichTextureMapping {
+	Block(BlockTypeId),
+}
+
+/// An offset that points to some texture mappings made for a cube model.
 #[derive(Clone, Copy)]
 pub(crate) struct CubeTextureMappingOffset(u32);
 
@@ -205,7 +268,7 @@ impl TextureMappingTable {
 		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> Option<CubeTextureMappingOffset> {
-		let entry = self.blocks.entry(block_type_id);
+		let entry = self.blocks.entry(WhichTextureMapping::Block(block_type_id));
 		match entry {
 			Entry::Occupied(occupied) => Some(CubeTextureMappingOffset(*occupied.get())),
 			Entry::Vacant(vacant) => {
@@ -232,11 +295,14 @@ impl TextureMappingTable {
 }
 
 pub(crate) mod textured_cubes {
+	//! Here are hanled the matters specific to the
+	//! textured cube entity parts and their `PartTable`.
+
 	use crate::shaders::Vector2Pod;
 
 	use super::*;
 
-	impl PartInstance for PartInstancePod {
+	impl PartInstance for PartTexturedInstancePod {
 		fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
 			let model_matrix = cgmath::conv::array4x4(*model_matrix);
 			self.model_matrix_1_of_4 = model_matrix[0];
@@ -246,7 +312,9 @@ pub(crate) mod textured_cubes {
 		}
 	}
 
-	pub(super) fn textured_cube_part_table(device: &wgpu::Device) -> PartTable<PartInstancePod> {
+	pub(super) fn textured_cube_part_table(
+		device: &wgpu::Device,
+	) -> PartTable<PartTexturedInstancePod> {
 		let name = "Textured Cube Part";
 		PartTable {
 			mesh: cube_mesh(device, name),
@@ -262,6 +330,8 @@ pub(crate) mod textured_cubes {
 		}
 	}
 
+	/// A nicer form of an instance that is yet to be converted into its raw counterpart (the raw
+	/// counterpart will be the one that gets stored in a `PartTable`).
 	pub(crate) struct PartTexturedCubeInstanceData {
 		model_matrix: [[f32; 4]; 4],
 		/// The offset is in the array of 2D points, so 1 rank per `vec2<f32>`.
@@ -281,8 +351,9 @@ pub(crate) mod textured_cubes {
 			}
 		}
 
-		pub(crate) fn to_pod(&self) -> PartInstancePod {
-			PartInstancePod {
+		/// Converts into the form that can be stored in a `PartTable`.
+		pub(crate) fn into_pod(self) -> PartTexturedInstancePod {
+			PartTexturedInstancePod {
 				model_matrix_1_of_4: self.model_matrix[0],
 				model_matrix_2_of_4: self.model_matrix[1],
 				model_matrix_3_of_4: self.model_matrix[2],
@@ -292,6 +363,7 @@ pub(crate) mod textured_cubes {
 		}
 	}
 
+	/// Creates the mesh of the cube model.
 	fn cube_mesh(device: &wgpu::Device, name: &str) -> Mesh {
 		// There is a lot of code duplicated from `chunk_meshing::generate_block_face_mesh`.
 		// TODO: Factorize some code with there.
@@ -354,6 +426,8 @@ pub(crate) mod textured_cubes {
 		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
 
+	/// Creates the texture mappings (to apply to the cube mesh)
+	/// with the given texture rect in the atlas.
 	pub(crate) fn texture_mappings_for_cube(
 		texture_coords_on_atlas: cgmath::Point2<i32>,
 	) -> Vec<Vector2Pod> {

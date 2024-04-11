@@ -1,6 +1,6 @@
 use crate::{
 	rendering_init::BindingThingy,
-	shaders::part_textured::{PartInstancePod, PartVertexPod},
+	shaders::part_textured::{PartTexturedInstancePod, PartVertexPod},
 };
 
 pub(crate) struct BindingThingies<'a> {
@@ -23,9 +23,9 @@ pub(crate) fn render_pipeline_and_bind_group(
 		attributes: &PartVertexPod::vertex_attributes(),
 	};
 	let part_instance_buffer_layout = wgpu::VertexBufferLayout {
-		array_stride: std::mem::size_of::<PartInstancePod>() as wgpu::BufferAddress,
+		array_stride: std::mem::size_of::<PartTexturedInstancePod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Instance,
-		attributes: &PartInstancePod::vertex_attributes(),
+		attributes: &PartTexturedInstancePod::vertex_attributes(),
 	};
 
 	use wgpu::ShaderStages as S;

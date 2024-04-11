@@ -16,7 +16,7 @@ use crate::{
 	},
 	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
-	shaders::part_textured::PartInstancePod,
+	shaders::part_textured::PartTexturedInstancePod,
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -31,7 +31,7 @@ enum EntityTyped {
 		block: Block,
 		motion: cgmath::Vector3<f32>,
 		#[serde(skip)]
-		part_handler: PartHandler<PartInstancePod>,
+		part_handler: PartHandler<PartTexturedInstancePod>,
 	},
 	/// Turns off warnings about irrefutability of patterns.
 	/// Can be removed when an other type is added.
@@ -140,7 +140,8 @@ impl Entity {
 								queue,
 							)
 							.unwrap();
-						PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset).to_pod()
+						PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
+							.into_pod()
 					});
 
 					part_handler.modify_instance(&mut part_tables.textured_cubes, |instance| {

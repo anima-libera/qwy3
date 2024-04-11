@@ -88,7 +88,7 @@ impl<'a> DataForRendering<'a> {
 					mesh_vertex_buffer,
 					instances_count,
 					instance_buffer,
-				} = part_table_for_rendering.get_data_for_rendering();
+				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
@@ -148,7 +148,7 @@ impl<'a> DataForRendering<'a> {
 					mesh_vertex_buffer,
 					instances_count,
 					instance_buffer,
-				} = part_table_for_rendering.get_data_for_rendering();
+				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
