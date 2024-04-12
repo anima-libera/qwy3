@@ -6,6 +6,7 @@ use std::{
 };
 
 use cgmath::EuclideanSpace;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -129,20 +130,34 @@ impl Entity {
 				if collides {
 					let coords = self.pos.map(|x| x.round() as i32);
 
-					let chunk_coords = chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
-					let is_loaded = chunk_grid.is_loaded(chunk_coords);
+					if chunk_grid
+						.get_block(coords)
+						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
+					{
+						self.pos.z += 100.0 * dt.as_secs_f32();
+						self.pos.x += rand::thread_rng().gen_range(-1.0..1.0) * 100.0 * dt.as_secs_f32();
+						self.pos.y += rand::thread_rng().gen_range(-1.0..1.0) * 100.0 * dt.as_secs_f32();
+						if let EntityTyped::Block { motion, .. } = &mut self.typed {
+							*motion = cgmath::vec3(0.0, 0.0, 0.0);
+						}
+					} else {
+						let chunk_coords =
+							chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
+						let is_loaded = chunk_grid.is_loaded(chunk_coords);
 
-					if is_loaded {
-						let block = if let EntityTyped::Block { block, .. } = &self.typed {
-							block.clone()
-						} else {
-							unreachable!()
-						};
-						chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
-						self.to_delete = true;
+						if is_loaded {
+							let block = if let EntityTyped::Block { block, .. } = &self.typed {
+								block.clone()
+							} else {
+								unreachable!()
+							};
+							chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
+							self.to_delete = true;
+						}
 					}
 				}
 
+				// Manage the part.
 				if let EntityTyped::Block { block, part_handler, .. } = &mut self.typed {
 					part_handler.ensure_is_allocated(
 						&mut part_manipulation.part_tables.textured_cubes,
