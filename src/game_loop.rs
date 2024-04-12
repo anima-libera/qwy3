@@ -7,7 +7,7 @@ use crate::{
 		iter_3d_cube_center_radius, AlignedBox, AxisOrientation, BlockCoords, ChunkCoordsSpan,
 		NonOrientedAxis, OrientedAxis, OrientedFaceCoords,
 	},
-	entities::Entity,
+	entities::{Entity, ForPartManipulation},
 	font,
 	game_init::{init_game, save_savable_state},
 	lang::{self, LogItem},
@@ -726,10 +726,12 @@ pub fn init_and_run_game_loop() {
 				&game.block_type_table,
 				dt,
 				game.save.as_ref(),
-				&mut game.part_tables,
-				&mut game.texture_mapping_table,
-				&game.coords_in_atlas_array_thingy,
-				&game.queue,
+				&mut ForPartManipulation {
+					part_tables: &mut game.part_tables,
+					texture_mapping_table: &mut game.texture_mapping_table,
+					coords_in_atlas_array_thingy: &game.coords_in_atlas_array_thingy,
+					queue: &game.queue,
+				},
 			);
 
 			game.queue.write_buffer(

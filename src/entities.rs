@@ -110,17 +110,12 @@ impl Entity {
 	}
 
 	/// If an entity "does stuff", then it probably happens here.
-	// TODO: Bundle part-managing arguments in a struct.
-	#[allow(clippy::too_many_arguments)]
 	fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-		part_tables: &mut PartTables,
-		texture_mapping_table: &mut TextureMappingTable,
-		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
-		queue: &wgpu::Queue,
+		part_manipulation: &mut ForPartManipulation,
 	) {
 		match self.typed {
 			EntityTyped::Block { .. } => {
@@ -149,24 +144,31 @@ impl Entity {
 				}
 
 				if let EntityTyped::Block { block, part_handler, .. } = &mut self.typed {
-					part_handler.ensure_is_allocated(&mut part_tables.textured_cubes, || {
-						let texture_mapping_point_offset = texture_mapping_table
-							.get_offset_of_block(
-								block.type_id,
-								block_type_table,
-								coords_in_atlas_array_thingy,
-								queue,
-							)
-							.unwrap();
-						PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
-							.into_pod()
-					});
+					part_handler.ensure_is_allocated(
+						&mut part_manipulation.part_tables.textured_cubes,
+						|| {
+							let texture_mapping_point_offset = part_manipulation
+								.texture_mapping_table
+								.get_offset_of_block(
+									block.type_id,
+									block_type_table,
+									part_manipulation.coords_in_atlas_array_thingy,
+									part_manipulation.queue,
+								)
+								.unwrap();
+							PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
+								.into_pod()
+						},
+					);
 
-					part_handler.modify_instance(&mut part_tables.textured_cubes, |instance| {
-						instance.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(
-							self.pos.to_vec(),
-						));
-					});
+					part_handler.modify_instance(
+						&mut part_manipulation.part_tables.textured_cubes,
+						|instance| {
+							instance.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(
+								self.pos.to_vec(),
+							));
+						},
+					);
 				}
 			},
 
@@ -187,6 +189,14 @@ impl Entity {
 			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
+}
+
+/// All that is needed for entities to be able to manipulate their parts.
+pub(crate) struct ForPartManipulation<'a> {
+	pub(crate) part_tables: &'a mut PartTables,
+	pub(crate) texture_mapping_table: &'a mut TextureMappingTable,
+	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) queue: &'a wgpu::Queue,
 }
 
 /// The entities of a chunk.
@@ -224,34 +234,26 @@ impl ChunkEntities {
 		self.savable.entities.push(Some(entity));
 	}
 
-	// TODO: Bundle part-managing arguments in a struct.
-	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
-		part_tables: &mut PartTables,
-		texture_mapping_table: &mut TextureMappingTable,
-		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
-		queue: &wgpu::Queue,
+		part_manipulation: &mut ForPartManipulation,
 	) {
 		for entity in self.savable.entities.iter_mut() {
 			entity.as_mut().unwrap().apply_one_physics_step(
 				chunk_grid,
 				block_type_table,
 				dt,
-				part_tables,
-				texture_mapping_table,
-				coords_in_atlas_array_thingy,
-				queue,
+				part_manipulation,
 			);
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
 				// The entity was flagged for deletion and is now deletd.
-				entity.take().unwrap().handle_unloading_or_deletion(part_tables);
+				entity.take().unwrap().handle_unloading_or_deletion(part_manipulation.part_tables);
 				false
 			} else {
 				let entity_chunk_coords = entity.as_ref().unwrap().chunk_coords(chunk_grid.cd());
