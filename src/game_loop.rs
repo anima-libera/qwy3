@@ -799,13 +799,14 @@ pub fn init_and_run_game_loop() {
 				position += direction * 0.01;
 			};
 
-			let targeted_block_box_mesh_opt = game.targeted_face.as_ref().map(|targeted_face| {
-				SimpleLineMesh::from_aligned_box(
+			let targeted_face_mesh_opt = game.targeted_face.as_ref().map(|targeted_face| {
+				SimpleLineMesh::from_aligned_box_but_only_one_side(
 					&game.device,
 					&AlignedBox {
 						pos: targeted_face.interior_coords.map(|x| x as f32),
 						dims: cgmath::vec3(1.01, 1.01, 1.01),
 					},
+					targeted_face.direction_to_exterior,
 				)
 			});
 
@@ -950,7 +951,7 @@ pub fn init_and_run_game_loop() {
 				player_blocks_box_mesh: &player_blocks_box_mesh,
 				entities_box_meshes: &entities_box_meshes,
 				chunk_with_entities_box_meshes: &chunk_with_entities_box_meshes,
-				targeted_block_box_mesh_opt: &targeted_block_box_mesh_opt,
+				targeted_face_mesh_opt: &targeted_face_mesh_opt,
 				enable_display_interface: game.enable_display_interface,
 				chunk_box_meshes: &chunk_box_meshes,
 				skybox_mesh: &skybox_mesh,

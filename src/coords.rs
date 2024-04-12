@@ -328,6 +328,14 @@ impl NonOrientedAxis {
 			NonOrientedAxis::Z => 'z',
 		}
 	}
+
+	pub(crate) fn the_other_two_axes(self) -> [NonOrientedAxis; 2] {
+		match self {
+			NonOrientedAxis::X => [NonOrientedAxis::Y, NonOrientedAxis::Z],
+			NonOrientedAxis::Y => [NonOrientedAxis::X, NonOrientedAxis::Z],
+			NonOrientedAxis::Z => [NonOrientedAxis::X, NonOrientedAxis::Y],
+		}
+	}
 }
 
 /// For a given `NonOrientedAxis`, this allows to represent
