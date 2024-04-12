@@ -181,12 +181,7 @@ fn generate_block_face_mesh(
 	// In doing so we moved the points along some axis.
 	// The two other axes are the ones that describe a plane in which the 4 points will be moved
 	// to make a square, so we get these two other axes.
-	let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
-		.into_iter()
-		.filter(|&axis| axis != face_orientation.axis);
-	let other_axis_a = other_axes.next().unwrap();
-	let other_axis_b = other_axes.next().unwrap();
-	assert!(other_axes.next().is_none());
+	let [other_axis_a, other_axis_b] = face_orientation.axis.the_other_two_axes();
 
 	// Now we move each point from the center of the face square to one of the square vertex.
 	coords_array[0][other_axis_a.index()] -= 0.5;

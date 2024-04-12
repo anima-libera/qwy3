@@ -411,11 +411,7 @@ pub(crate) mod textured_cubes {
 
 			let face_center = cube_center + direction.delta().map(|x| x as f32) * 0.5;
 
-			let mut other_axes = [NonOrientedAxis::X, NonOrientedAxis::Y, NonOrientedAxis::Z]
-				.into_iter()
-				.filter(|&axis| axis != direction.axis);
-			let other_axis_a = other_axes.next().unwrap();
-			let other_axis_b = other_axes.next().unwrap();
+			let [other_axis_a, other_axis_b] = direction.axis.the_other_two_axes();
 
 			let mut coords_array = [face_center; 4];
 
