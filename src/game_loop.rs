@@ -799,14 +799,20 @@ pub fn init_and_run_game_loop() {
 				position += direction * 0.01;
 			};
 
+			// The targeted face is hilighted by a mesh of a square around it.
+			// To avoid Z-fighting and make that mesh be more visible, we move it a little towards
+			// the exterior of the face (the air side of the face), and we also make it a little
+			// smaller than a block (so that the edges avoid being inside other blocks even
+			// when in a corner).
 			let targeted_face_mesh_opt = game.targeted_face.as_ref().map(|targeted_face| {
 				SimpleLineMesh::from_aligned_box_but_only_one_side(
 					&game.device,
 					&AlignedBox {
 						pos: targeted_face.interior_coords.map(|x| x as f32),
-						dims: cgmath::vec3(1.01, 1.01, 1.01),
+						dims: cgmath::vec3(0.99, 0.99, 0.99),
 					},
 					targeted_face.direction_to_exterior,
+					0.02,
 				)
 			});
 

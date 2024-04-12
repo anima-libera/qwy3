@@ -77,10 +77,13 @@ impl SimpleLineMesh {
 		SimpleLineMesh::from_vertices(device, vertices)
 	}
 
+	/// The `side_offset` parameter moves the generated rectangle along its normal.
+	/// It moves towards the outside of the box if the offset is positive.
 	pub(crate) fn from_aligned_box_but_only_one_side(
 		device: &wgpu::Device,
 		aligned_box: &AlignedBox,
 		which_side: OrientedAxis,
+		side_offset: f32,
 	) -> SimpleLineMesh {
 		// We are making a rectangle on the plane that contains axis_a and axis_b.
 		let [axis_a, axis_b] = which_side.axis.the_other_two_axes();
@@ -88,8 +91,9 @@ impl SimpleLineMesh {
 		let dim_a = aligned_box.dims[axis_a.index()];
 		let dim_b = aligned_box.dims[axis_b.index()];
 		// We get the center of the rectangle.
-		let displacement_mask = which_side.delta().map(|x| x as f32);
-		let center = aligned_box.pos + aligned_box.dims.mul_element_wise(displacement_mask) / 2.0;
+		let displacement_mask =
+			which_side.delta().map(|x| x as f32 + side_offset * x.signum() as f32);
+		let center = aligned_box.pos + (aligned_box.dims / 2.0).mul_element_wise(displacement_mask);
 
 		// The four vertices of the rectangle.
 		let ambm = center + {
