@@ -13,7 +13,7 @@ use crate::{
 	chunk_loading::LoadingManager,
 	chunks::{Block, ChunkGrid},
 	cmdline, commands,
-	coords::{AlignedBox, AngularDirection, BlockCoords, ChunkCoords, ChunkDimensions},
+	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
 	entity_parts::{PartTables, TextureMappingTable},
 	font::{self, Font},
 	interface::Interface,
@@ -100,9 +100,7 @@ pub(crate) struct Game {
 	pub(crate) sun_camera_matrices_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_camera_single_matrix_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
-	/// First is the block of matter that is targeted,
-	/// second is the empty block near it that would be filled if a block was placed now.
-	pub(crate) targeted_block_coords: Option<(BlockCoords, BlockCoords)>,
+	pub(crate) targeted_face: Option<OrientedFaceCoords>,
 	pub(crate) player_phys: AlignedPhysBox,
 	pub(crate) cd: ChunkDimensions,
 	pub(crate) chunk_grid: ChunkGrid,
@@ -398,9 +396,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		window.set_cursor_visible(false);
 	}
 
-	// First is the block of matter that is targeted,
-	// second is the empty block near it that would be filled if a block was placed now.
-	let targeted_block_coords: Option<(BlockCoords, BlockCoords)> = None;
+	let targeted_face = None;
 
 	let walking_forward = false;
 	let walking_backward = false;
@@ -629,7 +625,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		sun_camera_matrices_thingy,
 		sun_camera_single_matrix_thingy,
 		shadow_map_cascade_view_thingies,
-		targeted_block_coords,
+		targeted_face,
 		player_phys,
 		cd,
 		chunk_grid,

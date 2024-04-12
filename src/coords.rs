@@ -368,6 +368,14 @@ impl AxisOrientation {
 			AxisOrientation::Negativewards => '-',
 		}
 	}
+
+	fn from_sign(sign: i32) -> Option<AxisOrientation> {
+		match sign {
+			1 => Some(AxisOrientation::Positivewards),
+			-1 => Some(AxisOrientation::Negativewards),
+			_ => None,
+		}
+	}
 }
 
 /// Axis but oriented.
@@ -380,6 +388,24 @@ pub(crate) struct OrientedAxis {
 }
 
 impl OrientedAxis {
+	pub(crate) fn from_delta(delta: cgmath::Vector3<i32>) -> Option<OrientedAxis> {
+		if delta.x.abs() + delta.y.abs() + delta.z.abs() != 1 {
+			return None;
+		}
+		let sign = delta.x + delta.y + delta.z;
+		let orientation = AxisOrientation::from_sign(sign).unwrap();
+		let axis = if delta.x != 0 {
+			NonOrientedAxis::X
+		} else if delta.y != 0 {
+			NonOrientedAxis::Y
+		} else if delta.z != 0 {
+			NonOrientedAxis::Z
+		} else {
+			unreachable!()
+		};
+		Some(OrientedAxis { axis, orientation })
+	}
+
 	pub(crate) fn all_the_six_possible_directions() -> impl Iterator<Item = OrientedAxis> {
 		NonOrientedAxis::iter_over_the_three_possible_axes().flat_map(|axis| {
 			AxisOrientation::iter_over_the_two_possible_orientations()
@@ -391,6 +417,25 @@ impl OrientedAxis {
 		let mut delta: cgmath::Vector3<i32> = (0, 0, 0).into();
 		delta[self.axis.index()] = self.orientation.sign();
 		delta
+	}
+}
+
+/// Coordinates of a face.
+///
+/// `BlockCoords` refers to a block, and `OrientedFaceCoords` refers to one face of such block.
+///
+/// Also, the referred face is oriented; that means that, for two adjacent blocks A and B,
+/// the face between A and B can have two orientations: from A to B and from B et A.
+/// One of these two blocks is the "interior" block (field `interior_coords`)
+/// and the other is the "exterior" block (method `exterior_coords`).
+pub(crate) struct OrientedFaceCoords {
+	pub(crate) interior_coords: BlockCoords,
+	pub(crate) direction_to_exterior: OrientedAxis,
+}
+
+impl OrientedFaceCoords {
+	pub(crate) fn exterior_coords(&self) -> BlockCoords {
+		self.interior_coords + self.direction_to_exterior.delta()
 	}
 }
 

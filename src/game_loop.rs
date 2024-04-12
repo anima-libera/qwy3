@@ -3,7 +3,10 @@ use std::f32::consts::TAU;
 use crate::{
 	camera::{aspect_ratio, CameraSettings},
 	chunks::{Block, BlockData},
-	coords::{iter_3d_cube_center_radius, AlignedBox, BlockCoords, ChunkCoordsSpan},
+	coords::{
+		iter_3d_cube_center_radius, AlignedBox, AxisOrientation, BlockCoords, ChunkCoordsSpan,
+		NonOrientedAxis, OrientedAxis, OrientedFaceCoords,
+	},
 	entities::Entity,
 	font,
 	game_init::{init_game, save_savable_state},
@@ -239,7 +242,7 @@ pub fn init_and_run_game_loop() {
 							}
 						},
 						(Action::PlaceBlockAtTarget, true) => {
-							if let Some((_, coords)) = game.targeted_block_coords {
+							if let Some(targeted_face) = game.targeted_face.as_ref() {
 								let block_to_place = game.player_held_block.take().or_else(|| {
 									(game.playing_mode == PlayingMode::Free).then(|| Block {
 										type_id: game.block_type_table.text_id(),
@@ -247,25 +250,29 @@ pub fn init_and_run_game_loop() {
 									})
 								});
 								if let Some(block_to_place) = block_to_place {
-									game
-										.chunk_grid
-										.set_block_and_request_updates_to_meshes(coords, block_to_place);
+									game.chunk_grid.set_block_and_request_updates_to_meshes(
+										targeted_face.exterior_coords(),
+										block_to_place,
+									);
 								}
 							}
 						},
 						(Action::RemoveBlockAtTarget, true) => {
-							if let Some((coords_take, coords_place)) = game.targeted_block_coords {
+							if let Some(targeted_face) = game.targeted_face.as_ref() {
 								let block_to_place_back = game.player_held_block.take();
 								if let Some(block_to_place_back) = block_to_place_back {
 									game.chunk_grid.set_block_and_request_updates_to_meshes(
-										coords_place,
+										targeted_face.exterior_coords(),
 										block_to_place_back,
 									);
 								} else {
-									let broken_block =
-										game.chunk_grid.get_block(coords_take).unwrap().as_owned_block();
+									let broken_block = game
+										.chunk_grid
+										.get_block(targeted_face.interior_coords)
+										.unwrap()
+										.as_owned_block();
 									game.chunk_grid.set_block_and_request_updates_to_meshes(
-										coords_take,
+										targeted_face.interior_coords,
 										game.block_type_table.air_id().into(),
 									);
 									game.player_held_block = Some(broken_block);
@@ -759,7 +766,7 @@ pub fn init_and_run_game_loop() {
 			let direction = game.camera_direction.to_vec3();
 			let mut position = first_person_camera_position;
 			let mut last_position_int: Option<BlockCoords> = None;
-			game.targeted_block_coords = loop {
+			game.targeted_face = loop {
 				if first_person_camera_position.distance(position) > 6.0 {
 					break None;
 				}
@@ -770,7 +777,15 @@ pub fn init_and_run_game_loop() {
 					.is_some_and(|block| !game.block_type_table.get(block.type_id).unwrap().is_air())
 				{
 					if let Some(last_position_int) = last_position_int {
-						break Some((position_int, last_position_int));
+						let interior_coords = position_int;
+						let exterior_coords = last_position_int;
+						let direction_to_exterior = exterior_coords - interior_coords;
+						let direction_to_exterior = OrientedAxis::from_delta(direction_to_exterior)
+							.unwrap_or(OrientedAxis {
+								axis: NonOrientedAxis::Z,
+								orientation: AxisOrientation::Positivewards,
+							});
+						break Some(OrientedFaceCoords { interior_coords, direction_to_exterior });
 					} else {
 						break None;
 					}
@@ -780,14 +795,15 @@ pub fn init_and_run_game_loop() {
 				}
 				// TODO: Advance directly to the next block with exactly the right step distance,
 				// also do not skip blocks (even a small arbitrary step can be too big sometimes).
+				// TODO: Actually, we should have proper ray casting!
 				position += direction * 0.01;
 			};
 
-			let targeted_block_box_mesh_opt = game.targeted_block_coords.map(|(coords, _)| {
+			let targeted_block_box_mesh_opt = game.targeted_face.as_ref().map(|targeted_face| {
 				SimpleLineMesh::from_aligned_box(
 					&game.device,
 					&AlignedBox {
-						pos: coords.map(|x| x as f32),
+						pos: targeted_face.interior_coords.map(|x| x as f32),
 						dims: cgmath::vec3(1.01, 1.01, 1.01),
 					},
 				)
