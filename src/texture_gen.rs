@@ -244,14 +244,18 @@ struct WeightedValue<T> {
 	value: T,
 }
 
-fn weighted_mean(weighted_values: &[WeightedValue<f32>]) -> f32 {
+fn weighted_mean(weighted_values: &[WeightedValue<f32>], default: f32) -> f32 {
 	let mut weight_sum = 0.0;
 	let mut accumulator = 0.0;
 	for WeightedValue { weight, value } in weighted_values.iter() {
 		weight_sum += weight;
 		accumulator += value * weight;
 	}
-	accumulator / weight_sum
+	if weight_sum == 0.0 {
+		default
+	} else {
+		accumulator / weight_sum
+	}
 }
 
 fn color_weighted_mean(weighted_colors: &[WeightedValue<Color>]) -> Color {
@@ -264,7 +268,7 @@ fn color_weighted_mean(weighted_colors: &[WeightedValue<Color>]) -> Color {
 				value: value.0[i] as f32,
 			})
 			.collect();
-		*channel_value = weighted_mean(&weighted_values_for_channel_i) as u8;
+		*channel_value = weighted_mean(&weighted_values_for_channel_i, 1.0) as u8;
 	}
 	image::Rgba::from(rgba)
 }
@@ -362,8 +366,22 @@ fn generate_unary_step(
 	} else if !must_be_color_smoothing && random_unit() < 0.3 {
 		UnaryStep::Smooth01 { how_much_x: random_unit(), how_much_y: random_unit() }
 	} else if !must_be_color_smoothing && random_unit() < 0.3 {
-		UnaryStep::Smooth02 {
-			kernel: [
+		if random_unit() < 0.3 {
+			UnaryStep::Smooth02 {
+				kernel: [
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+					random_unit(),
+				],
+			}
+		} else {
+			let mut kernel = [
 				random_unit(),
 				random_unit(),
 				random_unit(),
@@ -373,7 +391,14 @@ fn generate_unary_step(
 				random_unit(),
 				random_unit(),
 				random_unit(),
-			],
+			];
+			let v = 0.0;
+			let n = (random_unit() * 20.0).ceil() as usize;
+			for _ in 0..n {
+				let index = (random_unit() * (9.0 - 0.0001)).floor() as usize % 9;
+				kernel[index] = v;
+			}
+			UnaryStep::Smooth02 { kernel }
 		}
 	} else if random_unit() < 0.4 {
 		UnaryStep::SmoothColors01 { seed: new_seed() }
