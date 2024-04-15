@@ -137,7 +137,7 @@ pub fn init_and_run_game_loop() {
 				let mut pos = game.player_phys.aligned_box().pos;
 				pos.z -= dy * sensitivity;
 				pos += direction_left_or_right.to_vec3() * f32::abs(dx) * sensitivity;
-				game.player_phys.impose_new_pos(pos);
+				game.player_phys.impose_position(pos);
 			}
 		},
 
@@ -699,7 +699,7 @@ pub fn init_and_run_game_loop() {
 
 			// Walking.
 			let walking_vector = {
-				let walking_factor = if game.enable_physics { 12.0 } else { 50.0 } * dt.as_secs_f32();
+				let walking_factor = if game.enable_physics { 12.0 } else { 50.0 };
 				let walking_forward_factor = if game.walking_forward { 1 } else { 0 }
 					+ if game.walking_backward { -1 } else { 0 };
 				let walking_rightward_factor = if game.walking_rightward { 1 } else { 0 }
@@ -716,11 +716,18 @@ pub fn init_and_run_game_loop() {
 					walking_vector_direction.normalize()
 				} * walking_factor)
 			};
-			game.player_phys.walk(walking_vector, !game.enable_physics);
 
+			// Player physics.
 			if game.enable_physics {
-				game.player_phys.apply_one_physics_step(&game.chunk_grid, &game.block_type_table, dt);
+				game.player_phys.apply_one_physics_step(
+					walking_vector,
+					&game.chunk_grid,
+					&game.block_type_table,
+					dt,
+				);
 				game.player_jump_manager.manage(&game.player_phys);
+			} else {
+				game.player_phys.impose_displacement(walking_vector * dt.as_secs_f32());
 			}
 
 			game.chunk_grid.apply_one_physics_step(

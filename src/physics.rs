@@ -10,38 +10,33 @@ use std::{cmp::Ordering, sync::Arc, time::Duration};
 #[derive(Clone)]
 pub(crate) struct AlignedPhysBox {
 	aligned_box: AlignedBox,
-	new_box_pos: cgmath::Point3<f32>,
 	motion: cgmath::Vector3<f32>,
 	on_ground: bool,
 }
 
 impl AlignedPhysBox {
 	pub(crate) fn new(aligned_box: AlignedBox) -> AlignedPhysBox {
-		let new_box_pos = aligned_box.pos;
 		let motion = cgmath::vec3(0.0, 0.0, 0.0);
 		let on_ground = false;
-		AlignedPhysBox { aligned_box, new_box_pos, motion, on_ground }
+		AlignedPhysBox { aligned_box, motion, on_ground }
 	}
 
 	pub(crate) fn aligned_box(&self) -> &AlignedBox {
 		&self.aligned_box
 	}
 
-	pub(crate) fn walk(&mut self, walking_vector: cgmath::Vector3<f32>, impose_new_pos: bool) {
-		self.new_box_pos += walking_vector;
-		if impose_new_pos {
-			self.aligned_box.pos = self.new_box_pos;
-		}
+	pub(crate) fn impose_position(&mut self, position: cgmath::Point3<f32>) {
+		self.aligned_box.pos = position;
+		self.on_ground = false;
 	}
-
-	pub(crate) fn impose_new_pos(&mut self, new_pos: cgmath::Point3<f32>) {
-		self.aligned_box.pos = new_pos;
-		self.new_box_pos = new_pos;
+	pub(crate) fn impose_displacement(&mut self, displacement: cgmath::Vector3<f32>) {
+		self.aligned_box.pos += displacement;
 		self.on_ground = false;
 	}
 
 	pub(crate) fn apply_one_physics_step(
 		&mut self,
+		walking_vector: cgmath::Vector3<f32>,
 		chunk_grid: &ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: Duration,
@@ -58,13 +53,12 @@ impl AlignedPhysBox {
 		.map(|x| x.round() as i32);
 		if is_opaque(bottom_block) {
 			self.aligned_box.pos.z += 100.0 * dt.as_secs_f32();
-			self.new_box_pos = self.aligned_box.pos;
 			self.motion = cgmath::vec3(0.0, 0.0, 0.0);
 			self.on_ground = true;
 			return;
 		}
 
-		self.new_box_pos += self.motion * 144.0 * dt.as_secs_f32();
+		let displacement = (self.motion * 144.0 + walking_vector) * dt.as_secs_f32();
 		self.motion.z -= 0.35 * dt.as_secs_f32();
 		self.motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
 
@@ -74,16 +68,11 @@ impl AlignedPhysBox {
 		// https://www.mcpk.wiki/wiki/Collisions
 		for axis in [NonOrientedAxis::Z, NonOrientedAxis::X, NonOrientedAxis::Y] {
 			let axis_i = axis.index();
-			let old_pos_coord = self.aligned_box.pos[axis_i];
-
-			// Apply the motion along the considered axis.
-			self.aligned_box.pos[axis_i] = self.new_box_pos[axis_i];
 
 			// The motion along the considered axis goes in either of the two possible orientations
 			// of the axis (positiveward or negativeward), here we get that orientation for the
 			// currently considered axis.
-			let position_comparison =
-				self.aligned_box.pos[axis_i].partial_cmp(&old_pos_coord).unwrap();
+			let position_comparison = displacement[axis_i].partial_cmp(&0.0).unwrap();
 			let orientation = match position_comparison {
 				Ordering::Equal => {
 					// There is no motion along the considered axis,
@@ -95,6 +84,9 @@ impl AlignedPhysBox {
 			};
 			let sign = orientation.sign() as f32;
 			let oriented_axis = OrientedAxis { axis, orientation };
+
+			// Apply the motion along the considered axis.
+			self.aligned_box.pos[axis_i] += displacement[axis_i];
 
 			// The hitbox overlaps with some blocks (a rectangukar 3D span of blocks) (solid or not).
 			// We get that block span to have a list of block to check for collisions, as the hitbox
@@ -135,7 +127,6 @@ impl AlignedPhysBox {
 				self.aligned_box.pos[axis_i] = pos_coord_solved;
 			}
 		}
-		self.new_box_pos = self.aligned_box.pos;
 
 		// Check for being on some ground or not.
 		self.on_ground = false;
@@ -146,6 +137,14 @@ impl AlignedPhysBox {
 			orientation: AxisOrientation::Negativewards,
 		});
 		self.on_ground = block_span_below.iter().any(is_opaque);
+		if self.motion.z > 0.0 {
+			self.on_ground = false;
+		}
+
+		// If on ground, friction is too high for motion to persist.
+		if self.on_ground {
+			self.motion *= 0.0;
+		}
 	}
 }
 
