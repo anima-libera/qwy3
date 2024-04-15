@@ -12,9 +12,6 @@ pub(crate) struct AlignedPhysBox {
 	aligned_box: AlignedBox,
 	new_box_pos: cgmath::Point3<f32>,
 	motion: cgmath::Vector3<f32>,
-	/// Gravity's acceleration of this box is influenced by this parameter.
-	/// It may not be exactly analog to weight but it's not too far.
-	gravity_factor: f32,
 	on_ground: bool,
 }
 
@@ -22,9 +19,8 @@ impl AlignedPhysBox {
 	pub(crate) fn new(aligned_box: AlignedBox) -> AlignedPhysBox {
 		let new_box_pos = aligned_box.pos;
 		let motion = cgmath::vec3(0.0, 0.0, 0.0);
-		let gravity_factor = 1.0;
 		let on_ground = false;
-		AlignedPhysBox { aligned_box, new_box_pos, motion, gravity_factor, on_ground }
+		AlignedPhysBox { aligned_box, new_box_pos, motion, on_ground }
 	}
 
 	pub(crate) fn aligned_box(&self) -> &AlignedBox {
@@ -69,7 +65,7 @@ impl AlignedPhysBox {
 		}
 
 		self.new_box_pos += self.motion * 144.0 * dt.as_secs_f32();
-		self.motion.z -= self.gravity_factor * 0.35 * dt.as_secs_f32();
+		self.motion.z -= 0.35 * dt.as_secs_f32();
 		self.motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
 
 		// We handle the motion axis by axis.
