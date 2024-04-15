@@ -6,7 +6,6 @@ use std::{
 };
 
 use cgmath::EuclideanSpace;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -17,6 +16,7 @@ use crate::{
 		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
 		TextureMappingTable,
 	},
+	physics::AlignedPhysBox,
 	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
 	shaders::part_textured::PartTexturedInstancePod,
@@ -39,7 +39,6 @@ use crate::{
 /// automatically, and will wait for the chunk loading (if it was not already loaded).
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Entity {
-	pos: cgmath::Point3<f32>,
 	to_delete: bool,
 	typed: EntityTyped,
 }
@@ -47,7 +46,7 @@ pub(crate) struct Entity {
 enum EntityTyped {
 	Block {
 		block: Block,
-		motion: cgmath::Vector3<f32>,
+		phys: AlignedPhysBox,
 		#[serde(skip)]
 		part_handler: PartHandler<PartTexturedInstancePod>,
 	},
@@ -63,14 +62,23 @@ impl Entity {
 		motion: cgmath::Vector3<f32>,
 	) -> Entity {
 		Entity {
-			pos,
 			to_delete: false,
-			typed: EntityTyped::Block { block, motion, part_handler: PartHandler::default() },
+			typed: EntityTyped::Block {
+				block,
+				phys: AlignedPhysBox::new(
+					AlignedBox { pos, dims: cgmath::vec3(1.0, 1.0, 1.0) },
+					motion,
+				),
+				part_handler: PartHandler::default(),
+			},
 		}
 	}
 
 	pub(crate) fn pos(&self) -> cgmath::Point3<f32> {
-		self.pos
+		match &self.typed {
+			EntityTyped::Block { phys, .. } => phys.aligned_box().pos,
+			EntityTyped::_DummyOtherType => panic!(),
+		}
 	}
 
 	pub(crate) fn chunk_coords(&self, cd: ChunkDimensions) -> ChunkCoords {
@@ -79,15 +87,13 @@ impl Entity {
 	}
 
 	pub(crate) fn aligned_box(&self) -> Option<AlignedBox> {
-		match self.typed {
-			EntityTyped::Block { .. } => {
-				Some(AlignedBox { pos: self.pos, dims: cgmath::vec3(1.0, 1.0, 1.0) })
-			},
+		match &self.typed {
+			EntityTyped::Block { phys, .. } => Some(phys.aligned_box().clone()),
 			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
-	fn collides_with_blocks(
+	fn _collides_with_blocks(
 		&self,
 		chunk_grid: &ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
@@ -103,7 +109,7 @@ impl Entity {
 			}
 			false
 		} else {
-			let coords = self.pos.map(|x| x.round() as i32);
+			let coords = self.pos().map(|x| x.round() as i32);
 			chunk_grid
 				.get_block(coords)
 				.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
@@ -120,25 +126,30 @@ impl Entity {
 	) {
 		match self.typed {
 			EntityTyped::Block { .. } => {
-				if let EntityTyped::Block { motion, .. } = &mut self.typed {
-					self.pos += *motion * 144.0 * dt.as_secs_f32();
-					motion.z -= 1.0 * 0.35 * dt.as_secs_f32();
-					*motion /= 1.0 + 0.0015 * 144.0 * dt.as_secs_f32();
-				}
+				let on_ground = if let EntityTyped::Block { phys, .. } = &mut self.typed {
+					phys.apply_one_physics_step(
+						cgmath::vec3(0.0, 0.0, 0.0),
+						chunk_grid,
+						block_type_table,
+						dt,
+					);
+					phys.on_ground()
+				} else {
+					unreachable!()
+				};
 
-				let collides = self.collides_with_blocks(chunk_grid, block_type_table);
-				if collides {
-					let coords = self.pos.map(|x| x.round() as i32);
+				if on_ground {
+					let coords = self.pos().map(|x| x.round() as i32);
 
 					if chunk_grid
 						.get_block(coords)
 						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
 					{
-						self.pos.z += 100.0 * dt.as_secs_f32();
-						self.pos.x += rand::thread_rng().gen_range(-1.0..1.0) * 100.0 * dt.as_secs_f32();
-						self.pos.y += rand::thread_rng().gen_range(-1.0..1.0) * 100.0 * dt.as_secs_f32();
-						if let EntityTyped::Block { motion, .. } = &mut self.typed {
-							*motion = cgmath::vec3(0.0, 0.0, 0.0);
+						if let EntityTyped::Block { phys, .. } = &mut self.typed {
+							phys.impose_nullification_of_motion();
+							phys.impose_displacement(
+								cgmath::vec3(0.0, 0.0, 1.0) * 100.0 * dt.as_secs_f32(),
+							);
 						}
 					} else {
 						let chunk_coords =
@@ -158,6 +169,7 @@ impl Entity {
 				}
 
 				// Manage the part.
+				let pos = self.pos();
 				if let EntityTyped::Block { block, part_handler, .. } = &mut self.typed {
 					part_handler.ensure_is_allocated(
 						&mut part_manipulation.part_tables.textured_cubes,
@@ -171,17 +183,15 @@ impl Entity {
 									part_manipulation.queue,
 								)
 								.unwrap();
-							PartTexturedCubeInstanceData::new(self.pos, texture_mapping_point_offset)
-								.into_pod()
+							PartTexturedCubeInstanceData::new(pos, texture_mapping_point_offset).into_pod()
 						},
 					);
 
 					part_handler.modify_instance(
 						&mut part_manipulation.part_tables.textured_cubes,
 						|instance| {
-							instance.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(
-								self.pos.to_vec(),
-							));
+							instance
+								.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(pos.to_vec()));
 						},
 					);
 				}

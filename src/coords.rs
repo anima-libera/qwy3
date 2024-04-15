@@ -9,6 +9,7 @@
 use std::f32::consts::TAU;
 
 use cgmath::EuclideanSpace;
+use serde::{Deserialize, Serialize};
 
 /// Coordinates of a block in the world.
 pub(crate) type BlockCoords = cgmath::Point3<i32>;
@@ -615,7 +616,7 @@ impl BitCube3 {
 
 /// Just a 3D rectangular axis-aligned box.
 /// It cannot rotate as it stays aligned on the axes.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct AlignedBox {
 	/// Position of the center of the box.
 	pub(crate) pos: cgmath::Point3<f32>,

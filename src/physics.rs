@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
 	block_types::BlockTypeTable,
 	chunks::ChunkGrid,
@@ -7,7 +9,7 @@ use crate::{
 use std::{cmp::Ordering, sync::Arc, time::Duration};
 
 /// Represents an `AlignedBox`-shaped object that has physics or something like that.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct AlignedPhysBox {
 	aligned_box: AlignedBox,
 	motion: cgmath::Vector3<f32>,
@@ -15,14 +17,16 @@ pub(crate) struct AlignedPhysBox {
 }
 
 impl AlignedPhysBox {
-	pub(crate) fn new(aligned_box: AlignedBox) -> AlignedPhysBox {
-		let motion = cgmath::vec3(0.0, 0.0, 0.0);
+	pub(crate) fn new(aligned_box: AlignedBox, motion: cgmath::Vector3<f32>) -> AlignedPhysBox {
 		let on_ground = false;
 		AlignedPhysBox { aligned_box, motion, on_ground }
 	}
 
 	pub(crate) fn aligned_box(&self) -> &AlignedBox {
 		&self.aligned_box
+	}
+	pub(crate) fn on_ground(&self) -> bool {
+		self.on_ground
 	}
 
 	pub(crate) fn impose_position(&mut self, position: cgmath::Point3<f32>) {
@@ -32,6 +36,9 @@ impl AlignedPhysBox {
 	pub(crate) fn impose_displacement(&mut self, displacement: cgmath::Vector3<f32>) {
 		self.aligned_box.pos += displacement;
 		self.on_ground = false;
+	}
+	pub(crate) fn impose_nullification_of_motion(&mut self) {
+		self.motion *= 0.0;
 	}
 
 	pub(crate) fn apply_one_physics_step(

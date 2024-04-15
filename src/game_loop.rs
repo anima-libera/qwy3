@@ -327,7 +327,7 @@ pub fn init_and_run_game_loop() {
 									game.save.as_ref(),
 								);
 							} else if game.playing_mode == PlayingMode::Free {
-								for _ in 0..300 {
+								for _ in 0..10 {
 									let block = Block {
 										type_id: game
 											.block_type_table

@@ -406,8 +406,10 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let player_pos: cgmath::Point3<f32> =
 		(*saved_state.as_ref().map(|state| &state.player_pos).unwrap_or(&[0.0, 0.0, 2.0])).into();
-	let player_phys =
-		AlignedPhysBox::new(AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() });
+	let player_phys = AlignedPhysBox::new(
+		AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() },
+		cgmath::vec3(0.0, 0.0, 0.0),
+	);
 	let player_jump_manager = PlayerJumpManager::new();
 	let enable_physics = true;
 	let enable_display_phys_box = false;
