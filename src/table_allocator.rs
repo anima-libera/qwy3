@@ -96,7 +96,7 @@ impl TableAllocator {
 	fn where_index_lands(&self, index: usize) -> WhereIndexLands {
 		assert!(index < self.length);
 		if self.free_intervals.is_empty() {
-			return WhereIndexLands::BeforeInterval(1);
+			return WhereIndexLands::BeforeInterval(0);
 		}
 
 		// Binary search, but we look both inside the intervals and inbetween the intervals.
