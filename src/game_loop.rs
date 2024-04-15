@@ -169,7 +169,7 @@ pub fn init_and_run_game_loop() {
 							game.walking_rightward = pressed;
 						},
 						(Action::Jump, true) => {
-							game.player_phys.jump();
+							game.player_jump_manager.jump(&mut game.player_phys);
 						},
 						(Action::TogglePhysics, true) => {
 							if game.playing_mode == PlayingMode::Free {
@@ -720,6 +720,7 @@ pub fn init_and_run_game_loop() {
 
 			if game.enable_physics {
 				game.player_phys.apply_one_physics_step(&game.chunk_grid, &game.block_type_table, dt);
+				game.player_jump_manager.manage(&game.player_phys);
 			}
 
 			game.chunk_grid.apply_one_physics_step(

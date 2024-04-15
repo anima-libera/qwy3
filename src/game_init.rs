@@ -19,7 +19,7 @@ use crate::{
 	interface::Interface,
 	lang,
 	line_meshes::SimpleLineMesh,
-	physics::AlignedPhysBox,
+	physics::{AlignedPhysBox, PlayerJumpManager},
 	rendering_init::{
 		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy,
 		init_coords_in_atlas_array_thingy, init_fog_stuff, init_shadow_map_stuff, init_skybox_stuff,
@@ -102,6 +102,7 @@ pub(crate) struct Game {
 	pub(crate) shadow_map_cascade_view_thingies: Vec<BindingThingy<wgpu::TextureView>>,
 	pub(crate) targeted_face: Option<OrientedFaceCoords>,
 	pub(crate) player_phys: AlignedPhysBox,
+	pub(crate) player_jump_manager: PlayerJumpManager,
 	pub(crate) cd: ChunkDimensions,
 	pub(crate) chunk_grid: ChunkGrid,
 	pub(crate) loading_manager: LoadingManager,
@@ -407,6 +408,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		(*saved_state.as_ref().map(|state| &state.player_pos).unwrap_or(&[0.0, 0.0, 2.0])).into();
 	let player_phys =
 		AlignedPhysBox::new(AlignedBox { pos: player_pos, dims: (0.8, 0.8, 1.8).into() });
+	let player_jump_manager = PlayerJumpManager::new();
 	let enable_physics = true;
 	let enable_display_phys_box = false;
 
@@ -627,6 +629,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		shadow_map_cascade_view_thingies,
 		targeted_face,
 		player_phys,
+		player_jump_manager,
 		cd,
 		chunk_grid,
 		loading_manager,

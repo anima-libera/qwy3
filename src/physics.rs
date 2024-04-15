@@ -16,7 +16,6 @@ pub(crate) struct AlignedPhysBox {
 	/// It may not be exactly analog to weight but it's not too far.
 	gravity_factor: f32,
 	on_ground: bool,
-	last_time_on_ground_if_not_jumped: Option<std::time::Instant>,
 }
 
 impl AlignedPhysBox {
@@ -25,31 +24,11 @@ impl AlignedPhysBox {
 		let motion = cgmath::vec3(0.0, 0.0, 0.0);
 		let gravity_factor = 1.0;
 		let on_ground = false;
-		let last_time_on_ground_if_not_jumped = None;
-		AlignedPhysBox {
-			aligned_box,
-			new_box_pos,
-			motion,
-			gravity_factor,
-			on_ground,
-			last_time_on_ground_if_not_jumped,
-		}
+		AlignedPhysBox { aligned_box, new_box_pos, motion, gravity_factor, on_ground }
 	}
 
 	pub(crate) fn aligned_box(&self) -> &AlignedBox {
 		&self.aligned_box
-	}
-
-	pub(crate) fn jump(&mut self) {
-		let can_still_jump = || {
-			self
-				.last_time_on_ground_if_not_jumped
-				.is_some_and(|time| time.elapsed() < std::time::Duration::from_secs_f32(0.15))
-		};
-		if self.on_ground || can_still_jump() {
-			self.motion.z = 0.1;
-			self.last_time_on_ground_if_not_jumped = None;
-		}
 	}
 
 	pub(crate) fn walk(&mut self, walking_vector: cgmath::Vector3<f32>, impose_new_pos: bool) {
@@ -171,8 +150,38 @@ impl AlignedPhysBox {
 			orientation: AxisOrientation::Negativewards,
 		});
 		self.on_ground = block_span_below.iter().any(is_opaque);
-		if self.on_ground {
+	}
+}
+
+/// Manages the paleyr's ability to jump.
+/// This handles permissive jumping (allows jumping even when it is a little bit too late
+/// and the player is already falling off an edge).
+pub(crate) struct PlayerJumpManager {
+	last_time_on_ground_if_not_jumped: Option<std::time::Instant>,
+}
+
+impl PlayerJumpManager {
+	pub(crate) fn new() -> PlayerJumpManager {
+		PlayerJumpManager { last_time_on_ground_if_not_jumped: None }
+	}
+
+	/// Must be called at every frame.
+	pub(crate) fn manage(&mut self, phys_box: &AlignedPhysBox) {
+		if phys_box.on_ground {
 			self.last_time_on_ground_if_not_jumped = Some(std::time::Instant::now());
+		}
+	}
+
+	pub(crate) fn jump(&mut self, phys_box: &mut AlignedPhysBox) {
+		let can_still_jump = || {
+			self
+				.last_time_on_ground_if_not_jumped
+				.is_some_and(|time| time.elapsed() < std::time::Duration::from_secs_f32(0.15))
+		};
+		if phys_box.on_ground || can_still_jump() {
+			phys_box.motion.z = 0.1;
+			phys_box.on_ground = false;
+			self.last_time_on_ground_if_not_jumped = None;
 		}
 	}
 }
