@@ -148,7 +148,8 @@ impl TableAllocator {
 			WhereIndexLands::InInterval(_interval_i) => panic!("Double free"),
 			WhereIndexLands::BeforeInterval(interval_after_i) => {
 				let interval_before = (interval_after_i >= 1)
-					.then(|| self.free_intervals.get(interval_after_i - 1).unwrap());
+					.then(|| self.free_intervals.get(interval_after_i - 1))
+					.flatten();
 				let interval_after = self.free_intervals.get(interval_after_i);
 
 				let extends_before =
