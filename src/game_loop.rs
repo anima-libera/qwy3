@@ -724,6 +724,7 @@ pub fn init_and_run_game_loop() {
 					&game.chunk_grid,
 					&game.block_type_table,
 					dt,
+					true,
 				);
 				game.player_jump_manager.manage(&game.player_phys);
 			} else {

@@ -37,9 +37,6 @@ impl AlignedPhysBox {
 		self.aligned_box.pos += displacement;
 		self.on_ground = false;
 	}
-	pub(crate) fn impose_nullification_of_motion(&mut self) {
-		self.motion *= 0.0;
-	}
 
 	pub(crate) fn apply_one_physics_step(
 		&mut self,
@@ -47,6 +44,7 @@ impl AlignedPhysBox {
 		chunk_grid: &ChunkGrid,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: Duration,
+		bubble_up: bool,
 	) {
 		let is_opaque = |coords: BlockCoords| -> bool {
 			chunk_grid
@@ -54,15 +52,15 @@ impl AlignedPhysBox {
 				.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
 		};
 
-		// Bubble up through solid matter if the hit box happens to already be inside matter.
-		let bottom_block = (self.aligned_box.pos
-			+ cgmath::vec3(0.0, 0.0, -self.aligned_box.dims.z / 2.0 + 0.3))
-		.map(|x| x.round() as i32);
-		if is_opaque(bottom_block) {
-			self.aligned_box.pos.z += 100.0 * dt.as_secs_f32();
-			self.motion = cgmath::vec3(0.0, 0.0, 0.0);
-			self.on_ground = true;
-			return;
+		if bubble_up {
+			// Bubble up through solid matter if the hit box happens to already be inside matter.
+			let collision = self.aligned_box.overlapping_block_coords_span().iter().any(is_opaque);
+			if collision {
+				self.aligned_box.pos.z += 100.0 * dt.as_secs_f32();
+				self.motion = cgmath::vec3(0.0, 0.0, 0.0);
+				self.on_ground = true;
+				return;
+			}
 		}
 
 		let displacement = (self.motion * 144.0 + walking_vector) * dt.as_secs_f32();

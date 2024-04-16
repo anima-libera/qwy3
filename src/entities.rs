@@ -132,30 +132,23 @@ impl Entity {
 						chunk_grid,
 						block_type_table,
 						dt,
+						true,
 					);
 					phys.on_ground()
 				} else {
 					unreachable!()
 				};
 
+				// Place itself on the block grid if on the ground and there is room.
 				if on_ground {
 					let coords = self.pos().map(|x| x.round() as i32);
-
-					if chunk_grid
+					let coords_are_free = !chunk_grid
 						.get_block(coords)
-						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
-					{
-						if let EntityTyped::Block { phys, .. } = &mut self.typed {
-							phys.impose_nullification_of_motion();
-							phys.impose_displacement(
-								cgmath::vec3(0.0, 0.0, 1.0) * 100.0 * dt.as_secs_f32(),
-							);
-						}
-					} else {
+						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque());
+					if coords_are_free {
 						let chunk_coords =
 							chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
 						let is_loaded = chunk_grid.is_loaded(chunk_coords);
-
 						if is_loaded {
 							let block = if let EntityTyped::Block { block, .. } = &self.typed {
 								block.clone()
