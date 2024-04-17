@@ -68,6 +68,7 @@ pub(crate) enum WhichWorldGenerator {
 	StructuresGeneratedBlocks,
 	WierdTerrain03,
 	StructuresProceduralPoc,
+	StructuresArcs,
 }
 
 impl WhichWorldGenerator {
@@ -131,6 +132,7 @@ impl WhichWorldGenerator {
 					block_type_table,
 				),
 			),
+			WhichWorldGenerator::StructuresArcs => Arc::new(WorldGeneratorStructuresArcs { seed }),
 		}
 	}
 }
@@ -3209,8 +3211,6 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 	}
 }
 
-mod structure_gen {}
-
 struct WorldGeneratorStructuresEnginePoc {
 	pub(crate) seed: i32,
 }
@@ -3963,5 +3963,204 @@ mod procedural_structures_poc {
 
 			chunk_blocks.finish_generation()
 		}
+	}
+}
+
+struct WorldGeneratorStructuresArcs {
+	pub(crate) seed: i32,
+}
+
+impl WorldGenerator for WorldGeneratorStructuresArcs {
+	fn generate_chunk_blocks(
+		&self,
+		coords_span: ChunkCoordsSpan,
+		block_type_table: &Arc<BlockTypeTable>,
+	) -> ChunkBlocks {
+		// Define the terrain generation as a deterministic coords->block function.
+		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
+		let coords_to_ground = |coords: BlockCoords| -> bool {
+			let coordsf = coords.map(|x| x as f32);
+			let coordsf_xy = cgmath::point2(coordsf.x, coordsf.y);
+			let scale = 60.0;
+			let height = 20.0 * noise_terrain.sample_2d_1d(coordsf_xy / scale, &[]);
+			coordsf.z < height
+		};
+		let block_type_table_for_terrain = Arc::clone(block_type_table);
+		let coords_to_terrain = |coords: BlockCoords| -> BlockTypeId {
+			let ground = coords_to_ground(coords);
+			if ground {
+				let ground_above = coords_to_ground(coords + cgmath::vec3(0, 0, 1));
+				if ground_above {
+					block_type_table_for_terrain.ground_id()
+				} else {
+					block_type_table_for_terrain.kinda_grass_id()
+				}
+			} else {
+				block_type_table_for_terrain.air_id()
+			}
+		};
+
+		// Define structure generation.
+		let structure_max_blocky_radius = 100;
+		let noise_structure = noise::OctavedNoise::new(1, vec![self.seed, 3]);
+		let generate_structure_arc = |mut context: StructureInstanceGenerationContext| {
+			let mut placing_head = context.origin.coords;
+
+			// Finding ground.
+			let mut found_ground = false;
+			for _i in 0..structure_max_blocky_radius {
+				let no_ground_above = context
+					.block_type_table
+					.get((context.terrain_generator)(
+						placing_head + cgmath::vec3(0, 0, 1),
+					))
+					.unwrap()
+					.is_air();
+				let ground_here = !context
+					.block_type_table
+					.get((context.terrain_generator)(placing_head))
+					.unwrap()
+					.is_air();
+				if no_ground_above && ground_here {
+					found_ground = true;
+					break;
+				}
+				placing_head.z -= 1;
+			}
+			if !found_ground {
+				return;
+			}
+
+			let noise_value_a = noise_structure.sample_i3d_1d(placing_head, &[1]);
+			let noise_value_b = noise_structure.sample_i3d_1d(placing_head, &[2]);
+			let noise_value_c = noise_structure.sample_i3d_1d(placing_head, &[3]);
+
+			let block_id = context.block_type_table.generated_test_id((noise_value_c * 10.0) as usize);
+
+			let radius = (noise_value_a * 0.5 + 0.5) * (structure_max_blocky_radius - 3).max(5) as f32;
+			let horizontal_angle = noise_value_b * TAU;
+			let center = placing_head.map(|x| x as f32);
+			let circumference = radius * TAU;
+			let step_count = (circumference / 1.3) as isize;
+			let step_radius = |step_i: isize| {
+				let mut delta = cgmath::vec3(0.0, 0.0, 0.0);
+				let angle = TAU * step_i as f32 / step_count as f32;
+				delta.z = angle.cos();
+				delta.x = angle.sin() * horizontal_angle.cos();
+				delta.y = angle.sin() * horizontal_angle.sin();
+				delta * radius
+			};
+
+			// Will the arc touch the ground on both ends while staying in its bounding box?
+			let smaller_bounding_box = {
+				let mut bounding_box = context.allowed_span;
+				bounding_box.add_margins(-3);
+				bounding_box
+			};
+			let mut last_touched_ground: Option<bool> = None;
+			let mut number_of_points_that_touch_ground_surface = 0;
+			for i in 0..step_count {
+				let placing_head_float = center + step_radius(i);
+				let placing_head = placing_head_float.map(|x| x.round() as i32);
+				let enough_in_bounding_box = smaller_bounding_box.contains(placing_head);
+				if enough_in_bounding_box {
+					let touching_ground = !context
+						.block_type_table
+						.get((context.terrain_generator)(placing_head))
+						.unwrap()
+						.is_air();
+					let touching_ground_surface = if let Some(last_touched_ground) = last_touched_ground
+					{
+						(touching_ground && !last_touched_ground)
+							|| (!touching_ground && last_touched_ground)
+					} else {
+						false
+					};
+					if touching_ground_surface {
+						number_of_points_that_touch_ground_surface += 1;
+					}
+					last_touched_ground = Some(touching_ground);
+				}
+			}
+			let touch_ground_on_both_ends = number_of_points_that_touch_ground_surface >= 2;
+
+			if touch_ground_on_both_ends {
+				// The arc will touch the ground on both ends while staying in its bounding box,
+				// we can actually generate it.
+				let mut last_touched_ground: Option<bool> = None;
+				let directions = [1, -1];
+				for direction in directions {
+					for i in 0..step_count {
+						let i = if direction == 1 {
+							i
+						} else {
+							step_count - 1 - i
+						};
+						let placing_head_float = center + step_radius(i);
+						let scale = 6.0;
+						let ball_radius =
+							2.0 + 2.0 * noise_structure.sample_3d_1d(placing_head_float / scale, &[4]);
+						context.place_ball(
+							&BlockPlacing { block_type_to_place: block_id, only_place_on_air: true },
+							placing_head_float,
+							ball_radius,
+						);
+						let touching_ground = !context
+							.block_type_table
+							.get((context.terrain_generator)(placing_head))
+							.unwrap()
+							.is_air();
+						let touching_ground_surface =
+							if let Some(last_touched_ground) = last_touched_ground {
+								(touching_ground && !last_touched_ground)
+									|| (!touching_ground && last_touched_ground)
+							} else {
+								false
+							};
+						if touching_ground_surface {
+							break;
+						}
+						last_touched_ground = Some(touching_ground);
+					}
+				}
+			} else {
+				// For the arc to touch the ground on both ends, it has to go past its bounding box,
+				// which it cannot do. We do not generate such arcs.
+			}
+		};
+
+		let structure_types: [&StructureTypeInstanceGenerator; 1] = [&generate_structure_arc];
+
+		// Setup structure origins generation stuff.
+		let structure_origin_generator =
+			TestStructureOriginGenerator::new(self.seed, 31, (-200, 2), structure_types.len() as i32);
+
+		// Now we generate the block data in the chunk.
+		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+
+		// Generate terrain in the chunk.
+		for coords in chunk_blocks.coords_span().iter_coords() {
+			chunk_blocks.set_simple(coords, coords_to_terrain(coords));
+		}
+
+		// Generate the structures that can overlap with the chunk.
+		let mut span_to_check = CubicCoordsSpan::from_chunk_span(coords_span);
+		span_to_check.add_margins(structure_max_blocky_radius);
+		let origins = structure_origin_generator.get_origins_in_span(span_to_check);
+		for origin in origins.into_iter() {
+			let allowed_span =
+				CubicCoordsSpan::with_center_and_radius(origin.coords, structure_max_blocky_radius);
+			let context = StructureInstanceGenerationContext {
+				origin,
+				allowed_span,
+				chunk_blocks: &mut chunk_blocks,
+				_origin_generator: &structure_origin_generator,
+				block_type_table,
+				terrain_generator: &coords_to_terrain,
+			};
+			structure_types[origin.type_id.index](context);
+		}
+
+		chunk_blocks.finish_generation()
 	}
 }
