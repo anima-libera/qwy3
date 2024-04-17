@@ -74,7 +74,7 @@ impl AlignedPhysBox {
 			let target_z_for_bottom_side = top_z_overlapping_blocks.unwrap() as f32 + 0.5;
 			let target_z = target_z_for_bottom_side + self.aligned_box.dims.z / 2.0 + 0.001;
 			self.aligned_box.pos.z = (self.aligned_box.pos.z + 100.0 * dt.as_secs_f32()).min(target_z);
-			//self.motion = cgmath::vec3(0.0, 0.0, 0.0);
+			self.motion /= 1.0 + 0.05 * 144.0 * dt.as_secs_f32();
 			return;
 		}
 
@@ -170,7 +170,8 @@ impl AlignedPhysBox {
 				* (face.direction_to_exterior.orientation.sign() as f32)
 				< 0.0
 			{
-				self.motion /= 1.0 + 0.05 * 144.0 * dt.as_secs_f32();
+				let friction = self.motion[face.direction_to_exterior.axis.index()].abs();
+				self.motion /= 1.0 + friction * 144.0 * dt.as_secs_f32();
 			}
 		}
 	}
