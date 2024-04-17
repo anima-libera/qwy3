@@ -75,6 +75,8 @@
 
 ## World
 
+- Structure engine.
+  - Set a maximum bounding box dimensions, then allow structures to declare their (potentially smaller) bounding box to already eliminate small structures too far from the chunk while still allowing very big structures.
 - Procedurally generated types of block.
   - Procedurally generated textures for these types of blocks (that actually are somewhat related to the block vibes, like if the block is made to be like wood or leaf the texture should at least try to feel like wood or something).
   - Procedurally generated properties.
