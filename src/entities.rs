@@ -66,7 +66,7 @@ impl Entity {
 			typed: EntityTyped::Block {
 				block,
 				phys: AlignedPhysBox::new(
-					AlignedBox { pos, dims: cgmath::vec3(1.0, 1.0, 1.0) },
+					AlignedBox { pos, dims: cgmath::vec3(0.99, 0.99, 0.99) },
 					motion,
 				),
 				part_handler: PartHandler::default(),

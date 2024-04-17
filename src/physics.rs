@@ -72,9 +72,8 @@ impl AlignedPhysBox {
 		// Bubble up through solid matter if the hitbox happens to already be inside matter.
 		if bubble_up && self.is_overlapping_blocks {
 			let target_z_for_bottom_side = top_z_overlapping_blocks.unwrap() as f32 + 0.5;
-			let target_z = target_z_for_bottom_side + self.aligned_box.dims.z / 2.0;
-			self.aligned_box.pos.z =
-				(self.aligned_box.pos.z + 1000.0 * dt.as_secs_f32()).min(target_z);
+			let target_z = target_z_for_bottom_side + self.aligned_box.dims.z / 2.0 + 0.001;
+			self.aligned_box.pos.z = (self.aligned_box.pos.z + 100.0 * dt.as_secs_f32()).min(target_z);
 			self.motion = cgmath::vec3(0.0, 0.0, 0.0);
 			return;
 		}
