@@ -126,27 +126,36 @@ impl Entity {
 	) {
 		match self.typed {
 			EntityTyped::Block { .. } => {
-				let on_ground_and_not_overlapping =
-					if let EntityTyped::Block { phys, .. } = &mut self.typed {
-						phys.apply_one_physics_step(
-							cgmath::vec3(0.0, 0.0, 0.0),
-							chunk_grid,
-							block_type_table,
-							dt,
-							true,
-						);
-						phys.on_ground_and_not_overlapping()
-					} else {
-						unreachable!()
-					};
+				let try_to_place = if let EntityTyped::Block { phys, .. } = &mut self.typed {
+					phys.apply_one_physics_step(
+						cgmath::vec3(0.0, 0.0, 0.0),
+						chunk_grid,
+						block_type_table,
+						dt,
+						true,
+					);
+
+					phys.on_ground_and_not_overlapping()
+				} else {
+					unreachable!()
+				};
 
 				// Place itself on the block grid if on the ground and there is room.
-				if on_ground_and_not_overlapping {
+				if try_to_place {
 					let coords = self.pos().map(|x| x.round() as i32);
-					let coords_are_free = !chunk_grid
+					let coords_are_empty = !chunk_grid
 						.get_block(coords)
 						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque());
-					if coords_are_free {
+					let coords_below_are_empty = !chunk_grid
+						.get_block(coords - cgmath::vec3(0, 0, 1))
+						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque());
+					if coords_below_are_empty {
+						if let EntityTyped::Block { phys, .. } = &mut self.typed {
+							phys.impose_position(coords.map(|x| x as f32));
+						} else {
+							unreachable!();
+						};
+					} else if coords_are_empty {
 						let chunk_coords =
 							chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
 						let is_loaded = chunk_grid.is_loaded(chunk_coords);
