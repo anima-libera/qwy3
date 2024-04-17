@@ -356,7 +356,7 @@ pub fn init_and_run_game_loop() {
 											break perturbation;
 										}
 									};
-									motion += perturbation * 0.1 * 144.0 * dt.as_secs_f32();
+									motion = motion * 0.8 + perturbation * 0.1;
 
 									game.chunk_grid.add_entity(
 										Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
