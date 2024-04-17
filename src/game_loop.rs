@@ -277,6 +277,16 @@ pub fn init_and_run_game_loop() {
 									);
 									game.player_held_block = Some(broken_block);
 								}
+							} else if let Some(block_to_throw) = game.player_held_block.take() {
+								let motion = game.camera_direction.to_vec3() * 0.5;
+								game.chunk_grid.add_entity(
+									Entity::new_block(
+										block_to_throw,
+										game.player_phys.aligned_box().pos,
+										motion,
+									),
+									game.save.as_ref(),
+								);
 							}
 						},
 						(Action::ToggleDisplayInterface, true) => {
