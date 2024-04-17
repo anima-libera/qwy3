@@ -302,7 +302,7 @@ impl ChunkDimensions {
 /// Axis (without considering its orientation).
 ///
 /// Note that the vertical axis is Z.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NonOrientedAxis {
 	X,
 	Y,
@@ -347,7 +347,7 @@ impl NonOrientedAxis {
 /// to represent the orientation of increasing coordinate values along the given axis.
 /// Thus, `NonOrientedAxis::Z` and `AxisOrientation::Positivewards` represent the upwards
 /// direction (Z+), as increasing the Z coordinate of a point makes it go upwards.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum AxisOrientation {
 	Positivewards,
 	Negativewards,
@@ -390,7 +390,7 @@ impl AxisOrientation {
 /// Axis but oriented.
 ///
 /// Note that upwards is Z+ and downwards is Z-.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct OrientedAxis {
 	pub(crate) axis: NonOrientedAxis,
 	pub(crate) orientation: AxisOrientation,
@@ -429,6 +429,34 @@ impl OrientedAxis {
 	}
 }
 
+#[allow(dead_code)]
+impl OrientedAxis {
+	pub(crate) const X_PLUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::X,
+		orientation: AxisOrientation::Positivewards,
+	};
+	pub(crate) const X_MINUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::X,
+		orientation: AxisOrientation::Negativewards,
+	};
+	pub(crate) const Y_PLUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::Y,
+		orientation: AxisOrientation::Positivewards,
+	};
+	pub(crate) const Y_MINUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::Y,
+		orientation: AxisOrientation::Negativewards,
+	};
+	pub(crate) const Z_PLUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::Z,
+		orientation: AxisOrientation::Positivewards,
+	};
+	pub(crate) const Z_MINUS: OrientedAxis = OrientedAxis {
+		axis: NonOrientedAxis::Z,
+		orientation: AxisOrientation::Negativewards,
+	};
+}
+
 /// Coordinates of a face.
 ///
 /// `BlockCoords` refers to a block, and `OrientedFaceCoords` refers to one face of such block.
@@ -437,6 +465,7 @@ impl OrientedAxis {
 /// the face between A and B can have two orientations: from A to B and from B et A.
 /// One of these two blocks is the "interior" block (field `interior_coords`)
 /// and the other is the "exterior" block (method `exterior_coords`).
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct OrientedFaceCoords {
 	pub(crate) interior_coords: BlockCoords,
 	pub(crate) direction_to_exterior: OrientedAxis,

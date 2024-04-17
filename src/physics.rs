@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
 	block_types::BlockTypeTable,
 	chunks::ChunkGrid,
-	coords::{AlignedBox, AxisOrientation, BlockCoords, NonOrientedAxis, OrientedAxis},
+	coords::{
+		AlignedBox, AxisOrientation, BlockCoords, NonOrientedAxis, OrientedAxis, OrientedFaceCoords,
+	},
 };
 
 use std::{cmp::Ordering, sync::Arc, time::Duration};
@@ -13,29 +15,35 @@ use std::{cmp::Ordering, sync::Arc, time::Duration};
 pub(crate) struct AlignedPhysBox {
 	aligned_box: AlignedBox,
 	motion: cgmath::Vector3<f32>,
-	on_ground: bool,
+	on_faces: Vec<OrientedFaceCoords>,
+	is_overlapping_blocks: bool,
 }
 
 impl AlignedPhysBox {
 	pub(crate) fn new(aligned_box: AlignedBox, motion: cgmath::Vector3<f32>) -> AlignedPhysBox {
-		let on_ground = false;
-		AlignedPhysBox { aligned_box, motion, on_ground }
+		AlignedPhysBox {
+			aligned_box,
+			motion,
+			on_faces: vec![],
+			is_overlapping_blocks: false,
+		}
 	}
 
 	pub(crate) fn aligned_box(&self) -> &AlignedBox {
 		&self.aligned_box
 	}
-	pub(crate) fn on_ground(&self) -> bool {
-		self.on_ground
+	pub(crate) fn on_ground_and_not_overlapping(&self) -> bool {
+		self.on_faces.iter().any(|face| face.direction_to_exterior == OrientedAxis::Z_PLUS)
+			&& !self.is_overlapping_blocks
 	}
 
 	pub(crate) fn impose_position(&mut self, position: cgmath::Point3<f32>) {
 		self.aligned_box.pos = position;
-		self.on_ground = false;
+		self.on_faces.clear();
 	}
 	pub(crate) fn impose_displacement(&mut self, displacement: cgmath::Vector3<f32>) {
 		self.aligned_box.pos += displacement;
-		self.on_ground = false;
+		self.on_faces.clear();
 	}
 
 	pub(crate) fn apply_one_physics_step(
@@ -52,15 +60,23 @@ impl AlignedPhysBox {
 				.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
 		};
 
-		if bubble_up {
-			// Bubble up through solid matter if the hit box happens to already be inside matter.
-			let collision = self.aligned_box.overlapping_block_coords_span().iter().any(is_opaque);
-			if collision {
-				self.aligned_box.pos.z += 100.0 * dt.as_secs_f32();
-				self.motion = cgmath::vec3(0.0, 0.0, 0.0);
-				self.on_ground = true;
-				return;
-			}
+		// Is the hitbox inside matter?
+		let overlapping_blocks = self
+			.aligned_box
+			.overlapping_block_coords_span()
+			.iter()
+			.filter(|&coords| is_opaque(coords));
+		let top_z_overlapping_blocks = overlapping_blocks.map(|coords| coords.z).max();
+		self.is_overlapping_blocks = top_z_overlapping_blocks.is_some();
+
+		// Bubble up through solid matter if the hitbox happens to already be inside matter.
+		if bubble_up && self.is_overlapping_blocks {
+			let target_z_for_bottom_side = top_z_overlapping_blocks.unwrap() as f32 + 0.5;
+			let target_z = target_z_for_bottom_side + self.aligned_box.dims.z / 2.0;
+			self.aligned_box.pos.z =
+				(self.aligned_box.pos.z + 1000.0 * dt.as_secs_f32()).min(target_z);
+			self.motion = cgmath::vec3(0.0, 0.0, 0.0);
+			return;
 		}
 
 		let displacement = (self.motion * 144.0 + walking_vector) * dt.as_secs_f32();
@@ -133,22 +149,30 @@ impl AlignedPhysBox {
 			}
 		}
 
-		// Check for being on some ground or not.
-		self.on_ground = false;
-		let mut moved_aligned_box = self.aligned_box.clone();
-		moved_aligned_box.pos.z -= 0.1;
-		let block_span_below = moved_aligned_box.overlapping_block_coords_span().side(OrientedAxis {
-			axis: NonOrientedAxis::Z,
-			orientation: AxisOrientation::Negativewards,
-		});
-		self.on_ground = block_span_below.iter().any(is_opaque);
-		if self.motion.z > 0.0 {
-			self.on_ground = false;
+		// Check for being on some block faces or not.
+		self.on_faces.clear();
+		for direction in OrientedAxis::all_the_six_possible_directions() {
+			let mut moved_aligned_box = self.aligned_box.clone();
+			moved_aligned_box.pos += direction.delta().map(|x| x as f32) * 0.005;
+			let block_span_on_side = moved_aligned_box.overlapping_block_coords_span().side(direction);
+			for interior_coords in block_span_on_side.iter().filter(|&coords| is_opaque(coords)) {
+				let direction_to_exterior = OrientedAxis::from_delta(direction.delta() * -1).unwrap();
+				let face = OrientedFaceCoords { interior_coords, direction_to_exterior };
+				let face_is_exposed = !is_opaque(face.exterior_coords());
+				if face_is_exposed {
+					self.on_faces.push(OrientedFaceCoords { interior_coords, direction_to_exterior })
+				}
+			}
 		}
 
-		// If on ground, friction is too high for motion to persist.
-		if self.on_ground {
-			self.motion *= 0.0;
+		// If perssed on face, then apply more friction.
+		for face in self.on_faces.iter() {
+			if self.motion[face.direction_to_exterior.axis.index()]
+				* (face.direction_to_exterior.orientation.sign() as f32)
+				< 0.0
+			{
+				self.motion /= 1.0 + 0.05 * 144.0 * dt.as_secs_f32();
+			}
 		}
 	}
 }
@@ -167,7 +191,7 @@ impl PlayerJumpManager {
 
 	/// Must be called at every frame.
 	pub(crate) fn manage(&mut self, phys_box: &AlignedPhysBox) {
-		if phys_box.on_ground {
+		if phys_box.on_ground_and_not_overlapping() {
 			self.last_time_on_ground_if_not_jumped = Some(std::time::Instant::now());
 		}
 	}
@@ -178,9 +202,8 @@ impl PlayerJumpManager {
 				.last_time_on_ground_if_not_jumped
 				.is_some_and(|time| time.elapsed() < std::time::Duration::from_secs_f32(0.15))
 		};
-		if phys_box.on_ground || can_still_jump() {
+		if phys_box.on_ground_and_not_overlapping() || can_still_jump() {
 			phys_box.motion.z = 0.1;
-			phys_box.on_ground = false;
 			self.last_time_on_ground_if_not_jumped = None;
 		}
 	}

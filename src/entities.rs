@@ -126,21 +126,22 @@ impl Entity {
 	) {
 		match self.typed {
 			EntityTyped::Block { .. } => {
-				let on_ground = if let EntityTyped::Block { phys, .. } = &mut self.typed {
-					phys.apply_one_physics_step(
-						cgmath::vec3(0.0, 0.0, 0.0),
-						chunk_grid,
-						block_type_table,
-						dt,
-						true,
-					);
-					phys.on_ground()
-				} else {
-					unreachable!()
-				};
+				let on_ground_and_not_overlapping =
+					if let EntityTyped::Block { phys, .. } = &mut self.typed {
+						phys.apply_one_physics_step(
+							cgmath::vec3(0.0, 0.0, 0.0),
+							chunk_grid,
+							block_type_table,
+							dt,
+							true,
+						);
+						phys.on_ground_and_not_overlapping()
+					} else {
+						unreachable!()
+					};
 
 				// Place itself on the block grid if on the ground and there is room.
-				if on_ground {
+				if on_ground_and_not_overlapping {
 					let coords = self.pos().map(|x| x.round() as i32);
 					let coords_are_free = !chunk_grid
 						.get_block(coords)
