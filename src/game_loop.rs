@@ -433,7 +433,7 @@ pub fn init_and_run_game_loop() {
 									* (1.0 / 512.0),
 								texture_rect_in_atlas_wh: cgmath::vec2(16.0, 16.0) * (1.0 / 512.0),
 							};
-							*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 6.0);
+							*item_held_widget = Widget::new_simple_texture(rect_in_atlas, 10.0);
 						} else {
 							*item_held_widget = Widget::Nothing;
 						}
