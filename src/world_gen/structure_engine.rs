@@ -176,7 +176,7 @@ impl<'a> StructureInstanceGenerationContext<'a> {
 					.get(coords)
 					.is_some_and(|block| self.block_type_table.get(block.type_id).unwrap().is_air());
 			if shall_place_block {
-				self.chunk_blocks.set_simple(coords, block_placing.block_type_to_place);
+				self.chunk_blocks.set_id(coords, block_placing.block_type_to_place);
 			}
 		}
 	}

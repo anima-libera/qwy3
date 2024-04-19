@@ -23,12 +23,12 @@ use crate::{
 	unsorted::CurrentWorkerTasks,
 };
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) enum BlockData {
 	Text(String),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct Block {
 	pub(crate) type_id: BlockTypeId,
 	pub(crate) data: Option<BlockData>,
@@ -57,9 +57,15 @@ impl<'a> BlockView<'a> {
 	}
 }
 
-/// The blocks of a chunk.
+#[derive(Clone, Serialize, Deserialize)]
+struct BlockPaletteEntry {
+	instance_count: u32,
+	block: Block,
+}
+
+/// The blocks of a chunk, stored in a palette compressed way.
 ///
-/// If no non-air block is ever placed in a `ChunkBlocks` then it never allocates memory.
+/// As long as no non-air block is ever placed in a `ChunkBlocks` then it does not allocate memory.
 #[derive(Clone)]
 pub(crate) struct ChunkBlocks {
 	pub(crate) coords_span: ChunkCoordsSpan,
@@ -69,11 +75,12 @@ pub(crate) struct ChunkBlocks {
 #[derive(Clone, Serialize, Deserialize)]
 struct ChunkBlocksSavable {
 	/// If the length is zero then it means the chunk is full of air.
-	block_ids: Vec<BlockTypeId>,
-	/// Negative block ids are keys to this table.
-	blocks_with_data: FxHashMap<BlockTypeId, Block>,
-	/// Next available id number for blocks with data.
-	next_id_for_block_with_data: i16,
+	/// Else, these are keys in the palette.
+	block_keys: Vec<u8>,
+	/// The palette of blocks.
+	palette: FxHashMap<u8, BlockPaletteEntry>,
+	/// Next available key for the palette.
+	next_free_palette_key: u8,
 	/// If the blocks ever underwent a change since the chunk generation, then it is flagged
 	/// as `modified`. If we want to reduce the size of the saved data then we can avoid saving
 	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
@@ -85,9 +92,9 @@ impl ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
 			savable: ChunkBlocksSavable {
-				block_ids: vec![],
-				blocks_with_data: HashMap::default(),
-				next_id_for_block_with_data: -1,
+				block_keys: vec![],
+				palette: HashMap::default(),
+				next_free_palette_key: 0,
 				modified: false,
 			},
 		}
@@ -96,51 +103,82 @@ impl ChunkBlocks {
 	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
-		Some(if self.savable.block_ids.is_empty() {
+		Some(if self.savable.block_keys.is_empty() {
 			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
 		} else {
-			let block_id = self.savable.block_ids[internal_index];
-			if block_id.value >= 0 {
-				BlockView { type_id: block_id, data: None }
-			} else {
-				self.savable.blocks_with_data.get(&block_id).unwrap().as_view()
-			}
+			let key = self.savable.block_keys[internal_index];
+			self.savable.palette[&key].block.as_view()
 		})
 	}
 
-	pub(crate) fn set_simple(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
-		if let Some(internal_index) = self.coords_span.internal_index(coords) {
-			if self.savable.block_ids.is_empty() && block_id.value == 0 {
-				// Setting a block to air, but we are already empty, there is no need to allocate.
-			} else {
-				if self.savable.block_ids.is_empty() && block_id.value != 0 {
-					self.savable.block_ids = Vec::from_iter(
-						std::iter::repeat(BlockTypeId { value: 0 })
-							.take(self.coords_span.cd.number_of_blocks()),
-					);
+	fn add_one_block_instance_to_palette(&mut self, block: Block) -> u8 {
+		let already_in_palette =
+			self.savable.palette.iter_mut().find(|(_key, palette_entry)| palette_entry.block == block);
+		if let Some((&key, entry)) = already_in_palette {
+			entry.instance_count += 1;
+			key
+		} else {
+			let key = self.savable.next_free_palette_key;
+			self.savable.next_free_palette_key += 1;
+			self.savable.palette.insert(key, BlockPaletteEntry { instance_count: 1, block });
+			key
+		}
+	}
+
+	fn remove_one_block_instance_from_palette(&mut self, key: u8) {
+		match self.savable.palette.entry(key) {
+			Entry::Vacant(_) => panic!(),
+			Entry::Occupied(mut occupied) => {
+				let entry = occupied.get_mut();
+				entry.instance_count = entry.instance_count.saturating_sub(1);
+				if entry.instance_count == 0 {
+					occupied.remove();
+					// TODO: The key is no longer is use, it should be reused for future entries.
 				}
-				self.savable.block_ids[internal_index] = block_id;
-			}
-			self.savable.modified = true;
+			},
 		}
 	}
 
 	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
 		if self.coords_span.contains(coords) {
-			if block.data.is_some() {
-				let new_id = BlockTypeId { value: self.savable.next_id_for_block_with_data };
-				self.savable.next_id_for_block_with_data -= 1;
-				self.savable.blocks_with_data.insert(new_id, block);
-				self.set_simple(coords, new_id);
-			} else {
-				self.set_simple(coords, block.type_id);
+			// Make sure that we have allocated the block keys if that is needed.
+			if self.savable.block_keys.is_empty() {
+				if block.type_id.value == 0 {
+					// Setting a block to air, but we are already empty, we have nothing to do.
+					return;
+				} else {
+					// Setting a block to non-air, but we were empty (all air, no setup for other blocks),
+					// so we have to actually allocate the blocks (all set to air).
+					// We put an entry for air in the palette first.
+					assert_eq!(self.savable.next_free_palette_key, 0);
+					let key = self.savable.next_free_palette_key;
+					self.savable.next_free_palette_key += 1;
+					assert!(self.savable.palette.is_empty());
+					self.savable.palette.insert(
+						key,
+						BlockPaletteEntry {
+							instance_count: self.coords_span.cd.number_of_blocks() as u32,
+							block: Block { type_id: BlockTypeId { value: 0 }, data: None },
+						},
+					);
+					self.savable.block_keys = Vec::from_iter(
+						std::iter::repeat(key).take(self.coords_span.cd.number_of_blocks()),
+					);
+				}
 			}
+
+			// All is good, we just have to get the block's palette key and put it in the grid.
+			let index = self.coords_span.internal_index(coords).unwrap();
+			let key_of_block_to_remove = self.savable.block_keys[index];
+			self.remove_one_block_instance_from_palette(key_of_block_to_remove);
+			let key_of_block_being_added = self.add_one_block_instance_to_palette(block);
+			self.savable.block_keys[index] = key_of_block_being_added;
 			self.savable.modified = true;
 		}
 	}
 
 	fn may_contain_non_air(&self) -> bool {
-		!self.savable.block_ids.is_empty()
+		!self.savable.block_keys.is_empty()
 	}
 
 	fn save(&self, save: &Arc<Save>) {
@@ -194,11 +232,11 @@ impl ChunkBlocksBeingGenerated {
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		self.0.get(coords)
 	}
-	pub(crate) fn set_simple(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
-		self.0.set_simple(coords, block_id);
-	}
-	pub(crate) fn _set(&mut self, coords: BlockCoords, block: Block) {
+	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
 		self.0.set(coords, block);
+	}
+	pub(crate) fn set_id(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
+		self.set(coords, Block { type_id: block_id, data: None });
 	}
 
 	pub(crate) fn finish_generation(mut self) -> ChunkBlocks {
