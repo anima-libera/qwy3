@@ -4,6 +4,7 @@ use std::{
 	sync::Arc,
 };
 
+use bitvec::{field::BitField, vec::BitVec};
 use cgmath::MetricSpace;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,7 @@ struct BlockPaletteEntry {
 	instance_count: u32,
 	block: Block,
 }
+type PaletteKey = u32;
 
 /// The blocks of a chunk, stored in a palette compressed way.
 ///
@@ -76,11 +78,12 @@ pub(crate) struct ChunkBlocks {
 struct ChunkBlocksSavable {
 	/// If the length is zero then it means the chunk is full of air.
 	/// Else, these are keys in the palette.
-	block_keys: Vec<u8>,
+	block_keys: BitVec,
+	block_key_size_in_bits: usize,
 	/// The palette of blocks.
-	palette: FxHashMap<u8, BlockPaletteEntry>,
+	palette: FxHashMap<PaletteKey, BlockPaletteEntry>,
 	/// Next available key for the palette.
-	next_free_palette_key: u8,
+	next_free_palette_key: PaletteKey,
 	/// If the blocks ever underwent a change since the chunk generation, then it is flagged
 	/// as `modified`. If we want to reduce the size of the saved data then we can avoid saving
 	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
@@ -92,12 +95,27 @@ impl ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
 			savable: ChunkBlocksSavable {
-				block_keys: vec![],
+				block_keys: BitVec::new(),
+				block_key_size_in_bits: 0,
 				palette: HashMap::default(),
 				next_free_palette_key: 0,
 				modified: false,
 			},
 		}
+	}
+
+	fn get_block_key(&self, internal_index: usize) -> PaletteKey {
+		let index_inf = internal_index * self.savable.block_key_size_in_bits;
+		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
+		self.savable.block_keys[index_inf..index_sup_excluded].load()
+	}
+
+	fn set_block_key(&mut self, internal_index: usize, key: PaletteKey) {
+		let key_can_fit_in_taht_many_bits = (key.checked_ilog2().unwrap_or(0) + 1) as usize;
+		assert!(key_can_fit_in_taht_many_bits <= self.savable.block_key_size_in_bits);
+		let index_inf = internal_index * self.savable.block_key_size_in_bits;
+		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
+		self.savable.block_keys[index_inf..index_sup_excluded].store(key);
 	}
 
 	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
@@ -106,12 +124,12 @@ impl ChunkBlocks {
 		Some(if self.savable.block_keys.is_empty() {
 			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
 		} else {
-			let key = self.savable.block_keys[internal_index];
+			let key = self.get_block_key(internal_index);
 			self.savable.palette[&key].block.as_view()
 		})
 	}
 
-	fn add_one_block_instance_to_palette(&mut self, block: Block) -> u8 {
+	fn add_one_block_instance_to_palette(&mut self, block: Block) -> PaletteKey {
 		let already_in_palette =
 			self.savable.palette.iter_mut().find(|(_key, palette_entry)| palette_entry.block == block);
 		if let Some((&key, entry)) = already_in_palette {
@@ -125,7 +143,7 @@ impl ChunkBlocks {
 		}
 	}
 
-	fn remove_one_block_instance_from_palette(&mut self, key: u8) {
+	fn remove_one_block_instance_from_palette(&mut self, key: PaletteKey) {
 		match self.savable.palette.entry(key) {
 			Entry::Vacant(_) => panic!(),
 			Entry::Occupied(mut occupied) => {
@@ -151,7 +169,7 @@ impl ChunkBlocks {
 					// so we have to actually allocate the blocks (all set to air).
 					// We put an entry for air in the palette first.
 					assert_eq!(self.savable.next_free_palette_key, 0);
-					let key = self.savable.next_free_palette_key;
+					let key = 0;
 					self.savable.next_free_palette_key += 1;
 					assert!(self.savable.palette.is_empty());
 					self.savable.palette.insert(
@@ -161,18 +179,21 @@ impl ChunkBlocks {
 							block: Block { type_id: BlockTypeId { value: 0 }, data: None },
 						},
 					);
-					self.savable.block_keys = Vec::from_iter(
-						std::iter::repeat(key).take(self.coords_span.cd.number_of_blocks()),
+					assert_eq!(self.savable.block_key_size_in_bits, 0);
+					self.savable.block_key_size_in_bits = 8;
+					self.savable.block_keys = BitVec::repeat(
+						false,
+						self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits,
 					);
 				}
 			}
 
 			// All is good, we just have to get the block's palette key and put it in the grid.
 			let index = self.coords_span.internal_index(coords).unwrap();
-			let key_of_block_to_remove = self.savable.block_keys[index];
+			let key_of_block_to_remove = self.get_block_key(index);
 			self.remove_one_block_instance_from_palette(key_of_block_to_remove);
 			let key_of_block_being_added = self.add_one_block_instance_to_palette(block);
-			self.savable.block_keys[index] = key_of_block_being_added;
+			self.set_block_key(index, key_of_block_being_added);
 			self.savable.modified = true;
 		}
 	}
