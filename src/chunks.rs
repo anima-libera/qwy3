@@ -104,6 +104,11 @@ impl ChunkBlocks {
 		}
 	}
 
+	fn does_the_key_fit(&self, key: PaletteKey) -> bool {
+		let key_can_fit_in_that_many_bits = (key.checked_ilog2().unwrap_or(0) + 1) as usize;
+		key_can_fit_in_that_many_bits <= self.savable.block_key_size_in_bits
+	}
+
 	fn get_block_key(&self, internal_index: usize) -> PaletteKey {
 		let index_inf = internal_index * self.savable.block_key_size_in_bits;
 		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
@@ -111,22 +116,68 @@ impl ChunkBlocks {
 	}
 
 	fn set_block_key(&mut self, internal_index: usize, key: PaletteKey) {
-		let key_can_fit_in_taht_many_bits = (key.checked_ilog2().unwrap_or(0) + 1) as usize;
-		assert!(key_can_fit_in_taht_many_bits <= self.savable.block_key_size_in_bits);
 		let index_inf = internal_index * self.savable.block_key_size_in_bits;
 		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
 		self.savable.block_keys[index_inf..index_sup_excluded].store(key);
 	}
 
-	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
-	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
-		let internal_index = self.coords_span.internal_index(coords)?;
-		Some(if self.savable.block_keys.is_empty() {
-			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
-		} else {
-			let key = self.get_block_key(internal_index);
-			self.savable.palette[&key].block.as_view()
-		})
+	fn allocate_for_the_first_time_and_fill_with_air(&mut self) {
+		// We first put the entry for air in the palette.
+		assert_eq!(self.savable.next_free_palette_key, 0);
+		let key = 0;
+		self.savable.next_free_palette_key += 1;
+		assert!(self.savable.palette.is_empty());
+		self.savable.palette.insert(
+			key,
+			BlockPaletteEntry {
+				instance_count: self.coords_span.cd.number_of_blocks() as u32,
+				block: Block { type_id: BlockTypeId { value: 0 }, data: None },
+			},
+		);
+		// Then we allocate the bit vec and fill it with zeros (`key` is zero so it works).
+		assert_eq!(self.savable.block_key_size_in_bits, 0);
+		self.savable.block_key_size_in_bits = 1;
+		self.savable.block_keys = BitVec::repeat(
+			false,
+			self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits,
+		);
+	}
+
+	fn add_a_bit_to_block_key_size(&mut self) {
+		// First we resize the bitvec.
+		let old_key_size = self.savable.block_key_size_in_bits;
+		self.savable.block_key_size_in_bits += 1;
+		let new_len = self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits;
+		self.savable.block_keys.resize(new_len, false);
+		// Then we move the old bitvec content to its new position.
+		// Now we have availble space at the end of the bitvec (after the old keys) and
+		// we must move keys so that they take all the space and that each key must now have one
+		// additional bit in its representation size.
+		// We can do it from the end, moving the last old key from its old position to its new
+		// position (which is further on the right, so we do not overwrite unmoved keys), etc.
+		for i in (0..self.coords_span.cd.number_of_blocks()).rev() {
+			// Get the last not-yet moved key from its old position.
+			let key: PaletteKey = {
+				let index_inf = i * old_key_size;
+				let index_sup_excluded = index_inf + old_key_size;
+				self.savable.block_keys[index_inf..index_sup_excluded].load()
+			};
+			// Move it to its new position, its size now takes one more bit form its old size.
+			{
+				let index_inf = i * self.savable.block_key_size_in_bits;
+				let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
+				self.savable.block_keys[index_inf..index_sup_excluded].store(key);
+			}
+		}
+	}
+
+	fn get_new_key(&mut self) -> PaletteKey {
+		let new_key = self.savable.next_free_palette_key;
+		self.savable.next_free_palette_key += 1;
+		while !self.does_the_key_fit(new_key) {
+			self.add_a_bit_to_block_key_size();
+		}
+		new_key
 	}
 
 	fn add_one_block_instance_to_palette(&mut self, block: Block) -> PaletteKey {
@@ -136,8 +187,7 @@ impl ChunkBlocks {
 			entry.instance_count += 1;
 			key
 		} else {
-			let key = self.savable.next_free_palette_key;
-			self.savable.next_free_palette_key += 1;
+			let key = self.get_new_key();
 			self.savable.palette.insert(key, BlockPaletteEntry { instance_count: 1, block });
 			key
 		}
@@ -157,6 +207,17 @@ impl ChunkBlocks {
 		}
 	}
 
+	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
+	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
+		let internal_index = self.coords_span.internal_index(coords)?;
+		Some(if self.savable.block_keys.is_empty() {
+			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
+		} else {
+			let key = self.get_block_key(internal_index);
+			self.savable.palette[&key].block.as_view()
+		})
+	}
+
 	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
 		if self.coords_span.contains(coords) {
 			// Make sure that we have allocated the block keys if that is needed.
@@ -167,24 +228,7 @@ impl ChunkBlocks {
 				} else {
 					// Setting a block to non-air, but we were empty (all air, no setup for other blocks),
 					// so we have to actually allocate the blocks (all set to air).
-					// We put an entry for air in the palette first.
-					assert_eq!(self.savable.next_free_palette_key, 0);
-					let key = 0;
-					self.savable.next_free_palette_key += 1;
-					assert!(self.savable.palette.is_empty());
-					self.savable.palette.insert(
-						key,
-						BlockPaletteEntry {
-							instance_count: self.coords_span.cd.number_of_blocks() as u32,
-							block: Block { type_id: BlockTypeId { value: 0 }, data: None },
-						},
-					);
-					assert_eq!(self.savable.block_key_size_in_bits, 0);
-					self.savable.block_key_size_in_bits = 8;
-					self.savable.block_keys = BitVec::repeat(
-						false,
-						self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits,
-					);
+					self.allocate_for_the_first_time_and_fill_with_air();
 				}
 			}
 
