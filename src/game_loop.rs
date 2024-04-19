@@ -338,12 +338,11 @@ pub fn init_and_run_game_loop() {
 								);
 							} else if game.playing_mode == PlayingMode::Free {
 								for _ in 0..10 {
-									let block = Block {
-										type_id: game
+									let block = Block::from(
+										game
 											.block_type_table
 											.generated_test_id(rand::thread_rng().gen_range(0..10)),
-										data: None,
-									};
+									);
 
 									let mut motion = game.camera_direction.to_vec3();
 									let perturbation = loop {

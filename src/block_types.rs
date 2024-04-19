@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use crate::atlas::ATLAS_DIMS;
 
 pub(crate) enum BlockType {
@@ -55,56 +53,44 @@ impl BlockTypeTable {
 	}
 
 	pub(crate) fn get(&self, id: BlockTypeId) -> Option<&BlockType> {
-		if id.value < 0 {
-			None
-		} else {
-			self.block_types.get(id.value as usize)
-		}
+		self.block_types.get(id as usize)
 	}
 
+	pub(crate) const AIR_ID: BlockTypeId = 0;
+
 	pub(crate) fn air_id(&self) -> BlockTypeId {
-		BlockTypeId::new(0)
+		BlockTypeTable::AIR_ID
 	}
 
 	pub(crate) fn ground_id(&self) -> BlockTypeId {
-		BlockTypeId::new(1)
+		1
 	}
 
 	pub(crate) fn kinda_grass_id(&self) -> BlockTypeId {
-		BlockTypeId::new(2)
+		2
 	}
 
 	pub(crate) fn kinda_grass_blades_id(&self) -> BlockTypeId {
-		BlockTypeId::new(3)
+		3
 	}
 
 	pub(crate) fn kinda_wood_id(&self) -> BlockTypeId {
-		BlockTypeId::new(4)
+		4
 	}
 
 	pub(crate) fn kinda_leaf_id(&self) -> BlockTypeId {
-		BlockTypeId::new(5)
+		5
 	}
 
 	pub(crate) fn text_id(&self) -> BlockTypeId {
-		BlockTypeId::new(6)
+		6
 	}
 
 	pub(crate) fn generated_test_id(&self, index: usize) -> BlockTypeId {
-		let id: i16 = (index + 7).try_into().unwrap();
-		BlockTypeId::new(id)
+		let id: BlockTypeId = (index + 7).try_into().unwrap();
+		id
 	}
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub(crate) struct BlockTypeId {
-	/// Positive values (and 0) are indices in the table of block types.
-	/// Negative values are keys in a block-with-data table in the `ChunkBlocks`.
-	pub(crate) value: i16,
-}
-
-impl BlockTypeId {
-	fn new(value: i16) -> BlockTypeId {
-		BlockTypeId { value }
-	}
-}
+/// Index in the table of block types.
+pub(crate) type BlockTypeId = u32;

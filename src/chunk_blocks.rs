@@ -15,14 +15,13 @@ use crate::{
 };
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) enum BlockData {
-	Text(String),
-}
-
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct Block {
 	pub(crate) type_id: BlockTypeId,
 	pub(crate) data: Option<BlockData>,
+}
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) enum BlockData {
+	Text(String),
 }
 
 impl From<BlockTypeId> for Block {
@@ -32,6 +31,10 @@ impl From<BlockTypeId> for Block {
 }
 
 impl Block {
+	fn new_air() -> Block {
+		Block { type_id: BlockTypeTable::AIR_ID, data: None }
+	}
+
 	fn as_view(&self) -> BlockView<'_> {
 		BlockView { type_id: self.type_id, data: self.data.as_ref() }
 	}
@@ -43,6 +46,10 @@ pub(crate) struct BlockView<'a> {
 }
 
 impl<'a> BlockView<'a> {
+	fn new_air() -> BlockView<'a> {
+		BlockView { type_id: BlockTypeTable::AIR_ID, data: None }
+	}
+
 	pub(crate) fn as_owned_block(&self) -> Block {
 		Block { type_id: self.type_id, data: self.data.cloned() }
 	}
@@ -124,7 +131,7 @@ impl ChunkBlocks {
 			key,
 			BlockPaletteEntry {
 				instance_count: self.coords_span.cd.number_of_blocks() as u32,
-				block: Block { type_id: BlockTypeId { value: 0 }, data: None },
+				block: Block::new_air(),
 			},
 		);
 		// Then we allocate the bit vec and fill it with zeros (`key` is zero so it works).
@@ -217,7 +224,7 @@ impl ChunkBlocks {
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
 		Some(if self.savable.block_keys.is_empty() {
-			BlockView { type_id: BlockTypeId { value: 0 }, data: None }
+			BlockView::new_air()
 		} else {
 			let key = self.get_block_key(internal_index);
 			self.savable.palette[&key].block.as_view()
@@ -228,7 +235,7 @@ impl ChunkBlocks {
 		if self.coords_span.contains(coords) {
 			// Make sure that we have allocated the block keys if that is needed.
 			if self.savable.block_keys.is_empty() {
-				if block.type_id.value == 0 {
+				if block.type_id == BlockTypeTable::AIR_ID {
 					// Setting a block to air, but we are already empty, we have nothing to do.
 					return;
 				} else {
@@ -311,7 +318,7 @@ impl ChunkBlocksBeingGenerated {
 		self.0.set(coords, block);
 	}
 	pub(crate) fn set_id(&mut self, coords: BlockCoords, block_id: BlockTypeId) {
-		self.set(coords, Block { type_id: block_id, data: None });
+		self.set(coords, Block::from(block_id));
 	}
 
 	pub(crate) fn finish_generation(mut self) -> ChunkBlocks {
