@@ -82,8 +82,10 @@ struct ChunkBlocksSavable {
 	block_key_size_in_bits: usize,
 	/// The palette of blocks.
 	palette: FxHashMap<PaletteKey, BlockPaletteEntry>,
-	/// Next available key for the palette.
-	next_free_palette_key: PaletteKey,
+	/// Next available key for the palette that was never used before.
+	next_never_used_palette_key: PaletteKey,
+	/// Available palette keys that have been used before.
+	available_palette_keys: Vec<PaletteKey>,
 	/// If the blocks ever underwent a change since the chunk generation, then it is flagged
 	/// as `modified`. If we want to reduce the size of the saved data then we can avoid saving
 	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
@@ -98,7 +100,8 @@ impl ChunkBlocks {
 				block_keys: BitVec::new(),
 				block_key_size_in_bits: 0,
 				palette: HashMap::default(),
-				next_free_palette_key: 0,
+				next_never_used_palette_key: 0,
+				available_palette_keys: Vec::new(),
 				modified: false,
 			},
 		}
@@ -123,9 +126,9 @@ impl ChunkBlocks {
 
 	fn allocate_for_the_first_time_and_fill_with_air(&mut self) {
 		// We first put the entry for air in the palette.
-		assert_eq!(self.savable.next_free_palette_key, 0);
+		assert_eq!(self.savable.next_never_used_palette_key, 0);
 		let key = 0;
-		self.savable.next_free_palette_key += 1;
+		self.savable.next_never_used_palette_key += 1;
 		assert!(self.savable.palette.is_empty());
 		self.savable.palette.insert(
 			key,
@@ -172,12 +175,25 @@ impl ChunkBlocks {
 	}
 
 	fn get_new_key(&mut self) -> PaletteKey {
-		let new_key = self.savable.next_free_palette_key;
-		self.savable.next_free_palette_key += 1;
-		while !self.does_the_key_fit(new_key) {
-			self.add_a_bit_to_block_key_size();
+		if let Some(new_key) = self.savable.available_palette_keys.pop() {
+			// There is a previously-used key available. This does not risk to
+			// `add_a_bit_to_block_key_size` so we prefer resuing old keys.
+			new_key
+		} else {
+			// There is no old key that are available for reuse, so we have to get new keys
+			// that were never used before on this chunk, at the risk of having to use more bits
+			// on each key if the new key does not fit in the current number of bits per key.
+			let new_key = self.savable.next_never_used_palette_key;
+			self.savable.next_never_used_palette_key += 1;
+			while !self.does_the_key_fit(new_key) {
+				self.add_a_bit_to_block_key_size();
+			}
+			new_key
 		}
-		new_key
+	}
+
+	fn give_back_key_no_longer_in_use(&mut self, key: PaletteKey) {
+		self.savable.available_palette_keys.push(key);
 	}
 
 	fn add_one_block_instance_to_palette(&mut self, block: Block) -> PaletteKey {
@@ -201,7 +217,7 @@ impl ChunkBlocks {
 				entry.instance_count = entry.instance_count.saturating_sub(1);
 				if entry.instance_count == 0 {
 					occupied.remove();
-					// TODO: The key is no longer is use, it should be reused for future entries.
+					self.give_back_key_no_longer_in_use(key);
 				}
 			},
 		}
