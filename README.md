@@ -44,6 +44,7 @@ Advice:
 
 - Blocks, chunks, meshes.
 - Chunks, loading and unloading so that an area around the player is loaded.
+- Palette compression for the chunk blocks.
 - Infinite-ish world, in all directions including up and down.
 - Taking and placing back blocks, can also throw them.
 - Saving/loading to/from disk, named saves.
