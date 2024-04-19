@@ -55,8 +55,12 @@ impl<'a> BlockView<'a> {
 	}
 }
 
+/// An entry in the palette of a chunk of a `ChunkBlocks`.
 #[derive(Clone, Serialize, Deserialize)]
 struct BlockPaletteEntry {
+	/// The number of blocks in the chunk that refer to this entry.
+	/// We keep track of that count so that when it reaches zero then the entry can be removed and
+	/// its key is no longer used and can be given to a future new entry.
 	instance_count: u32,
 	block: Block,
 }
@@ -65,6 +69,14 @@ type PaletteKey = u32;
 /// The blocks of a chunk, stored in a palette compressed way.
 ///
 /// As long as no non-air block is ever placed in a `ChunkBlocks` then it does not allocate memory.
+///
+/// The palette compression means that actual `Block`s are in a palette, with no duplicates,
+/// and the grid of blocks that the chunk is made of is actually a grid of keys (`PaletteKey`)
+/// that each refer to a `Block` in the palette.
+/// There can be multiple blocks in the grid that use the same key to refer to the same palette
+/// entry, this removes some redundancy.
+/// Also, the biggest used key's number of bits required to represent its value sets the number of
+/// bits used to represent all the keys, this makes the grid of keys be so much smaller and tighter.
 #[derive(Clone)]
 pub(crate) struct ChunkBlocks {
 	pub(crate) coords_span: ChunkCoordsSpan,
@@ -73,28 +85,32 @@ pub(crate) struct ChunkBlocks {
 /// Part of `ChunkBlocks` that can be saved/loaded to/from disk.
 #[derive(Clone, Serialize, Deserialize)]
 struct ChunkBlocksSavable {
+	/// The grid of blocks of the chunk is stored here.
 	/// If the length is zero then it means the chunk is full of air.
-	/// Else, these are keys in the palette.
-	block_keys: BitVec,
+	/// Else, these are keys in the palette, each key being stored on `block_key_size_in_bits` bits.
+	block_keys_grid: BitVec,
+	/// The number of bits that each key in `block_keys` uses.
 	block_key_size_in_bits: usize,
-	/// The palette of blocks.
+	/// The palette of blocks. Every key in `block_keys` refers to an entry in this palette.
+	/// There may be multiple keys that are the same and thus refer to the same entry.
 	palette: FxHashMap<PaletteKey, BlockPaletteEntry>,
 	/// Next available key for the palette that was never used before.
 	next_never_used_palette_key: PaletteKey,
 	/// Available palette keys that have been used before.
 	available_palette_keys: Vec<PaletteKey>,
 	/// If the blocks ever underwent a change since the chunk generation, then it is flagged
-	/// as `modified`. If we want to reduce the size of the saved data then we can avoid saving
+	/// as modified. If we want to reduce the size of the saved data then we can avoid saving
 	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
 	modified_since_generation: bool,
 }
 
 impl ChunkBlocks {
+	/// Returns a new `ChunkBlocks` full of air that did not allocate anything yet.
 	fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkBlocks {
 		ChunkBlocks {
 			coords_span,
 			savable: ChunkBlocksSavable {
-				block_keys: BitVec::new(),
+				block_keys_grid: BitVec::new(),
 				block_key_size_in_bits: 0,
 				palette: HashMap::default(),
 				next_never_used_palette_key: 0,
@@ -104,23 +120,36 @@ impl ChunkBlocks {
 		}
 	}
 
+	/// Returns true iff the given key can be represented in the key representation size
+	/// currently used. If returns false then calling `add_a_bit_to_block_key_size` will
+	/// be required for that key to fit in the representation size of this chunk.
 	fn does_the_key_fit(&self, key: PaletteKey) -> bool {
 		let key_can_fit_in_that_many_bits = (key.checked_ilog2().unwrap_or(0) + 1) as usize;
 		key_can_fit_in_that_many_bits <= self.savable.block_key_size_in_bits
 	}
 
-	fn get_block_key(&self, internal_index: usize) -> PaletteKey {
+	/// Returns the key of the block at the given internal index.
+	fn get_block_key_from_grid(&self, internal_index: usize) -> PaletteKey {
 		let index_inf = internal_index * self.savable.block_key_size_in_bits;
 		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
-		self.savable.block_keys[index_inf..index_sup_excluded].load()
+		self.savable.block_keys_grid[index_inf..index_sup_excluded].load()
 	}
 
-	fn set_block_key(&mut self, internal_index: usize, key: PaletteKey) {
+	/// Sets the key of the block at the given internal index to the given key,
+	/// without checking if the key can fit the current key representation size.
+	fn set_block_key_to_grid(&mut self, internal_index: usize, key: PaletteKey) {
 		let index_inf = internal_index * self.savable.block_key_size_in_bits;
 		let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
-		self.savable.block_keys[index_inf..index_sup_excluded].store(key);
+		self.savable.block_keys_grid[index_inf..index_sup_excluded].store(key);
 	}
 
+	/// The `ChunkBlocks` returned by `new_empty` has no data in allocated vecs and maps
+	/// (which means that it contains only air). It avoids using memory for
+	/// generated chunks full of air, but it is not suited for actually being modified properly.
+	///
+	/// This method makes the allocations and fills the grid of blocks with air so that now the
+	/// blocks can be modified properly. It is like a delayed initialization that is only called
+	/// when necessary to save the memory and the time of the allocations if not needed.
 	fn allocate_for_the_first_time_and_fill_with_air(&mut self) {
 		// We first put the entry for air in the palette.
 		assert_eq!(self.savable.next_never_used_palette_key, 0);
@@ -137,18 +166,20 @@ impl ChunkBlocks {
 		// Then we allocate the bit vec and fill it with zeros (`key` is zero so it works).
 		assert_eq!(self.savable.block_key_size_in_bits, 0);
 		self.savable.block_key_size_in_bits = 1;
-		self.savable.block_keys = BitVec::repeat(
+		self.savable.block_keys_grid = BitVec::repeat(
 			false,
 			self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits,
 		);
 	}
 
+	/// Makes the key representation size one bit larger. This requires to make all the keys of
+	/// `block_keys_grid` one bit larger.
 	fn add_a_bit_to_block_key_size(&mut self) {
 		// First we resize the bitvec.
 		let old_key_size = self.savable.block_key_size_in_bits;
 		self.savable.block_key_size_in_bits += 1;
 		let new_len = self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits;
-		self.savable.block_keys.resize(new_len, false);
+		self.savable.block_keys_grid.resize(new_len, false);
 		// Then we move the old bitvec content to its new position.
 		// Now we have availble space at the end of the bitvec (after the old keys) and
 		// we must move keys so that they take all the space and that each key must now have one
@@ -160,17 +191,20 @@ impl ChunkBlocks {
 			let key: PaletteKey = {
 				let index_inf = i * old_key_size;
 				let index_sup_excluded = index_inf + old_key_size;
-				self.savable.block_keys[index_inf..index_sup_excluded].load()
+				self.savable.block_keys_grid[index_inf..index_sup_excluded].load()
 			};
 			// Move it to its new position, its size now takes one more bit form its old size.
 			{
 				let index_inf = i * self.savable.block_key_size_in_bits;
 				let index_sup_excluded = index_inf + self.savable.block_key_size_in_bits;
-				self.savable.block_keys[index_inf..index_sup_excluded].store(key);
+				self.savable.block_keys_grid[index_inf..index_sup_excluded].store(key);
 			}
 		}
 	}
 
+	/// Returns a key that is not is use (and that must be used now, or else it is leaked forever).
+	/// The key returned always fit the key representation size of this chunk, at the cost of
+	/// a call to `add_a_bit_to_block_key_size` if necessary.
 	fn get_new_key(&mut self) -> PaletteKey {
 		if let Some(new_key) = self.savable.available_palette_keys.pop() {
 			// There is a previously-used key available. This does not risk to
@@ -189,10 +223,14 @@ impl ChunkBlocks {
 		}
 	}
 
+	/// Avoids leaking the given key no longer in use by remembering it so that it can be associated
+	/// to a future new palette entry.
 	fn give_back_key_no_longer_in_use(&mut self, key: PaletteKey) {
 		self.savable.available_palette_keys.push(key);
 	}
 
+	/// Tells the palette that one more instance of the given `block` is in the chunk, and returns
+	/// the key corresponding to that block.
 	fn add_one_block_instance_to_palette(&mut self, block: Block) -> PaletteKey {
 		let already_in_palette =
 			self.savable.palette.iter_mut().find(|(_key, palette_entry)| palette_entry.block == block);
@@ -206,13 +244,19 @@ impl ChunkBlocks {
 		}
 	}
 
+	/// Tells the palette that there is one fewer instance of the block
+	/// reffered to by the given `key` in the grid.
 	fn remove_one_block_instance_from_palette(&mut self, key: PaletteKey) {
 		match self.savable.palette.entry(key) {
-			Entry::Vacant(_) => panic!(),
+			Entry::Vacant(_) => {
+				panic!("It makes no sense to remove an instance of which the key is not in use.");
+			},
 			Entry::Occupied(mut occupied) => {
 				let entry = occupied.get_mut();
-				entry.instance_count = entry.instance_count.saturating_sub(1);
+				assert_ne!(entry.instance_count, 0);
+				entry.instance_count -= 1;
 				if entry.instance_count == 0 {
+					// The palette entry is no longer used, we don't need it anymore.
 					occupied.remove();
 					self.give_back_key_no_longer_in_use(key);
 				}
@@ -220,26 +264,30 @@ impl ChunkBlocks {
 		}
 	}
 
-	/// Get a view on a block, returns `None` if the given coords land outside the chunk's span.
+	/// Get a view on the block at the given `coords`,
+	/// returns `None` if the given coords land outside the chunk's span.
 	pub(crate) fn get(&self, coords: BlockCoords) -> Option<BlockView> {
 		let internal_index = self.coords_span.internal_index(coords)?;
-		Some(if self.savable.block_keys.is_empty() {
+		Some(if self.savable.block_keys_grid.is_empty() {
+			// The chunk is empty, which represents the fact that it is full of air.
 			BlockView::new_air()
 		} else {
-			let key = self.get_block_key(internal_index);
+			let key = self.get_block_key_from_grid(internal_index);
 			self.savable.palette[&key].block.as_view()
 		})
 	}
 
+	/// Sets the block at the given `coords` to the given `block`,
+	/// does nothing if the given coords land outside the chunk's span.
 	pub(crate) fn set(&mut self, coords: BlockCoords, block: Block) {
 		if self.coords_span.contains(coords) {
 			// Make sure that we have allocated the block keys if that is needed.
-			if self.savable.block_keys.is_empty() {
+			if self.savable.block_keys_grid.is_empty() {
 				if block.type_id == BlockTypeTable::AIR_ID {
 					// Setting a block to air, but we are already empty, we have nothing to do.
 					return;
 				} else {
-					// Setting a block to non-air, but we were empty (all air, no setup for other blocks),
+					// Setting a block to non-air, but we were empty (all air, no setup),
 					// so we have to actually allocate the blocks (all set to air).
 					self.allocate_for_the_first_time_and_fill_with_air();
 				}
@@ -247,16 +295,16 @@ impl ChunkBlocks {
 
 			// All is good, we just have to get the block's palette key and put it in the grid.
 			let index = self.coords_span.internal_index(coords).unwrap();
-			let key_of_block_to_remove = self.get_block_key(index);
+			let key_of_block_to_remove = self.get_block_key_from_grid(index);
 			self.remove_one_block_instance_from_palette(key_of_block_to_remove);
 			let key_of_block_being_added = self.add_one_block_instance_to_palette(block);
-			self.set_block_key(index, key_of_block_being_added);
+			self.set_block_key_to_grid(index, key_of_block_being_added);
 			self.savable.modified_since_generation = true;
 		}
 	}
 
 	fn may_contain_non_air(&self) -> bool {
-		!self.savable.block_keys.is_empty()
+		!self.savable.block_keys_grid.is_empty()
 	}
 
 	pub(crate) fn was_modified_since_generation(&self) -> bool {
