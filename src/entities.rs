@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
 	block_types::BlockTypeTable,
-	chunks::{Block, ChunkGrid},
+	chunk_blocks::Block,
+	chunks::ChunkGrid,
 	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 	entity_parts::{
 		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,

@@ -5,7 +5,8 @@ use wgpu::util::DeviceExt;
 
 use crate::{
 	block_types::{BlockType, BlockTypeTable},
-	chunks::{BlockData, ChunkBlocks, ChunkGrid},
+	chunk_blocks::{BlockData, ChunkBlocks},
+	chunks::ChunkGrid,
 	coords::{
 		iter_3d_cube_center_radius, AxisOrientation, BitCube3, BitCube3Coords, BlockCoords,
 		ChunkCoords, ChunkCoordsSpan, ChunkDimensions, NonOrientedAxis, OrientedAxis,

@@ -3,6 +3,7 @@
 mod atlas;
 mod block_types;
 mod camera;
+mod chunk_blocks;
 mod chunk_loading;
 mod chunk_meshing;
 mod chunks;

@@ -4,7 +4,7 @@ use cgmath::{EuclideanSpace, MetricSpace};
 
 use crate::{
 	block_types::{BlockTypeId, BlockTypeTable},
-	chunks::ChunkBlocksBeingGenerated,
+	chunk_blocks::ChunkBlocksBeingGenerated,
 	coords::{BlockCoords, CubicCoordsSpan},
 	noise::OctavedNoise,
 };

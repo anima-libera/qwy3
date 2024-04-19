@@ -8,8 +8,8 @@ use wgpu::util::DeviceExt;
 use crate::{
 	atlas::Atlas,
 	block_types::BlockTypeTable,
+	chunk_blocks::{ChunkBlocks, ChunkCullingInfo},
 	chunk_meshing::{ChunkMesh, DataForChunkMeshing},
-	chunks::{ChunkBlocks, ChunkCullingInfo},
 	coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 	entities::ChunkEntities,
 	saves::Save,

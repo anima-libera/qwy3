@@ -5,7 +5,8 @@ use rand::Rng;
 
 use crate::{
 	block_types::BlockTypeTable,
-	chunks::{ChunkBlocks, ChunkCullingInfo, ChunkGrid},
+	chunk_blocks::{ChunkBlocks, ChunkCullingInfo},
+	chunks::ChunkGrid,
 	coords::{iter_3d_cube_center_radius, ChunkCoords, OrientedAxis},
 	entities::ChunkEntities,
 	saves::Save,

@@ -2,7 +2,7 @@ use std::f32::consts::TAU;
 
 use crate::{
 	camera::{aspect_ratio, CameraSettings},
-	chunks::{Block, BlockData},
+	chunk_blocks::{Block, BlockData},
 	coords::{
 		iter_3d_cube_center_radius, AlignedBox, AxisOrientation, BlockCoords, ChunkCoordsSpan,
 		NonOrientedAxis, OrientedAxis, OrientedFaceCoords,

@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 
 use crate::{
 	block_types::{BlockTypeId, BlockTypeTable},
-	chunks::{ChunkBlocks, ChunkBlocksBeingGenerated},
+	chunk_blocks::{ChunkBlocks, ChunkBlocksBeingGenerated},
 	coords::{
 		iter_3d_rect_inf_sup_excluded, BlockCoords, ChunkCoordsSpan, CubicCoordsSpan, NonOrientedAxis,
 	},
