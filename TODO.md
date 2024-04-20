@@ -89,7 +89,6 @@
 ## Entities
 
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
-- Make blocks place themselves on a face of a placed block instead of sometimes on an edge or even a corner.
 - Support the throwing of X-shaped blocks.
 - Particles, like when breaking blocks.
 - Animals >w< or something.

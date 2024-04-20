@@ -659,11 +659,19 @@ pub(crate) mod colored_icosahedron {
 			[7, 2, 11],
 		];
 		for triangle_indices_in_refs in triangles_indices_in_refs {
+			// Normal of the face. We choose to have one normal per face instead of interpolated
+			// per-vertex normals, because we embrace the low poly visual style (by artistic choice).
+			let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
+			for index_in_refs in triangle_indices_in_refs.iter().copied() {
+				let position = vertices_for_ref[index_in_refs];
+				normal += position;
+			}
+			normal = normal.normalize();
+
 			// The triangles are the wrong kind of clock-wise/counter-clock-wise orientation,
 			// so we reverse them.
 			for index_in_refs in triangle_indices_in_refs.into_iter().rev() {
 				let position = vertices_for_ref[index_in_refs];
-				let normal = position.normalize();
 				let position = position.normalize() / 2.0;
 				vertices.push(PartVertexPod { position: position.into(), normal: normal.into() });
 			}
