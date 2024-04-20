@@ -375,19 +375,21 @@ fn generate_xshaped_block_face_mesh(
 			3 - (side_a as i32 + side_b as i32 + corner_ab as i32)
 		}
 	};
-	let ambiant_occlusion_uwu = |along_x: i32, along_y: i32| {
+	let ambiant_occlusion_uwu = |along_x: i32, along_y: i32, top_z: bool| {
+		let along_z = if top_z { 1 } else { 0 };
+
 		let mut coords: BitCube3Coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
-		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::Z, along_z);
 		coords.set(NonOrientedAxis::X, along_x);
 		let side_a = neighborhood_opaqueness.get(coords);
 
 		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
-		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::Z, along_z);
 		coords.set(NonOrientedAxis::Y, along_y);
 		let side_b = neighborhood_opaqueness.get(coords);
 
 		coords = BitCube3Coords::from(cgmath::point3(0, 0, 0));
-		coords.set(NonOrientedAxis::Z, 0);
+		coords.set(NonOrientedAxis::Z, along_z);
 		coords.set(NonOrientedAxis::X, along_x);
 		coords.set(NonOrientedAxis::Y, along_y);
 		let corner_ab = neighborhood_opaqueness.get(coords);
@@ -398,18 +400,22 @@ fn generate_xshaped_block_face_mesh(
 		ambiant_occlusion_uwu(
 			if offset_a.x < 0.0 { -1 } else { 1 },
 			if offset_a.y < 0.0 { -1 } else { 1 },
+			false,
 		),
 		ambiant_occlusion_uwu(
 			if offset_b.x < 0.0 { -1 } else { 1 },
 			if offset_b.y < 0.0 { -1 } else { 1 },
+			false,
 		),
 		ambiant_occlusion_uwu(
 			if offset_a.x < 0.0 { -1 } else { 1 },
 			if offset_a.y < 0.0 { -1 } else { 1 },
+			true,
 		),
 		ambiant_occlusion_uwu(
 			if offset_b.x < 0.0 { -1 } else { 1 },
 			if offset_b.y < 0.0 { -1 } else { 1 },
+			true,
 		),
 	];
 

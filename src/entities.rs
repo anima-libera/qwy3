@@ -23,6 +23,13 @@ use crate::{
 	shaders::part_textured::PartTexturedInstancePod,
 };
 
+//todo
+//use https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
+//to make a ball entity
+//then make it roll around on its own
+//put two eyes on it
+//this shall be our first animal
+
 /// In the world there are two sorts of things: static blocks and entities.
 /// Despite the constraint that an entity must have a position, it can be anything.
 /// Entities can have parts (via `PartHandler`s) which are instances of models of simple shapes,
