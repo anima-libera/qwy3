@@ -31,7 +31,7 @@ use crate::{
 	block_types::{BlockType, BlockTypeId, BlockTypeTable},
 	coords::{AxisOrientation, NonOrientedAxis, OrientedAxis},
 	rendering_init::BindingThingy,
-	shaders::part_textured::{PartTexturedInstancePod, PartVertexPod},
+	shaders::{part_colored::PartColoredInstancePod, part_textured::PartTexturedInstancePod},
 	table_allocator::{AllocationDecision, FreeingAdvice, TableAllocator},
 };
 
@@ -114,12 +114,18 @@ impl<T: PartInstance> PartHandler<T> {
 /// All these tables are gathered in here.
 pub(crate) struct PartTables {
 	pub(crate) textured_cubes: PartTable<PartTexturedInstancePod>,
-	// NOTE: Added tables should also be added to the output of `tables_for_rendering`.
+	pub(crate) colored_icosahedron: PartTable<PartColoredInstancePod>,
+	// NOTE: Added tables should also be added to the output of
+	// `PartTables::tables_for_rendering_textured` or `PartTables::tables_for_rendering_colored`.
+	// They should also be handled in `PartTables::cup_to_gpu_update_if_required`.
 }
 
 impl PartTables {
 	pub(crate) fn new(device: &wgpu::Device) -> PartTables {
-		PartTables { textured_cubes: textured_cubes::textured_cube_part_table(device) }
+		PartTables {
+			textured_cubes: textured_cubes::textured_cube_part_table(device),
+			colored_icosahedron: colored_icosahedron::colored_icosahedron_part_table(device),
+		}
 	}
 
 	pub(crate) fn cup_to_gpu_update_if_required(
@@ -128,13 +134,23 @@ impl PartTables {
 		queue: &wgpu::Queue,
 	) {
 		self.textured_cubes.cup_to_gpu_update_if_required(device, queue);
+		self.colored_icosahedron.cup_to_gpu_update_if_required(device, queue);
 	}
 
-	/// Returns an array of what is needed to render the parts of a table, for all the tables.
+	/// Returns an array of what is needed to render the parts of a table,
+	/// for all the tables of textured parts.
 	/// The rendering can just iterate over this output,
 	/// no change is needed on the rendering part even when new part tables are added.
-	pub(crate) fn tables_for_rendering(&self) -> [DataForPartTableRendering; 1] {
+	pub(crate) fn tables_for_rendering_textured(&self) -> [DataForPartTableRendering; 1] {
 		[self.textured_cubes.get_data_for_rendering()]
+	}
+
+	/// Returns an array of what is needed to render the parts of a table,
+	/// for all the tables of colored parts.
+	/// The rendering can just iterate over this output,
+	/// no change is needed on the rendering part even when new part tables are added.
+	pub(crate) fn tables_for_rendering_colored(&self) -> [DataForPartTableRendering; 1] {
+		[self.colored_icosahedron.get_data_for_rendering()]
 	}
 }
 
@@ -332,7 +348,7 @@ pub(crate) mod textured_cubes {
 	//! Here are hanled the matters specific to the
 	//! textured cube entity parts and their `PartTable`.
 
-	use crate::shaders::Vector2Pod;
+	use crate::shaders::{part_textured::PartVertexPod, Vector2Pod};
 
 	use super::*;
 
@@ -358,7 +374,7 @@ pub(crate) mod textured_cubes {
 				contents: &[],
 				usage: wgpu::BufferUsages::VERTEX,
 			}),
-			instance_table_allocator: TableAllocator::new(0, 2000),
+			instance_table_allocator: TableAllocator::new(0, 200),
 			cpu_to_gpu_update_required_for_instances: false,
 			cpu_to_gpu_update_required_for_buffer_length_change: false,
 			name,
@@ -527,5 +543,138 @@ pub(crate) mod textured_cubes {
 		}
 
 		mappings_coords_on_atlas
+	}
+}
+
+pub(crate) mod colored_icosahedron {
+	//! Here are hanled the matters specific to the
+	//! colored icosahedron entity parts and their `PartTable`.
+
+	use cgmath::InnerSpace;
+
+	use crate::shaders::{part_colored::PartColoredInstancePod, part_textured::PartVertexPod};
+
+	use super::*;
+
+	impl PartInstance for PartColoredInstancePod {
+		fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+			let model_matrix = cgmath::conv::array4x4(*model_matrix);
+			self.model_matrix_1_of_4 = model_matrix[0];
+			self.model_matrix_2_of_4 = model_matrix[1];
+			self.model_matrix_3_of_4 = model_matrix[2];
+			self.model_matrix_4_of_4 = model_matrix[3];
+		}
+	}
+
+	pub(super) fn colored_icosahedron_part_table(
+		device: &wgpu::Device,
+	) -> PartTable<PartColoredInstancePod> {
+		let name = "Colored Icosahedron Part";
+		PartTable {
+			mesh: icosahedron_mesh(device, name),
+			instance_table: vec![],
+			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Instance Buffer")),
+				contents: &[],
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+			instance_table_allocator: TableAllocator::new(0, 200),
+			cpu_to_gpu_update_required_for_instances: false,
+			cpu_to_gpu_update_required_for_buffer_length_change: false,
+			name,
+		}
+	}
+
+	/// A nicer form of an instance that is yet to be converted into its raw counterpart (the raw
+	/// counterpart will be the one that gets stored in a `PartTable`).
+	pub(crate) struct PartColoredIcosahedronInstanceData {
+		model_matrix: [[f32; 4]; 4],
+		/// Unused for now.
+		/// TODO: Use.
+		coloring_point_offset: u32,
+	}
+
+	impl PartColoredIcosahedronInstanceData {
+		pub(crate) fn new(pos: cgmath::Point3<f32>) -> PartColoredIcosahedronInstanceData {
+			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
+			let model_matrix = cgmath::conv::array4x4(model_matrix);
+			PartColoredIcosahedronInstanceData { model_matrix, coloring_point_offset: 0 }
+		}
+
+		/// Converts into the form that can be stored in a `PartTable`.
+		pub(crate) fn into_pod(self) -> PartColoredInstancePod {
+			PartColoredInstancePod {
+				model_matrix_1_of_4: self.model_matrix[0],
+				model_matrix_2_of_4: self.model_matrix[1],
+				model_matrix_3_of_4: self.model_matrix[2],
+				model_matrix_4_of_4: self.model_matrix[3],
+				coloring_point_offset: self.coloring_point_offset,
+			}
+		}
+	}
+
+	/// Creates the mesh of the icosahedron model.
+	fn icosahedron_mesh(device: &wgpu::Device, name: &str) -> Mesh {
+		// Some resources:
+		// https://schneide.blog/2016/07/15/generating-an-icosphere-in-c/
+		// https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
+
+		let mut vertices: Vec<PartVertexPod> = vec![];
+
+		let g = 1.618034; // Golden ratio.
+		let vertices_for_ref = [
+			cgmath::vec3(-1.0, 0.0, g),
+			cgmath::vec3(1.0, 0.0, g),
+			cgmath::vec3(-1.0, 0.0, -g),
+			cgmath::vec3(1.0, 0.0, -g),
+			cgmath::vec3(0.0, g, 1.0),
+			cgmath::vec3(0.0, g, -1.0),
+			cgmath::vec3(0.0, -g, 1.0),
+			cgmath::vec3(0.0, -g, -1.0),
+			cgmath::vec3(g, 1.0, 0.0),
+			cgmath::vec3(-g, 1.0, 0.0),
+			cgmath::vec3(g, -1.0, 0.0),
+			cgmath::vec3(-g, -1.0, 0.0),
+		];
+		let triangles_indices_in_refs = [
+			[0, 4, 1],
+			[0, 9, 4],
+			[9, 5, 4],
+			[4, 5, 8],
+			[4, 8, 1],
+			[8, 10, 1],
+			[8, 3, 10],
+			[5, 3, 8],
+			[5, 2, 3],
+			[2, 7, 3],
+			[7, 10, 3],
+			[7, 6, 10],
+			[7, 11, 6],
+			[11, 0, 6],
+			[0, 1, 6],
+			[6, 1, 10],
+			[9, 0, 11],
+			[9, 11, 2],
+			[9, 2, 5],
+			[7, 2, 11],
+		];
+		for triangle_indices_in_refs in triangles_indices_in_refs {
+			// The triangles are the wrong kind of clock-wise/counter-clock-wise orientation,
+			// so we reverse them.
+			for index_in_refs in triangle_indices_in_refs.into_iter().rev() {
+				let position = vertices_for_ref[index_in_refs];
+				let normal = position.normalize();
+				let position = position.normalize() / 2.0;
+				vertices.push(PartVertexPod { position: position.into(), normal: normal.into() });
+			}
+		}
+
+		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some(&format!("{name} Vertex Buffer")),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+
+		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
 }

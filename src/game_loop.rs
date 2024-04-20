@@ -338,11 +338,11 @@ pub fn init_and_run_game_loop() {
 								);
 							} else if game.playing_mode == PlayingMode::Free {
 								for _ in 0..10 {
-									let block = Block::from(
-										game
-											.block_type_table
-											.generated_test_id(rand::thread_rng().gen_range(0..10)),
-									);
+									//let block = Block::from(
+									//	game
+									//		.block_type_table
+									//		.generated_test_id(rand::thread_rng().gen_range(0..10)),
+									//);
 
 									let mut motion = game.camera_direction.to_vec3();
 									let perturbation = loop {
@@ -357,8 +357,16 @@ pub fn init_and_run_game_loop() {
 									};
 									motion = motion * 0.8 + perturbation * 0.1;
 
+									//game.chunk_grid.add_entity(
+									//	Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
+									//	game.save.as_ref(),
+									//);
+
 									game.chunk_grid.add_entity(
-										Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
+										Entity::new_test_icosahedron(
+											game.player_phys.aligned_box().pos,
+											motion,
+										),
 										game.save.as_ref(),
 									);
 								}

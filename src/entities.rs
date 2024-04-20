@@ -14,21 +14,15 @@ use crate::{
 	chunks::ChunkGrid,
 	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 	entity_parts::{
+		colored_icosahedron::PartColoredIcosahedronInstanceData,
 		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
 		TextureMappingTable,
 	},
 	physics::AlignedPhysBox,
 	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
-	shaders::part_textured::PartTexturedInstancePod,
+	shaders::{part_colored::PartColoredInstancePod, part_textured::PartTexturedInstancePod},
 };
-
-//todo
-//use https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
-//to make a ball entity
-//then make it roll around on its own
-//put two eyes on it
-//this shall be our first animal
 
 /// In the world there are two sorts of things: static blocks and entities.
 /// Despite the constraint that an entity must have a position, it can be anything.
@@ -58,6 +52,11 @@ enum EntityTyped {
 		#[serde(skip)]
 		part_handler: PartHandler<PartTexturedInstancePod>,
 	},
+	TestIcosahedron {
+		phys: AlignedPhysBox,
+		#[serde(skip)]
+		part_handler: PartHandler<PartColoredInstancePod>,
+	},
 	/// Turns off warnings about irrefutability of patterns.
 	/// Can be removed when an other type is added.
 	_DummyOtherType,
@@ -82,9 +81,26 @@ impl Entity {
 		}
 	}
 
+	pub(crate) fn new_test_icosahedron(
+		pos: cgmath::Point3<f32>,
+		motion: cgmath::Vector3<f32>,
+	) -> Entity {
+		Entity {
+			to_delete: false,
+			typed: EntityTyped::TestIcosahedron {
+				phys: AlignedPhysBox::new(
+					AlignedBox { pos, dims: cgmath::vec3(0.99, 0.99, 0.99) },
+					motion,
+				),
+				part_handler: PartHandler::default(),
+			},
+		}
+	}
+
 	pub(crate) fn pos(&self) -> cgmath::Point3<f32> {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => phys.aligned_box().pos,
+			EntityTyped::TestIcosahedron { phys, .. } => phys.aligned_box().pos,
 			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
@@ -97,6 +113,7 @@ impl Entity {
 	pub(crate) fn aligned_box(&self) -> Option<AlignedBox> {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => Some(phys.aligned_box().clone()),
+			EntityTyped::TestIcosahedron { phys, .. } => Some(phys.aligned_box().clone()),
 			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
@@ -208,6 +225,37 @@ impl Entity {
 				}
 			},
 
+			EntityTyped::TestIcosahedron { .. } => {
+				if let EntityTyped::TestIcosahedron { phys, .. } = &mut self.typed {
+					phys.apply_one_physics_step(
+						cgmath::vec3(0.0, 0.0, 0.0),
+						chunk_grid,
+						block_type_table,
+						dt,
+						true,
+					);
+				} else {
+					unreachable!()
+				};
+
+				// Manage the part.
+				let pos = self.pos();
+				if let EntityTyped::TestIcosahedron { part_handler, .. } = &mut self.typed {
+					part_handler.ensure_is_allocated(
+						&mut part_manipulation.part_tables.colored_icosahedron,
+						|| PartColoredIcosahedronInstanceData::new(pos).into_pod(),
+					);
+
+					part_handler.modify_instance(
+						&mut part_manipulation.part_tables.colored_icosahedron,
+						|instance| {
+							instance
+								.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(pos.to_vec()));
+						},
+					);
+				}
+			},
+
 			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
@@ -221,6 +269,9 @@ impl Entity {
 		match self.typed {
 			EntityTyped::Block { part_handler, .. } => {
 				part_handler.delete(&mut part_tables.textured_cubes);
+			},
+			EntityTyped::TestIcosahedron { part_handler, .. } => {
+				part_handler.delete(&mut part_tables.colored_icosahedron);
 			},
 			EntityTyped::_DummyOtherType => panic!(),
 		}
