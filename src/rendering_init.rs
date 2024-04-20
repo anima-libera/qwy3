@@ -96,6 +96,8 @@ pub(crate) struct RenderPipelinesAndBindGroups {
 	pub(crate) part_textured_shadow_bind_group: wgpu::BindGroup,
 	pub(crate) part_textured_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) part_textured_bind_group: wgpu::BindGroup,
+	pub(crate) part_colored_shadow_render_pipeline: wgpu::RenderPipeline,
+	pub(crate) part_colored_shadow_bind_group: wgpu::BindGroup,
 	pub(crate) part_colored_render_pipeline: wgpu::RenderPipeline,
 	pub(crate) part_colored_bind_group: wgpu::BindGroup,
 	pub(crate) simple_line_render_pipeline: wgpu::RenderPipeline,
@@ -195,6 +197,17 @@ pub(crate) fn init_rendering_stuff(
 			z_buffer_format,
 		);
 
+	let (part_colored_shadow_render_pipeline, part_colored_shadow_bind_group) =
+		shaders::part_colored_shadow::render_pipeline_and_bind_group(
+			&device,
+			shaders::part_colored_shadow::BindingThingies {
+				sun_camera_single_matrix_thingy: all_binding_thingies.sun_camera_single_matrix_thingy,
+				fog_center_position_thingy: all_binding_thingies.fog_center_position_thingy,
+				fog_inf_sup_radiuses_thingy: all_binding_thingies.fog_inf_sup_radiuses_thingy,
+			},
+			shadow_map_format,
+		);
+
 	let (part_colored_render_pipeline, part_colored_bind_group) =
 		shaders::part_colored::render_pipeline_and_bind_group(
 			&device,
@@ -266,6 +279,8 @@ pub(crate) fn init_rendering_stuff(
 		part_textured_shadow_bind_group,
 		part_textured_render_pipeline,
 		part_textured_bind_group,
+		part_colored_shadow_render_pipeline,
+		part_colored_shadow_bind_group,
 		part_colored_render_pipeline,
 		part_colored_bind_group,
 		simple_line_render_pipeline,

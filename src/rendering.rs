@@ -93,6 +93,21 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
 			}
+
+			// Entity parts colored.
+			render_pass.set_pipeline(&self.rendering.part_colored_shadow_render_pipeline);
+			render_pass.set_bind_group(0, &self.rendering.part_colored_shadow_bind_group, &[]);
+			for part_table_for_rendering in self.part_tables.tables_for_rendering_colored() {
+				let DataForPartTableRendering {
+					mesh_vertices_count,
+					mesh_vertex_buffer,
+					instances_count,
+					instance_buffer,
+				} = part_table_for_rendering;
+				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
+				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
+			}
 		}
 
 		// Render pass to render the world to the screen.

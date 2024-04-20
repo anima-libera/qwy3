@@ -107,11 +107,11 @@ pub(crate) fn render_pipeline_and_bind_group(
 		],
 	});
 
-	let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+	let part_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Part Textured Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("part_textured.wgsl").into()),
 	});
-	let block_render_pipeline_layout =
+	let part_render_pipeline_layout =
 		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
 			label: Some("Part Textured Render Pipeline Layout"),
 			bind_group_layouts: &[&bind_group_layout],
@@ -120,14 +120,14 @@ pub(crate) fn render_pipeline_and_bind_group(
 
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Part Textured Render Pipeline"),
-		layout: Some(&block_render_pipeline_layout),
+		layout: Some(&part_render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &block_shader,
+			module: &part_shader,
 			entry_point: "vertex_shader_main",
 			buffers: &[part_vertex_buffer_layout, part_instance_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &block_shader,
+			module: &part_shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
