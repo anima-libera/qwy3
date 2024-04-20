@@ -41,10 +41,11 @@ fn vertex_shader_main(
 	);
 
 	// TODO: Get the color from the coloring at the offset given by `coloring_point_offset`.
-	let color = vec3(
-		f32(vertex_index % 2) / 2.0,
-		f32(vertex_index % 3) / 3.0,
-		f32(vertex_index % 5) / 5.0);
+	//let color = vec3(
+	//	f32(vertex_index % 2) / 2.0,
+	//	f32(vertex_index % 3) / 3.0,
+	//	f32(vertex_index % 5) / 5.0);
+	let color = vec3(1.0, 1.0, 1.0);
 
 	var shade = dot(vertex_input.normal, -uniform_sun_light_direction);
 	shade = clamp(shade, 0.0, 1.0);
