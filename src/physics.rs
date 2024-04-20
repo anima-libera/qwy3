@@ -171,7 +171,7 @@ impl AlignedPhysBox {
 				< 0.0
 			{
 				let friction = self.motion[face.direction_to_exterior.axis.index()].abs();
-				self.motion /= 1.0 + friction * 144.0 * dt.as_secs_f32();
+				self.motion /= 1.0 + friction * 10.0 * 144.0 * dt.as_secs_f32();
 			}
 		}
 	}
