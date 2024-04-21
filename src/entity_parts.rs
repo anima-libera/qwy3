@@ -282,10 +282,10 @@ struct Mesh {
 /// The table in which are stored the texture mappings and the colorings of the instances.
 /// A model for textured/colored entity parts is not textured/colored itself, instead
 /// each instance of that model refers to its desired texture mappings/coloring in this table.
-pub(crate) struct TextureMappingTable {
+pub(crate) struct TextureMappingAndColoringTable {
 	/// Maps each possible texturings/colorings to the offset (in `f32`s) of
 	/// the texture mapping/coloring in the array.
-	blocks: FxHashMap<WhichTextureMapping, u32>,
+	map_to_offset: FxHashMap<WhichTextureMappingOrColoring, u32>,
 	/// Next offset in the Wgpu buffer, in bytes.
 	next_offset_in_buffer_in_bytes: u32,
 	/// Next offset in `f32`s to be given to instances.
@@ -293,18 +293,28 @@ pub(crate) struct TextureMappingTable {
 }
 
 #[derive(Hash, PartialEq, Eq)]
-enum WhichTextureMapping {
-	Block(BlockTypeId),
+enum WhichTextureMappingOrColoring {
+	BlockTextureMapping(BlockTypeId),
+	IcosahedronColoring(WhichIcosahedronColoring),
+}
+
+#[derive(Hash, PartialEq, Eq)]
+pub(crate) enum WhichIcosahedronColoring {
+	Test,
 }
 
 /// An offset that points to some texture mappings made for a cube model.
 #[derive(Clone, Copy)]
 pub(crate) struct CubeTextureMappingOffset(u32);
 
-impl TextureMappingTable {
-	pub(crate) fn new() -> TextureMappingTable {
-		TextureMappingTable {
-			blocks: HashMap::default(),
+/// An offset that points to some coloring made for an icosahedron model.
+#[derive(Clone, Copy)]
+pub(crate) struct IcosahedrongColoringOffset(u32);
+
+impl TextureMappingAndColoringTable {
+	pub(crate) fn new() -> TextureMappingAndColoringTable {
+		TextureMappingAndColoringTable {
+			map_to_offset: HashMap::default(),
 			next_offset_in_buffer_in_bytes: 0,
 			next_offset: 0,
 		}
@@ -321,7 +331,9 @@ impl TextureMappingTable {
 		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> Option<CubeTextureMappingOffset> {
-		let entry = self.blocks.entry(WhichTextureMapping::Block(block_type_id));
+		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::BlockTextureMapping(
+			block_type_id,
+		));
 		match entry {
 			Entry::Occupied(occupied) => Some(CubeTextureMappingOffset(*occupied.get())),
 			Entry::Vacant(vacant) => {
@@ -343,6 +355,39 @@ impl TextureMappingTable {
 				self.next_offset += mappings.len() as u32 * length_of_the_mapping_for_one_vertex;
 				vacant.insert(offset);
 				Some(CubeTextureMappingOffset(offset))
+			},
+		}
+	}
+
+	/// Get an offset in the array of colorings, specifically for a colored icosahedron part.
+	/// The resulting offset may be given to an instance of the colored icosahedron model.
+	/// If the requested coloring is not in the table, it is added.
+	pub(crate) fn get_offset_of_icosahedron_coloring(
+		&mut self,
+		which_coloring: WhichIcosahedronColoring,
+		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
+	) -> IcosahedrongColoringOffset {
+		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::IcosahedronColoring(
+			which_coloring,
+		));
+		match entry {
+			Entry::Occupied(occupied) => IcosahedrongColoringOffset(*occupied.get()),
+			Entry::Vacant(vacant) => {
+				let coloring = colored_icosahedron::coloring_for_icosahedron();
+				let data = bytemuck::cast_slice(&coloring);
+				let data_offset = self.next_offset_in_buffer_in_bytes;
+				queue.write_buffer(
+					&texturing_and_coloring_array_thingy.resource,
+					data_offset as u64,
+					data,
+				);
+				self.next_offset_in_buffer_in_bytes += data.len() as u32;
+				let offset = self.next_offset;
+				let length_of_the_coloring_for_one_vertex = 3;
+				self.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
+				vacant.insert(offset);
+				IcosahedrongColoringOffset(offset)
 			},
 		}
 	}
@@ -555,7 +600,9 @@ pub(crate) mod colored_icosahedron {
 
 	use cgmath::InnerSpace;
 
-	use crate::shaders::{part_colored::PartColoredInstancePod, part_textured::PartVertexPod};
+	use crate::shaders::{
+		part_colored::PartColoredInstancePod, part_textured::PartVertexPod, Vector3Pod,
+	};
 
 	use super::*;
 
@@ -598,10 +645,16 @@ pub(crate) mod colored_icosahedron {
 	}
 
 	impl PartColoredIcosahedronInstanceData {
-		pub(crate) fn new(pos: cgmath::Point3<f32>) -> PartColoredIcosahedronInstanceData {
+		pub(crate) fn new(
+			pos: cgmath::Point3<f32>,
+			texture_mapping_offset: IcosahedrongColoringOffset,
+		) -> PartColoredIcosahedronInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
 			let model_matrix = cgmath::conv::array4x4(model_matrix);
-			PartColoredIcosahedronInstanceData { model_matrix, coloring_offset: 0 }
+			PartColoredIcosahedronInstanceData {
+				model_matrix,
+				coloring_offset: texture_mapping_offset.0,
+			}
 		}
 
 		/// Converts into the form that can be stored in a `PartTable`.
@@ -616,6 +669,44 @@ pub(crate) mod colored_icosahedron {
 		}
 	}
 
+	const GOLD: f32 = 1.618034; // Golden ratio.
+	const VERTICES_FOR_REF: [cgmath::Vector3<f32>; 12] = [
+		cgmath::vec3(-1.0, 0.0, GOLD),
+		cgmath::vec3(1.0, 0.0, GOLD),
+		cgmath::vec3(-1.0, 0.0, -GOLD),
+		cgmath::vec3(1.0, 0.0, -GOLD),
+		cgmath::vec3(0.0, GOLD, 1.0),
+		cgmath::vec3(0.0, GOLD, -1.0),
+		cgmath::vec3(0.0, -GOLD, 1.0),
+		cgmath::vec3(0.0, -GOLD, -1.0),
+		cgmath::vec3(GOLD, 1.0, 0.0),
+		cgmath::vec3(-GOLD, 1.0, 0.0),
+		cgmath::vec3(GOLD, -1.0, 0.0),
+		cgmath::vec3(-GOLD, -1.0, 0.0),
+	];
+	const TRIANGLES_INDICES_IN_REFS: [[usize; 3]; 20] = [
+		[1, 4, 0],
+		[4, 9, 0],
+		[4, 5, 9],
+		[8, 5, 4],
+		[1, 8, 4],
+		[1, 10, 8],
+		[10, 3, 8],
+		[8, 3, 5],
+		[3, 2, 5],
+		[3, 7, 2],
+		[3, 10, 7],
+		[10, 6, 7],
+		[6, 11, 7],
+		[6, 0, 11],
+		[6, 1, 0],
+		[10, 1, 6],
+		[11, 0, 9],
+		[2, 11, 9],
+		[5, 2, 9],
+		[11, 2, 7],
+	];
+
 	/// Creates the mesh of the icosahedron model.
 	fn icosahedron_mesh(device: &wgpu::Device, name: &str) -> Mesh {
 		// Some resources:
@@ -623,62 +714,22 @@ pub(crate) mod colored_icosahedron {
 		// https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
 
 		let mut vertices: Vec<PartVertexPod> = vec![];
-
-		let g = 1.618034; // Golden ratio.
-		let vertices_for_ref = [
-			cgmath::vec3(-1.0, 0.0, g),
-			cgmath::vec3(1.0, 0.0, g),
-			cgmath::vec3(-1.0, 0.0, -g),
-			cgmath::vec3(1.0, 0.0, -g),
-			cgmath::vec3(0.0, g, 1.0),
-			cgmath::vec3(0.0, g, -1.0),
-			cgmath::vec3(0.0, -g, 1.0),
-			cgmath::vec3(0.0, -g, -1.0),
-			cgmath::vec3(g, 1.0, 0.0),
-			cgmath::vec3(-g, 1.0, 0.0),
-			cgmath::vec3(g, -1.0, 0.0),
-			cgmath::vec3(-g, -1.0, 0.0),
-		];
-		let triangles_indices_in_refs = [
-			[0, 4, 1],
-			[0, 9, 4],
-			[9, 5, 4],
-			[4, 5, 8],
-			[4, 8, 1],
-			[8, 10, 1],
-			[8, 3, 10],
-			[5, 3, 8],
-			[5, 2, 3],
-			[2, 7, 3],
-			[7, 10, 3],
-			[7, 6, 10],
-			[7, 11, 6],
-			[11, 0, 6],
-			[0, 1, 6],
-			[6, 1, 10],
-			[9, 0, 11],
-			[9, 11, 2],
-			[9, 2, 5],
-			[7, 2, 11],
-		];
-		for triangle_indices_in_refs in triangles_indices_in_refs {
+		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
 			// Normal of the face.
 			let normal = {
 				// We choose to have one normal per face instead of interpolated per-vertex normals,
 				// because we embrace the low poly visual style (by artistic choice).
 				let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
 				for index_in_refs in triangle_indices_in_refs.iter().copied() {
-					let position = vertices_for_ref[index_in_refs];
+					let position = VERTICES_FOR_REF[index_in_refs];
 					normal += position;
 				}
 				normal.normalize()
 			};
 
 			// Vertices of the face.
-			// The triangles are the wrong kind of clock-wise/counter-clock-wise orientation,
-			// so we reverse them (so that the face culling will cull the right faces).
-			for index_in_refs in triangle_indices_in_refs.into_iter().rev() {
-				let position = vertices_for_ref[index_in_refs];
+			for index_in_refs in triangle_indices_in_refs.into_iter() {
+				let position = VERTICES_FOR_REF[index_in_refs];
 				let position = position.normalize() / 2.0;
 				vertices.push(PartVertexPod { position: position.into(), normal: normal.into() });
 			}
@@ -691,5 +742,18 @@ pub(crate) mod colored_icosahedron {
 		});
 
 		Mesh { vertex_count: vertices.len() as u32, buffer }
+	}
+
+	/// Creates coloring (to apply to the icosahedron mesh).
+	pub(crate) fn coloring_for_icosahedron() -> Vec<Vector3Pod> {
+		let mut colors: Vec<Vector3Pod> = vec![];
+		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
+			for index_in_refs in triangle_indices_in_refs.into_iter() {
+				let position = VERTICES_FOR_REF[index_in_refs];
+				let position = position.normalize() / 2.0 + cgmath::vec3(0.5, 0.5, 0.5);
+				colors.push(Vector3Pod { values: cgmath::conv::array3(position) });
+			}
+		}
+		colors
 	}
 }

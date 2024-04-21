@@ -15,7 +15,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
-	entity_parts::{PartTables, TextureMappingTable},
+	entity_parts::{PartTables, TextureMappingAndColoringTable},
 	font::{self, Font},
 	interface::Interface,
 	lang,
@@ -136,7 +136,7 @@ pub(crate) struct Game {
 	pub(crate) max_fps: Option<i32>,
 	pub(crate) part_tables: PartTables,
 	pub(crate) texturing_and_coloring_array_thingy: BindingThingy<wgpu::Buffer>,
-	pub(crate) texture_mapping_table: TextureMappingTable,
+	pub(crate) texture_mapping_table: TextureMappingAndColoringTable,
 	pub(crate) player_held_block: Option<Block>,
 	pub(crate) world_time: Duration,
 	pub(crate) playing_mode: PlayingMode,
@@ -506,7 +506,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let texturing_and_coloring_array_thingy =
 		init_texturing_and_coloring_array_thingy(Arc::clone(&device));
-	let texture_mapping_table = TextureMappingTable::new();
+	let texture_mapping_table = TextureMappingAndColoringTable::new();
 
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),

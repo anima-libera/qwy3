@@ -8,7 +8,7 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
-	@location(6) coloring_point_offset: u32,
+	@location(6) coloring_offset: u32,
 };
 
 struct VertexOutput {
@@ -19,7 +19,7 @@ struct VertexOutput {
 };
 
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
-@group(0) @binding(1) var<storage, read> uniform_texturing_and_coloring_array: array<vec2<f32> >;
+@group(0) @binding(1) var<storage, read> uniform_texturing_and_coloring_array: array<f32>;
 @group(0) @binding(2) var<uniform> uniform_sun_light_direction: vec3<f32>;
 @group(0) @binding(3) var<storage, read> uniform_sun_camera_array: array<mat4x4<f32> >;
 @group(0) @binding(4) var uniform_shadow_map_texture_array: texture_depth_2d_array;
@@ -40,12 +40,11 @@ fn vertex_shader_main(
 		instance_input.model_matrix_4_of_4,
 	);
 
-	// TODO: Get the color from the coloring at the offset given by `coloring_point_offset`.
-	//let color = vec3(
-	//	f32(vertex_index % 2) / 2.0,
-	//	f32(vertex_index % 3) / 3.0,
-	//	f32(vertex_index % 5) / 5.0);
-	let color = vec3(1.0, 1.0, 1.0);
+	var coloring_vertex_offset = instance_input.coloring_offset + vertex_index * 3;
+	var r = uniform_texturing_and_coloring_array[coloring_vertex_offset + 0];
+	var g = uniform_texturing_and_coloring_array[coloring_vertex_offset + 1];
+	var b = uniform_texturing_and_coloring_array[coloring_vertex_offset + 2];
+	var color = vec3(r, g, b);
 
 	var shade = dot(vertex_input.normal, -uniform_sun_light_direction);
 	shade = clamp(shade, 0.0, 1.0);

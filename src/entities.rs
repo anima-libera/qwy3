@@ -16,7 +16,7 @@ use crate::{
 	entity_parts::{
 		colored_icosahedron::PartColoredIcosahedronInstanceData,
 		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
-		TextureMappingTable,
+		TextureMappingAndColoringTable, WhichIcosahedronColoring,
 	},
 	physics::AlignedPhysBox,
 	rendering_init::BindingThingy,
@@ -203,7 +203,7 @@ impl Entity {
 						&mut part_manipulation.part_tables.textured_cubes,
 						|| {
 							let texture_mapping_offset = part_manipulation
-								.texture_mapping_table
+								.texture_mapping_and_coloring_table
 								.get_offset_of_block(
 									block.type_id,
 									block_type_table,
@@ -243,7 +243,16 @@ impl Entity {
 				if let EntityTyped::TestIcosahedron { part_handler, .. } = &mut self.typed {
 					part_handler.ensure_is_allocated(
 						&mut part_manipulation.part_tables.colored_icosahedron,
-						|| PartColoredIcosahedronInstanceData::new(pos).into_pod(),
+						|| {
+							let coloring_offset = part_manipulation
+								.texture_mapping_and_coloring_table
+								.get_offset_of_icosahedron_coloring(
+									WhichIcosahedronColoring::Test,
+									part_manipulation.texturing_and_coloring_array_thingy,
+									part_manipulation.queue,
+								);
+							PartColoredIcosahedronInstanceData::new(pos, coloring_offset).into_pod()
+						},
 					);
 
 					part_handler.modify_instance(
@@ -281,7 +290,7 @@ impl Entity {
 /// All that is needed for entities to be able to manipulate their parts.
 pub(crate) struct ForPartManipulation<'a> {
 	pub(crate) part_tables: &'a mut PartTables,
-	pub(crate) texture_mapping_table: &'a mut TextureMappingTable,
+	pub(crate) texture_mapping_and_coloring_table: &'a mut TextureMappingAndColoringTable,
 	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) queue: &'a wgpu::Queue,
 }

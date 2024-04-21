@@ -754,7 +754,7 @@ pub fn init_and_run_game_loop() {
 				game.save.as_ref(),
 				&mut ForPartManipulation {
 					part_tables: &mut game.part_tables,
-					texture_mapping_table: &mut game.texture_mapping_table,
+					texture_mapping_and_coloring_table: &mut game.texture_mapping_table,
 					texturing_and_coloring_array_thingy: &game.texturing_and_coloring_array_thingy,
 					queue: &game.queue,
 				},
