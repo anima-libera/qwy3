@@ -12,7 +12,7 @@ pub(crate) struct PartColoredInstancePod {
 	pub(crate) model_matrix_2_of_4: [f32; 4],
 	pub(crate) model_matrix_3_of_4: [f32; 4],
 	pub(crate) model_matrix_4_of_4: [f32; 4],
-	pub(crate) coloring_point_offset: u32,
+	pub(crate) coloring_offset: u32,
 }
 impl PartColoredInstancePod {
 	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
@@ -28,7 +28,7 @@ impl PartColoredInstancePod {
 
 pub(crate) struct BindingThingies<'a> {
 	pub(crate) camera_matrix_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_light_direction_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) shadow_map_view_thingy: &'a BindingThingy<wgpu::TextureView>,
@@ -59,7 +59,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		label: Some("Part Colored Shader Bind Group Layout"),
 		entries: &[
 			binding_thingies.camera_matrix_thingy.layout_entry(0, S::VERTEX),
-			binding_thingies.coords_in_atlas_array_thingy.layout_entry(1, S::VERTEX),
+			binding_thingies.texturing_and_coloring_array_thingy.layout_entry(1, S::VERTEX),
 			binding_thingies.sun_light_direction_thingy.layout_entry(2, S::VERTEX),
 			binding_thingies.sun_camera_matrices_thingy.layout_entry(3, S::FRAGMENT),
 			binding_thingies.shadow_map_view_thingy.layout_entry(4, S::FRAGMENT),
@@ -73,7 +73,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 		layout: &bind_group_layout,
 		entries: &[
 			binding_thingies.camera_matrix_thingy.bind_group_entry(0),
-			binding_thingies.coords_in_atlas_array_thingy.bind_group_entry(1),
+			binding_thingies.texturing_and_coloring_array_thingy.bind_group_entry(1),
 			binding_thingies.sun_light_direction_thingy.bind_group_entry(2),
 			binding_thingies.sun_camera_matrices_thingy.bind_group_entry(3),
 			binding_thingies.shadow_map_view_thingy.bind_group_entry(4),

@@ -19,7 +19,7 @@ struct VertexOutput {
 };
 
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
-@group(0) @binding(1) var<storage, read> uniform_coords_in_atlas_array: array<vec2<f32> >;
+@group(0) @binding(1) var<storage, read> uniform_texturing_and_coloring_array: array<vec2<f32> >;
 @group(0) @binding(2) var<uniform> uniform_sun_light_direction: vec3<f32>;
 @group(0) @binding(3) var<storage, read> uniform_sun_camera_array: array<mat4x4<f32> >;
 @group(0) @binding(4) var uniform_shadow_map_texture_array: texture_depth_2d_array;

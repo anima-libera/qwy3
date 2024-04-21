@@ -9,7 +9,7 @@ pub(crate) struct BindingThingies<'a> {
 	pub(crate) atlas_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) fog_center_position_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub(crate) fn render_pipeline_and_bind_group(
@@ -37,7 +37,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.atlas_texture_sampler_thingy.layout_entry(2, S::FRAGMENT),
 			binding_thingies.fog_center_position_thingy.layout_entry(3, S::FRAGMENT),
 			binding_thingies.fog_inf_sup_radiuses_thingy.layout_entry(4, S::FRAGMENT),
-			binding_thingies.coords_in_atlas_array_thingy.layout_entry(5, S::VERTEX),
+			binding_thingies.texturing_and_coloring_array_thingy.layout_entry(5, S::VERTEX),
 		],
 	});
 	let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -49,7 +49,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 			binding_thingies.atlas_texture_sampler_thingy.bind_group_entry(2),
 			binding_thingies.fog_center_position_thingy.bind_group_entry(3),
 			binding_thingies.fog_inf_sup_radiuses_thingy.bind_group_entry(4),
-			binding_thingies.coords_in_atlas_array_thingy.bind_group_entry(5),
+			binding_thingies.texturing_and_coloring_array_thingy.bind_group_entry(5),
 		],
 	});
 

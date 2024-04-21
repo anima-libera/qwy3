@@ -6,16 +6,18 @@
 //! The parts are instanced, so there is one table of instances per model.
 //! The models can be simple shapes (such as a cube), or whatever.
 //!
-//! The models are not colored nor textured, this texturing is done per instance.
-//! But the actual texturing data for all the vertices of the model is not inside the instance,
-//! rather it is in a table of such data, and the instace points to the offset at which sits the
-//! texturing data it wants.
+//! The models are not textured nor colored, the texturing/coloring is done per instance.
+//! But the actual texturing/coloring data for all the vertices of the model is not inside
+//! the instance, rather it is in a table of such data, and the instace points to the offset
+//! at which sits the texturing/coloring data it wants.
 //! Thus there are 3 Wgpu buffers:
 //!   - the model mesh (one per part table).
 //!   - the instance table (one per part table).
-//!   - the texturing data table (`coords_in_atlas_array_thingy`, shared between the part tables).
+//!   - the texturing/coloring data table (one for all the tables).
 //!
-//! One part table has one model and all the instances of that model.
+//! One part table owns one model and owns all the instances of that model.
+//!
+//! The buffer of the actual texturing/coloring data is `texturing_and_coloring_array_thingy`.
 
 use std::{
 	collections::{hash_map::Entry, HashMap},
@@ -56,7 +58,7 @@ pub(crate) enum PartHandler<T: PartInstance> {
 		/// Index of the instance in the `instance_table` of the `PartTable<T>`.
 		index: u32,
 		/// Rust bullied me into putting that here >_<'
-		/// The handler does not "own" a `T` in the sense of owning things in Rust.
+		/// The handler does not "own" a `T` with the Rust meaning of ownership.
 		/// This should be harmless, but who knows, the documentation of `PhantomData` acts all
 		/// mysterious about what this really does to the compilation (but it can have an influence,
 		/// that was clear at least).
@@ -277,16 +279,17 @@ struct Mesh {
 	buffer: wgpu::Buffer,
 }
 
-/// The table in which are stored the texture mappings of the instances.
-/// A model for textured entity parts is not textured itself, instead each instance of that model
-/// points to its desired texture mappings in this table.
+/// The table in which are stored the texture mappings and the colorings of the instances.
+/// A model for textured/colored entity parts is not textured/colored itself, instead
+/// each instance of that model refers to its desired texture mappings/coloring in this table.
 pub(crate) struct TextureMappingTable {
-	/// Maps a block type to the offset (in `vec2<f32>`s) of the texture mapping of the block type.
+	/// Maps each possible texturings/colorings to the offset (in `f32`s) of
+	/// the texture mapping/coloring in the array.
 	blocks: FxHashMap<WhichTextureMapping, u32>,
 	/// Next offset in the Wgpu buffer, in bytes.
 	next_offset_in_buffer_in_bytes: u32,
-	/// Next offset in `vec2<f32>`s to be given to instances.
-	next_offset_in_points: u32,
+	/// Next offset in `f32`s to be given to instances.
+	next_offset: u32,
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -303,7 +306,7 @@ impl TextureMappingTable {
 		TextureMappingTable {
 			blocks: HashMap::default(),
 			next_offset_in_buffer_in_bytes: 0,
-			next_offset_in_points: 0,
+			next_offset: 0,
 		}
 	}
 
@@ -315,7 +318,7 @@ impl TextureMappingTable {
 		&mut self,
 		block_type_id: BlockTypeId,
 		block_type_table: &Arc<BlockTypeTable>,
-		coords_in_atlas_array_thingy: &BindingThingy<wgpu::Buffer>,
+		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> Option<CubeTextureMappingOffset> {
 		let entry = self.blocks.entry(WhichTextureMapping::Block(block_type_id));
@@ -330,15 +333,16 @@ impl TextureMappingTable {
 				let data = bytemuck::cast_slice(&mappings);
 				let data_offset = self.next_offset_in_buffer_in_bytes;
 				queue.write_buffer(
-					&coords_in_atlas_array_thingy.resource,
+					&texturing_and_coloring_array_thingy.resource,
 					data_offset as u64,
 					data,
 				);
 				self.next_offset_in_buffer_in_bytes += data.len() as u32;
-				let offset_in_points = self.next_offset_in_points;
-				self.next_offset_in_points += mappings.len() as u32;
-				vacant.insert(offset_in_points);
-				Some(CubeTextureMappingOffset(offset_in_points))
+				let offset = self.next_offset;
+				let length_of_the_mapping_for_one_vertex = 2;
+				self.next_offset += mappings.len() as u32 * length_of_the_mapping_for_one_vertex;
+				vacant.insert(offset);
+				Some(CubeTextureMappingOffset(offset))
 			},
 		}
 	}
@@ -385,20 +389,19 @@ pub(crate) mod textured_cubes {
 	/// counterpart will be the one that gets stored in a `PartTable`).
 	pub(crate) struct PartTexturedCubeInstanceData {
 		model_matrix: [[f32; 4]; 4],
-		/// The offset is in the array of 2D points, so 1 rank per `vec2<f32>`.
-		texture_mapping_point_offset: u32,
+		texture_mapping_offset: u32,
 	}
 
 	impl PartTexturedCubeInstanceData {
 		pub(crate) fn new(
 			pos: cgmath::Point3<f32>,
-			texture_mapping_point_offset: CubeTextureMappingOffset,
+			texture_mapping_offset: CubeTextureMappingOffset,
 		) -> PartTexturedCubeInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
 			let model_matrix = cgmath::conv::array4x4(model_matrix);
 			PartTexturedCubeInstanceData {
 				model_matrix,
-				texture_mapping_point_offset: texture_mapping_point_offset.0,
+				texture_mapping_offset: texture_mapping_offset.0,
 			}
 		}
 
@@ -409,7 +412,7 @@ pub(crate) mod textured_cubes {
 				model_matrix_2_of_4: self.model_matrix[1],
 				model_matrix_3_of_4: self.model_matrix[2],
 				model_matrix_4_of_4: self.model_matrix[3],
-				texture_mapping_point_offset: self.texture_mapping_point_offset,
+				texture_mapping_offset: self.texture_mapping_offset,
 			}
 		}
 	}
@@ -591,14 +594,14 @@ pub(crate) mod colored_icosahedron {
 		model_matrix: [[f32; 4]; 4],
 		/// Unused for now.
 		/// TODO: Use.
-		coloring_point_offset: u32,
+		coloring_offset: u32,
 	}
 
 	impl PartColoredIcosahedronInstanceData {
 		pub(crate) fn new(pos: cgmath::Point3<f32>) -> PartColoredIcosahedronInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
 			let model_matrix = cgmath::conv::array4x4(model_matrix);
-			PartColoredIcosahedronInstanceData { model_matrix, coloring_point_offset: 0 }
+			PartColoredIcosahedronInstanceData { model_matrix, coloring_offset: 0 }
 		}
 
 		/// Converts into the form that can be stored in a `PartTable`.
@@ -608,7 +611,7 @@ pub(crate) mod colored_icosahedron {
 				model_matrix_2_of_4: self.model_matrix[1],
 				model_matrix_3_of_4: self.model_matrix[2],
 				model_matrix_4_of_4: self.model_matrix[3],
-				coloring_point_offset: self.coloring_point_offset,
+				coloring_offset: self.coloring_offset,
 			}
 		}
 	}
@@ -659,17 +662,21 @@ pub(crate) mod colored_icosahedron {
 			[7, 2, 11],
 		];
 		for triangle_indices_in_refs in triangles_indices_in_refs {
-			// Normal of the face. We choose to have one normal per face instead of interpolated
-			// per-vertex normals, because we embrace the low poly visual style (by artistic choice).
-			let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
-			for index_in_refs in triangle_indices_in_refs.iter().copied() {
-				let position = vertices_for_ref[index_in_refs];
-				normal += position;
-			}
-			normal = normal.normalize();
+			// Normal of the face.
+			let normal = {
+				// We choose to have one normal per face instead of interpolated per-vertex normals,
+				// because we embrace the low poly visual style (by artistic choice).
+				let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
+				for index_in_refs in triangle_indices_in_refs.iter().copied() {
+					let position = vertices_for_ref[index_in_refs];
+					normal += position;
+				}
+				normal.normalize()
+			};
 
+			// Vertices of the face.
 			// The triangles are the wrong kind of clock-wise/counter-clock-wise orientation,
-			// so we reverse them.
+			// so we reverse them (so that the face culling will cull the right faces).
 			for index_in_refs in triangle_indices_in_refs.into_iter().rev() {
 				let position = vertices_for_ref[index_in_refs];
 				let position = position.normalize() / 2.0;

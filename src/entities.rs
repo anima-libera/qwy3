@@ -202,16 +202,16 @@ impl Entity {
 					part_handler.ensure_is_allocated(
 						&mut part_manipulation.part_tables.textured_cubes,
 						|| {
-							let texture_mapping_point_offset = part_manipulation
+							let texture_mapping_offset = part_manipulation
 								.texture_mapping_table
 								.get_offset_of_block(
 									block.type_id,
 									block_type_table,
-									part_manipulation.coords_in_atlas_array_thingy,
+									part_manipulation.texturing_and_coloring_array_thingy,
 									part_manipulation.queue,
 								)
 								.unwrap();
-							PartTexturedCubeInstanceData::new(pos, texture_mapping_point_offset).into_pod()
+							PartTexturedCubeInstanceData::new(pos, texture_mapping_offset).into_pod()
 						},
 					);
 
@@ -282,7 +282,7 @@ impl Entity {
 pub(crate) struct ForPartManipulation<'a> {
 	pub(crate) part_tables: &'a mut PartTables,
 	pub(crate) texture_mapping_table: &'a mut TextureMappingTable,
-	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) queue: &'a wgpu::Queue,
 }
 

@@ -22,11 +22,11 @@ use crate::{
 	line_meshes::SimpleLineMesh,
 	physics::{AlignedPhysBox, PlayerJumpManager},
 	rendering_init::{
-		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy,
-		init_coords_in_atlas_array_thingy, init_fog_stuff, init_shadow_map_stuff, init_skybox_stuff,
-		init_sun_camera_matrices_thingy, init_sun_light_direction_thingy, make_z_buffer_texture_view,
-		AllBindingThingies, AtlasStuff, BindingThingy, FogStuff, RenderPipelinesAndBindGroups,
-		ShadowMapStuff, SkyboxStuff, SunCameraStuff,
+		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy, init_fog_stuff,
+		init_shadow_map_stuff, init_skybox_stuff, init_sun_camera_matrices_thingy,
+		init_sun_light_direction_thingy, init_texturing_and_coloring_array_thingy,
+		make_z_buffer_texture_view, AllBindingThingies, AtlasStuff, BindingThingy, FogStuff,
+		RenderPipelinesAndBindGroups, ShadowMapStuff, SkyboxStuff, SunCameraStuff,
 	},
 	saves::Save,
 	shaders::{Vector2Pod, Vector3Pod},
@@ -135,7 +135,7 @@ pub(crate) struct Game {
 	pub(crate) only_save_modified_chunks: bool,
 	pub(crate) max_fps: Option<i32>,
 	pub(crate) part_tables: PartTables,
-	pub(crate) coords_in_atlas_array_thingy: BindingThingy<wgpu::Buffer>,
+	pub(crate) texturing_and_coloring_array_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) texture_mapping_table: TextureMappingTable,
 	pub(crate) player_held_block: Option<Block>,
 	pub(crate) world_time: Duration,
@@ -504,7 +504,8 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 
 	let part_tables = PartTables::new(&device);
 
-	let coords_in_atlas_array_thingy = init_coords_in_atlas_array_thingy(Arc::clone(&device));
+	let texturing_and_coloring_array_thingy =
+		init_texturing_and_coloring_array_thingy(Arc::clone(&device));
 	let texture_mapping_table = TextureMappingTable::new();
 
 	let rendering = rendering_init::init_rendering_stuff(
@@ -523,7 +524,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 			skybox_cubemap_texture_sampler_thingy: &skybox_cubemap_texture_sampler_thingy,
 			fog_center_position_thingy: &fog_center_position_thingy,
 			fog_inf_sup_radiuses_thingy: &fog_inf_sup_radiuses_thingy,
-			coords_in_atlas_array_thingy: &coords_in_atlas_array_thingy,
+			texturing_and_coloring_array_thingy: &texturing_and_coloring_array_thingy,
 		},
 		shadow_map_format,
 		window_surface_config.format,
@@ -664,7 +665,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		only_save_modified_chunks,
 		max_fps,
 		part_tables,
-		coords_in_atlas_array_thingy,
+		texturing_and_coloring_array_thingy,
 		texture_mapping_table,
 		player_held_block,
 		world_time,

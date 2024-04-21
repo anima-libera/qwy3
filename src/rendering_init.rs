@@ -124,7 +124,7 @@ pub(crate) struct AllBindingThingies<'a> {
 	pub(crate) skybox_cubemap_texture_sampler_thingy: &'a BindingThingy<wgpu::Sampler>,
 	pub(crate) fog_center_position_thingy: &'a BindingThingy<wgpu::Buffer>,
 	pub(crate) fog_inf_sup_radiuses_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) coords_in_atlas_array_thingy: &'a BindingThingy<wgpu::Buffer>,
+	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
 }
 
 pub(crate) fn init_rendering_stuff(
@@ -173,7 +173,8 @@ pub(crate) fn init_rendering_stuff(
 				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
 				fog_center_position_thingy: all_binding_thingies.fog_center_position_thingy,
 				fog_inf_sup_radiuses_thingy: all_binding_thingies.fog_inf_sup_radiuses_thingy,
-				coords_in_atlas_array_thingy: all_binding_thingies.coords_in_atlas_array_thingy,
+				texturing_and_coloring_array_thingy: all_binding_thingies
+					.texturing_and_coloring_array_thingy,
 			},
 			shadow_map_format,
 		);
@@ -185,7 +186,8 @@ pub(crate) fn init_rendering_stuff(
 				camera_matrix_thingy: all_binding_thingies.camera_matrix_thingy,
 				atlas_texture_view_thingy: all_binding_thingies.atlas_texture_view_thingy,
 				atlas_texture_sampler_thingy: all_binding_thingies.atlas_texture_sampler_thingy,
-				coords_in_atlas_array_thingy: all_binding_thingies.coords_in_atlas_array_thingy,
+				texturing_and_coloring_array_thingy: all_binding_thingies
+					.texturing_and_coloring_array_thingy,
 				sun_light_direction_thingy: all_binding_thingies.sun_light_direction_thingy,
 				sun_camera_matrices_thingy: all_binding_thingies.sun_camera_matrices_thingy,
 				shadow_map_view_thingy: all_binding_thingies.shadow_map_view_thingy,
@@ -213,7 +215,8 @@ pub(crate) fn init_rendering_stuff(
 			&device,
 			shaders::part_colored::BindingThingies {
 				camera_matrix_thingy: all_binding_thingies.camera_matrix_thingy,
-				coords_in_atlas_array_thingy: all_binding_thingies.coords_in_atlas_array_thingy,
+				texturing_and_coloring_array_thingy: all_binding_thingies
+					.texturing_and_coloring_array_thingy,
 				sun_light_direction_thingy: all_binding_thingies.sun_light_direction_thingy,
 				sun_camera_matrices_thingy: all_binding_thingies.sun_camera_matrices_thingy,
 				shadow_map_view_thingy: all_binding_thingies.shadow_map_view_thingy,
@@ -754,20 +757,22 @@ pub(crate) fn init_fog_stuff(device: Arc<wgpu::Device>) -> FogStuff {
 	FogStuff { fog_center_position_thingy, fog_inf_sup_radiuses_thingy }
 }
 
-const COORDS_IN_ATLAS_ARRAY_LENGTH: usize = 10000;
+const TEXTURING_AND_COLORING_ARRAY_LENGTH: usize = 10000;
 
-pub(crate) fn init_coords_in_atlas_array_thingy(
+pub(crate) fn init_texturing_and_coloring_array_thingy(
 	device: Arc<wgpu::Device>,
 ) -> BindingThingy<wgpu::Buffer> {
-	let coords_in_atlas_array_buffer =
+	let texturing_and_coloring_array_buffer =
 		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some("Coords in Atlas Array Buffer"),
+			label: Some("Texturing and Coloring Array Buffer"),
 			// If it is intially empty, then validation fails on error "Buffer binding size is zero".
 			// TODO: Why though? How is this a problem? Is there a better fix?
-			contents: bytemuck::cast_slice(&[Vector2Pod::zeroed(); COORDS_IN_ATLAS_ARRAY_LENGTH]),
+			contents: bytemuck::cast_slice(
+				&[Vector2Pod::zeroed(); TEXTURING_AND_COLORING_ARRAY_LENGTH],
+			),
 			usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
 		});
-	let coords_in_atlas_array_binding_type = BindingType {
+	let texturing_and_coloring_array_binding_type = BindingType {
 		ty: wgpu::BindingType::Buffer {
 			ty: wgpu::BufferBindingType::Storage { read_only: true },
 			has_dynamic_offset: false,
@@ -776,7 +781,7 @@ pub(crate) fn init_coords_in_atlas_array_thingy(
 		count: None,
 	};
 	BindingThingy {
-		binding_type: coords_in_atlas_array_binding_type,
-		resource: coords_in_atlas_array_buffer,
+		binding_type: texturing_and_coloring_array_binding_type,
+		resource: texturing_and_coloring_array_buffer,
 	}
 }

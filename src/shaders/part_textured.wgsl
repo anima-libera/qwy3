@@ -8,7 +8,7 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
-	@location(6) texture_mapping_point_offset: u32,
+	@location(6) texture_mapping_offset: u32,
 };
 
 struct VertexOutput {
@@ -21,7 +21,7 @@ struct VertexOutput {
 @group(0) @binding(0) var<uniform> uniform_camera: mat4x4<f32>;
 @group(0) @binding(1) var uniform_atlas_texture: texture_2d<f32>;
 @group(0) @binding(2) var uniform_atlas_sampler: sampler;
-@group(0) @binding(3) var<storage, read> uniform_coords_in_atlas_array: array<vec2<f32> >;
+@group(0) @binding(3) var<storage, read> uniform_texturing_and_coloring_array: array<f32>;
 @group(0) @binding(4) var<uniform> uniform_sun_light_direction: vec3<f32>;
 @group(0) @binding(5) var<storage, read> uniform_sun_camera_array: array<mat4x4<f32> >;
 @group(0) @binding(6) var uniform_shadow_map_texture_array: texture_depth_2d_array;
@@ -42,8 +42,10 @@ fn vertex_shader_main(
 		instance_input.model_matrix_4_of_4,
 	);
 
-	var coords_in_atlas =
-		uniform_coords_in_atlas_array[instance_input.texture_mapping_point_offset + vertex_index];
+	var texture_mapping_vertex_offset = instance_input.texture_mapping_offset + vertex_index * 2;
+	var x_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 0];
+	var y_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 1];
+	var coords_in_atlas = vec2(x_in_atlas, y_in_atlas);
 
 	var shade = dot(vertex_input.normal, -uniform_sun_light_direction);
 	shade = clamp(shade, 0.0, 1.0);

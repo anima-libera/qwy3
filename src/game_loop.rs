@@ -755,7 +755,7 @@ pub fn init_and_run_game_loop() {
 				&mut ForPartManipulation {
 					part_tables: &mut game.part_tables,
 					texture_mapping_table: &mut game.texture_mapping_table,
-					coords_in_atlas_array_thingy: &game.coords_in_atlas_array_thingy,
+					texturing_and_coloring_array_thingy: &game.texturing_and_coloring_array_thingy,
 					queue: &game.queue,
 				},
 			);

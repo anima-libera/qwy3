@@ -8,7 +8,7 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
-	@location(6) texture_mapping_point_offset: u32,
+	@location(6) texture_mapping_offset: u32,
 };
 
 struct VertexOutput {
@@ -22,7 +22,7 @@ struct VertexOutput {
 @group(0) @binding(2) var uniform_atlas_sampler: sampler;
 @group(0) @binding(3) var<uniform> uniform_fog_center_position: vec3<f32>;
 @group(0) @binding(4) var<uniform> uniform_fog_inf_sup_radiuses: vec2<f32>;
-@group(0) @binding(5) var<storage, read> uniform_coords_in_atlas_array: array<vec2<f32> >;
+@group(0) @binding(5) var<storage, read> uniform_texturing_and_coloring_array: array<f32>;
 
 // TODO: There is a lot of code duplication between here and `block_shadow.wgsl`,
 // we have to factorize!
@@ -40,8 +40,10 @@ fn vertex_shader_main(
 		instance_input.model_matrix_4_of_4,
 	);
 
-	var coords_in_atlas =
-		uniform_coords_in_atlas_array[instance_input.texture_mapping_point_offset + vertex_index];
+	var texture_mapping_vertex_offset = instance_input.texture_mapping_offset + vertex_index * 2;
+	var x_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 0];
+	var y_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 1];
+	var coords_in_atlas = vec2(x_in_atlas, y_in_atlas);
 
 	var world_position = model_matrix * vec4<f32>(vertex_input.position, 1.0);
 
