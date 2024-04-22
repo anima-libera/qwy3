@@ -639,8 +639,6 @@ pub(crate) mod colored_icosahedron {
 	/// counterpart will be the one that gets stored in a `PartTable`).
 	pub(crate) struct PartColoredIcosahedronInstanceData {
 		model_matrix: [[f32; 4]; 4],
-		/// Unused for now.
-		/// TODO: Use.
 		coloring_offset: u32,
 	}
 
@@ -669,6 +667,9 @@ pub(crate) mod colored_icosahedron {
 		}
 	}
 
+	// Some resources:
+	// https://schneide.blog/2016/07/15/generating-an-icosphere-in-c/
+	// https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
 	const GOLD: f32 = 1.618034; // Golden ratio.
 	const VERTICES_FOR_REF: [cgmath::Vector3<f32>; 12] = [
 		cgmath::vec3(-1.0, 0.0, GOLD),
@@ -709,10 +710,6 @@ pub(crate) mod colored_icosahedron {
 
 	/// Creates the mesh of the icosahedron model.
 	fn icosahedron_mesh(device: &wgpu::Device, name: &str) -> Mesh {
-		// Some resources:
-		// https://schneide.blog/2016/07/15/generating-an-icosphere-in-c/
-		// https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
-
 		let mut vertices: Vec<PartVertexPod> = vec![];
 		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
 			// Normal of the face.
