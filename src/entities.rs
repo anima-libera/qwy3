@@ -5,7 +5,7 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::EuclideanSpace;
+use cgmath::{EuclideanSpace, Zero};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -54,6 +54,7 @@ enum EntityTyped {
 	},
 	TestIcosahedron {
 		phys: AlignedPhysBox,
+		rotation_matrix: cgmath::Matrix4<f32>,
 		#[serde(skip)]
 		part_handler: PartHandler<PartColoredInstancePod>,
 	},
@@ -92,6 +93,7 @@ impl Entity {
 					AlignedBox { pos, dims: cgmath::vec3(0.99, 0.99, 0.99) },
 					motion,
 				),
+				rotation_matrix: cgmath::Matrix4::from_angle_x(cgmath::Rad::zero()),
 				part_handler: PartHandler::default(),
 			},
 		}
@@ -226,7 +228,7 @@ impl Entity {
 			},
 
 			EntityTyped::TestIcosahedron { .. } => {
-				if let EntityTyped::TestIcosahedron { phys, .. } = &mut self.typed {
+				if let EntityTyped::TestIcosahedron { phys, rotation_matrix, .. } = &mut self.typed {
 					phys.apply_one_physics_step(
 						cgmath::vec3(0.0, 0.0, 0.0),
 						chunk_grid,
@@ -234,13 +236,19 @@ impl Entity {
 						dt,
 						true,
 					);
+
+					*rotation_matrix =
+						cgmath::Matrix4::<f32>::from_angle_z(cgmath::Rad(dt.as_secs_f32() * 6.0))
+							* *rotation_matrix;
 				} else {
 					unreachable!()
 				};
 
 				// Manage the part.
 				let pos = self.pos();
-				if let EntityTyped::TestIcosahedron { part_handler, .. } = &mut self.typed {
+				if let EntityTyped::TestIcosahedron { part_handler, rotation_matrix, .. } =
+					&mut self.typed
+				{
 					part_handler.ensure_is_allocated(
 						&mut part_manipulation.part_tables.colored_icosahedron,
 						|| {
@@ -258,8 +266,10 @@ impl Entity {
 					part_handler.modify_instance(
 						&mut part_manipulation.part_tables.colored_icosahedron,
 						|instance| {
-							instance
-								.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(pos.to_vec()));
+							instance.set_model_matrix(
+								&(cgmath::Matrix4::<f32>::from_translation(pos.to_vec())
+									* *rotation_matrix),
+							);
 						},
 					);
 				}
