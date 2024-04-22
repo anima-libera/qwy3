@@ -1,6 +1,7 @@
 //! The entities and a part of their handling by the chunks.
 
 use std::{
+	f32::consts::TAU,
 	io::{Read, Write},
 	sync::Arc,
 };
@@ -229,17 +230,28 @@ impl Entity {
 
 			EntityTyped::TestIcosahedron { .. } => {
 				if let EntityTyped::TestIcosahedron { phys, rotation_matrix, .. } = &mut self.typed {
+					let last_pos = phys.aligned_box().pos;
 					phys.apply_one_physics_step(
-						cgmath::vec3(0.0, 0.0, 0.0),
+						cgmath::vec3(1.0, 0.0, 0.0),
 						chunk_grid,
 						block_type_table,
 						dt,
 						true,
 					);
 
-					*rotation_matrix =
-						cgmath::Matrix4::<f32>::from_angle_z(cgmath::Rad(dt.as_secs_f32() * 6.0))
-							* *rotation_matrix;
+					let delta_pos = phys.aligned_box().pos - last_pos;
+					if phys.on_ground_and_not_overlapping() {
+						let radius = 0.5;
+						let circumference = TAU * radius;
+						let delta_angle_x = (delta_pos.x / circumference) * TAU;
+						let delta_angle_y = (delta_pos.y / circumference) * TAU;
+						*rotation_matrix =
+							cgmath::Matrix4::<f32>::from_angle_y(cgmath::Rad(delta_angle_x))
+								* *rotation_matrix;
+						*rotation_matrix =
+							cgmath::Matrix4::<f32>::from_angle_x(-cgmath::Rad(delta_angle_y))
+								* *rotation_matrix;
+					}
 				} else {
 					unreachable!()
 				};

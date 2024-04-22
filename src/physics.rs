@@ -177,7 +177,7 @@ impl AlignedPhysBox {
 	}
 }
 
-/// Manages the paleyr's ability to jump.
+/// Manages the player's ability to jump.
 /// This handles permissive jumping (allows jumping even when it is a little bit too late
 /// and the player is already falling off an edge).
 pub(crate) struct PlayerJumpManager {
