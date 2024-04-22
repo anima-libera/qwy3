@@ -393,6 +393,26 @@ impl TextureMappingAndColoringTable {
 	}
 }
 
+impl PartInstance for PartTexturedInstancePod {
+	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+		let model_matrix = cgmath::conv::array4x4(*model_matrix);
+		self.model_matrix_1_of_4 = model_matrix[0];
+		self.model_matrix_2_of_4 = model_matrix[1];
+		self.model_matrix_3_of_4 = model_matrix[2];
+		self.model_matrix_4_of_4 = model_matrix[3];
+	}
+}
+
+impl PartInstance for PartColoredInstancePod {
+	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+		let model_matrix = cgmath::conv::array4x4(*model_matrix);
+		self.model_matrix_1_of_4 = model_matrix[0];
+		self.model_matrix_2_of_4 = model_matrix[1];
+		self.model_matrix_3_of_4 = model_matrix[2];
+		self.model_matrix_4_of_4 = model_matrix[3];
+	}
+}
+
 pub(crate) mod textured_cubes {
 	//! Here are hanled the matters specific to the
 	//! textured cube entity parts and their `PartTable`.
@@ -400,16 +420,6 @@ pub(crate) mod textured_cubes {
 	use crate::shaders::{part_textured::PartVertexPod, Vector2Pod};
 
 	use super::*;
-
-	impl PartInstance for PartTexturedInstancePod {
-		fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
-			let model_matrix = cgmath::conv::array4x4(*model_matrix);
-			self.model_matrix_1_of_4 = model_matrix[0];
-			self.model_matrix_2_of_4 = model_matrix[1];
-			self.model_matrix_3_of_4 = model_matrix[2];
-			self.model_matrix_4_of_4 = model_matrix[3];
-		}
-	}
 
 	pub(super) fn textured_cube_part_table(
 		device: &wgpu::Device,
@@ -606,16 +616,6 @@ pub(crate) mod colored_icosahedron {
 
 	use super::*;
 
-	impl PartInstance for PartColoredInstancePod {
-		fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
-			let model_matrix = cgmath::conv::array4x4(*model_matrix);
-			self.model_matrix_1_of_4 = model_matrix[0];
-			self.model_matrix_2_of_4 = model_matrix[1];
-			self.model_matrix_3_of_4 = model_matrix[2];
-			self.model_matrix_4_of_4 = model_matrix[3];
-		}
-	}
-
 	pub(super) fn colored_icosahedron_part_table(
 		device: &wgpu::Device,
 	) -> PartTable<PartColoredInstancePod> {
@@ -746,6 +746,7 @@ pub(crate) mod colored_icosahedron {
 		let mut colors: Vec<Vector3Pod> = vec![];
 		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
 			for index_in_refs in triangle_indices_in_refs.into_iter() {
+				// Test coloring.
 				let position = VERTICES_FOR_REF[index_in_refs];
 				let position = position.normalize() / 2.0 + cgmath::vec3(0.5, 0.5, 0.5);
 				colors.push(Vector3Pod { values: cgmath::conv::array3(position) });

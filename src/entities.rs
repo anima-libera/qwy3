@@ -59,9 +59,6 @@ enum EntityTyped {
 		#[serde(skip)]
 		part_handler: PartHandler<PartColoredInstancePod>,
 	},
-	/// Turns off warnings about irrefutability of patterns.
-	/// Can be removed when an other type is added.
-	_DummyOtherType,
 }
 
 impl Entity {
@@ -104,7 +101,6 @@ impl Entity {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => phys.aligned_box().pos,
 			EntityTyped::TestIcosahedron { phys, .. } => phys.aligned_box().pos,
-			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
@@ -117,7 +113,6 @@ impl Entity {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => Some(phys.aligned_box().clone()),
 			EntityTyped::TestIcosahedron { phys, .. } => Some(phys.aligned_box().clone()),
-			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
@@ -286,8 +281,6 @@ impl Entity {
 					);
 				}
 			},
-
-			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 
@@ -304,7 +297,6 @@ impl Entity {
 			EntityTyped::TestIcosahedron { part_handler, .. } => {
 				part_handler.delete(&mut part_tables.colored_icosahedron);
 			},
-			EntityTyped::_DummyOtherType => panic!(),
 		}
 	}
 }
