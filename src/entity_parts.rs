@@ -671,19 +671,19 @@ pub(crate) mod colored_icosahedron {
 	// https://schneide.blog/2016/07/15/generating-an-icosphere-in-c/
 	// https://web.archive.org/web/20180808214504/http://donhavey.com:80/blog/tutorials/tutorial-3-the-icosahedron-sphere/
 	const GOLD: f32 = 1.618034; // Golden ratio.
-	const VERTICES_FOR_REF: [cgmath::Vector3<f32>; 12] = [
-		cgmath::vec3(-1.0, 0.0, GOLD),
-		cgmath::vec3(1.0, 0.0, GOLD),
-		cgmath::vec3(-1.0, 0.0, -GOLD),
-		cgmath::vec3(1.0, 0.0, -GOLD),
-		cgmath::vec3(0.0, GOLD, 1.0),
-		cgmath::vec3(0.0, GOLD, -1.0),
-		cgmath::vec3(0.0, -GOLD, 1.0),
-		cgmath::vec3(0.0, -GOLD, -1.0),
-		cgmath::vec3(GOLD, 1.0, 0.0),
-		cgmath::vec3(-GOLD, 1.0, 0.0),
-		cgmath::vec3(GOLD, -1.0, 0.0),
-		cgmath::vec3(-GOLD, -1.0, 0.0),
+	const VERTICES_FOR_REF: [cgmath::Point3<f32>; 12] = [
+		cgmath::point3(-1.0, 0.0, GOLD),
+		cgmath::point3(1.0, 0.0, GOLD),
+		cgmath::point3(-1.0, 0.0, -GOLD),
+		cgmath::point3(1.0, 0.0, -GOLD),
+		cgmath::point3(0.0, GOLD, 1.0),
+		cgmath::point3(0.0, GOLD, -1.0),
+		cgmath::point3(0.0, -GOLD, 1.0),
+		cgmath::point3(0.0, -GOLD, -1.0),
+		cgmath::point3(GOLD, 1.0, 0.0),
+		cgmath::point3(-GOLD, 1.0, 0.0),
+		cgmath::point3(GOLD, -1.0, 0.0),
+		cgmath::point3(-GOLD, -1.0, 0.0),
 	];
 	const TRIANGLES_INDICES_IN_REFS: [[usize; 3]; 20] = [
 		[1, 4, 0],
@@ -708,48 +708,87 @@ pub(crate) mod colored_icosahedron {
 		[11, 2, 7],
 	];
 
+	struct Face([cgmath::Point3<f32>; 3]);
+
+	impl Face {
+		fn normal(&self) -> cgmath::Vector3<f32> {
+			// We choose to have one normal per face instead of interpolated per-vertex normals,
+			// because we embrace the low poly visual style (by artistic choice).
+			let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
+			for position in self.0.iter().copied() {
+				normal += position.to_vec();
+			}
+			normal.normalize()
+		}
+
+		fn subdivise(&self) -> [Face; 4] {
+			// A d B
+			//  f e
+			//   C
+			let a = self.0[0];
+			let b = self.0[1];
+			let c = self.0[2];
+			let d = a.midpoint(b);
+			let e = b.midpoint(c);
+			let f = c.midpoint(a);
+			[
+				Face([a, d, f]),
+				Face([d, b, e]),
+				Face([d, e, f]),
+				Face([f, e, c]),
+			]
+		}
+	}
+
+	fn faces() -> impl Iterator<Item = Face> {
+		TRIANGLES_INDICES_IN_REFS
+			.into_iter()
+			.map(|triangle_indices_in_refs| {
+				Face(triangle_indices_in_refs.map(|index_in_refs| VERTICES_FOR_REF[index_in_refs]))
+			})
+			.flat_map(|face| face.subdivise())
+			.map(|face| {
+				let mut positions = face
+					.0
+					.into_iter()
+					.map(|position| cgmath::Point3::from_vec(position.to_vec().normalize() / 2.0));
+				Face([
+					positions.next().unwrap(),
+					positions.next().unwrap(),
+					positions.next().unwrap(),
+				])
+			})
+	}
+
 	/// Creates the mesh of the icosahedron model.
 	fn icosahedron_mesh(device: &wgpu::Device, name: &str) -> Mesh {
 		let mut vertices: Vec<PartVertexPod> = vec![];
-		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
-			// Normal of the face.
-			let normal = {
-				// We choose to have one normal per face instead of interpolated per-vertex normals,
-				// because we embrace the low poly visual style (by artistic choice).
-				let mut normal = cgmath::vec3(0.0, 0.0, 0.0);
-				for index_in_refs in triangle_indices_in_refs.iter().copied() {
-					let position = VERTICES_FOR_REF[index_in_refs];
-					normal += position;
-				}
-				normal.normalize()
-			};
-
-			// Vertices of the face.
-			for index_in_refs in triangle_indices_in_refs.into_iter() {
-				let position = VERTICES_FOR_REF[index_in_refs];
-				let position = position.normalize() / 2.0;
+		for face in faces() {
+			let normal = face.normal();
+			for position in face.0.into_iter() {
 				vertices.push(PartVertexPod { position: position.into(), normal: normal.into() });
 			}
 		}
-
 		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some(&format!("{name} Vertex Buffer")),
 			contents: bytemuck::cast_slice(&vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-
 		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
 
 	/// Creates coloring (to apply to the icosahedron mesh).
 	pub(crate) fn coloring_for_icosahedron() -> Vec<Vector3Pod> {
 		let mut colors: Vec<Vector3Pod> = vec![];
-		for triangle_indices_in_refs in TRIANGLES_INDICES_IN_REFS {
-			for index_in_refs in triangle_indices_in_refs.into_iter() {
-				// Test coloring.
-				let position = VERTICES_FOR_REF[index_in_refs];
-				let position = position.normalize() / 2.0 + cgmath::vec3(0.5, 0.5, 0.5);
-				colors.push(Vector3Pod { values: cgmath::conv::array3(position) });
+		for face in faces() {
+			for position in face.0 {
+				let mut color = cgmath::conv::array3(position + cgmath::vec3(0.5, 0.5, 0.5));
+				if color.iter().sum::<f32>() < 1.5 {
+					for component in color.iter_mut() {
+						*component = 1.0 - *component;
+					}
+				}
+				colors.push(Vector3Pod { values: cgmath::conv::array3(color) });
 			}
 		}
 		colors
