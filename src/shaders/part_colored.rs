@@ -12,16 +12,24 @@ pub(crate) struct PartColoredInstancePod {
 	pub(crate) model_matrix_2_of_4: [f32; 4],
 	pub(crate) model_matrix_3_of_4: [f32; 4],
 	pub(crate) model_matrix_4_of_4: [f32; 4],
+	pub(crate) inv_trans_model_matrix_1_of_4: [f32; 4],
+	pub(crate) inv_trans_model_matrix_2_of_4: [f32; 4],
+	pub(crate) inv_trans_model_matrix_3_of_4: [f32; 4],
+	pub(crate) inv_trans_model_matrix_4_of_4: [f32; 4],
 	pub(crate) coloring_offset: u32,
 }
 impl PartColoredInstancePod {
-	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 5] {
+	pub(crate) fn vertex_attributes() -> [wgpu::VertexAttribute; 9] {
 		vertex_attr_array![
 			2 => Float32x4,
 			3 => Float32x4,
 			4 => Float32x4,
 			5 => Float32x4,
-			6 => Uint32,
+			6 => Float32x4,
+			7 => Float32x4,
+			8 => Float32x4,
+			9 => Float32x4,
+			10 => Uint32,
 		]
 	}
 }

@@ -8,7 +8,11 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
-	@location(6) coloring_point_offset: u32,
+	@location(6) inv_trans_model_matrix_1_of_4: vec4<f32>,
+	@location(7) inv_trans_model_matrix_2_of_4: vec4<f32>,
+	@location(8) inv_trans_model_matrix_3_of_4: vec4<f32>,
+	@location(9) inv_trans_model_matrix_4_of_4: vec4<f32>,
+	@location(10) coloring_point_offset: u32,
 };
 
 struct VertexOutput {

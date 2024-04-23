@@ -8,7 +8,11 @@ struct InstanceInput {
 	@location(3) model_matrix_2_of_4: vec4<f32>,
 	@location(4) model_matrix_3_of_4: vec4<f32>,
 	@location(5) model_matrix_4_of_4: vec4<f32>,
-	@location(6) texture_mapping_offset: u32,
+	@location(6) inv_trans_model_matrix_1_of_4: vec4<f32>,
+	@location(7) inv_trans_model_matrix_2_of_4: vec4<f32>,
+	@location(8) inv_trans_model_matrix_3_of_4: vec4<f32>,
+	@location(9) inv_trans_model_matrix_4_of_4: vec4<f32>,
+	@location(10) texture_mapping_offset: u32,
 };
 
 struct VertexOutput {
@@ -41,13 +45,20 @@ fn vertex_shader_main(
 		instance_input.model_matrix_3_of_4,
 		instance_input.model_matrix_4_of_4,
 	);
+	var inv_trans_model_matrix = mat4x4(
+		instance_input.inv_trans_model_matrix_1_of_4,
+		instance_input.inv_trans_model_matrix_2_of_4,
+		instance_input.inv_trans_model_matrix_3_of_4,
+		instance_input.inv_trans_model_matrix_4_of_4,
+	);
 
 	var texture_mapping_vertex_offset = instance_input.texture_mapping_offset + vertex_index * 2;
 	var x_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 0];
 	var y_in_atlas = uniform_texturing_and_coloring_array[texture_mapping_vertex_offset + 1];
 	var coords_in_atlas = vec2(x_in_atlas, y_in_atlas);
 
-	var shade = dot(vertex_input.normal, -uniform_sun_light_direction);
+	var world_normal = inv_trans_model_matrix * vec4<f32>(vertex_input.normal, 1.0);
+	var shade = dot(world_normal.xyz, -uniform_sun_light_direction);
 	shade = clamp(shade, 0.0, 1.0);
 
 	var world_position = model_matrix * vec4<f32>(vertex_input.position, 1.0);

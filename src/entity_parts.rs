@@ -25,7 +25,7 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::EuclideanSpace;
+use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
 use rustc_hash::FxHashMap;
 use wgpu::util::DeviceExt;
 
@@ -395,27 +395,41 @@ impl TextureMappingAndColoringTable {
 
 impl PartInstance for PartTexturedInstancePod {
 	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+		let inv_trans_model_matrix =
+			cgmath::conv::array4x4(model_matrix.transpose().invert().unwrap());
 		let model_matrix = cgmath::conv::array4x4(*model_matrix);
 		self.model_matrix_1_of_4 = model_matrix[0];
 		self.model_matrix_2_of_4 = model_matrix[1];
 		self.model_matrix_3_of_4 = model_matrix[2];
 		self.model_matrix_4_of_4 = model_matrix[3];
+		self.inv_trans_model_matrix_1_of_4 = inv_trans_model_matrix[0];
+		self.inv_trans_model_matrix_2_of_4 = inv_trans_model_matrix[1];
+		self.inv_trans_model_matrix_3_of_4 = inv_trans_model_matrix[2];
+		self.inv_trans_model_matrix_4_of_4 = inv_trans_model_matrix[3];
 	}
 }
 
 impl PartInstance for PartColoredInstancePod {
 	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>) {
+		let inv_trans_model_matrix =
+			cgmath::conv::array4x4(model_matrix.transpose().invert().unwrap());
 		let model_matrix = cgmath::conv::array4x4(*model_matrix);
 		self.model_matrix_1_of_4 = model_matrix[0];
 		self.model_matrix_2_of_4 = model_matrix[1];
 		self.model_matrix_3_of_4 = model_matrix[2];
 		self.model_matrix_4_of_4 = model_matrix[3];
+		self.inv_trans_model_matrix_1_of_4 = inv_trans_model_matrix[0];
+		self.inv_trans_model_matrix_2_of_4 = inv_trans_model_matrix[1];
+		self.inv_trans_model_matrix_3_of_4 = inv_trans_model_matrix[2];
+		self.inv_trans_model_matrix_4_of_4 = inv_trans_model_matrix[3];
 	}
 }
 
 pub(crate) mod textured_cubes {
 	//! Here are hanled the matters specific to the
 	//! textured cube entity parts and their `PartTable`.
+
+	use cgmath::{Matrix, SquareMatrix};
 
 	use crate::shaders::{part_textured::PartVertexPod, Vector2Pod};
 
@@ -443,7 +457,7 @@ pub(crate) mod textured_cubes {
 	/// A nicer form of an instance that is yet to be converted into its raw counterpart (the raw
 	/// counterpart will be the one that gets stored in a `PartTable`).
 	pub(crate) struct PartTexturedCubeInstanceData {
-		model_matrix: [[f32; 4]; 4],
+		model_matrix: cgmath::Matrix4<f32>,
 		texture_mapping_offset: u32,
 	}
 
@@ -453,7 +467,6 @@ pub(crate) mod textured_cubes {
 			texture_mapping_offset: CubeTextureMappingOffset,
 		) -> PartTexturedCubeInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
-			let model_matrix = cgmath::conv::array4x4(model_matrix);
 			PartTexturedCubeInstanceData {
 				model_matrix,
 				texture_mapping_offset: texture_mapping_offset.0,
@@ -462,11 +475,18 @@ pub(crate) mod textured_cubes {
 
 		/// Converts into the form that can be stored in a `PartTable`.
 		pub(crate) fn into_pod(self) -> PartTexturedInstancePod {
+			let model_matrix = cgmath::conv::array4x4(self.model_matrix);
+			let inv_trans_model_matrix =
+				cgmath::conv::array4x4(self.model_matrix.transpose().invert().unwrap());
 			PartTexturedInstancePod {
-				model_matrix_1_of_4: self.model_matrix[0],
-				model_matrix_2_of_4: self.model_matrix[1],
-				model_matrix_3_of_4: self.model_matrix[2],
-				model_matrix_4_of_4: self.model_matrix[3],
+				model_matrix_1_of_4: model_matrix[0],
+				model_matrix_2_of_4: model_matrix[1],
+				model_matrix_3_of_4: model_matrix[2],
+				model_matrix_4_of_4: model_matrix[3],
+				inv_trans_model_matrix_1_of_4: inv_trans_model_matrix[0],
+				inv_trans_model_matrix_2_of_4: inv_trans_model_matrix[1],
+				inv_trans_model_matrix_3_of_4: inv_trans_model_matrix[2],
+				inv_trans_model_matrix_4_of_4: inv_trans_model_matrix[3],
 				texture_mapping_offset: self.texture_mapping_offset,
 			}
 		}
@@ -608,7 +628,7 @@ pub(crate) mod colored_icosahedron {
 	//! Here are hanled the matters specific to the
 	//! colored icosahedron entity parts and their `PartTable`.
 
-	use cgmath::InnerSpace;
+	use cgmath::{InnerSpace, Matrix, SquareMatrix};
 
 	use crate::shaders::{
 		part_colored::PartColoredInstancePod, part_textured::PartVertexPod, Vector3Pod,
@@ -638,7 +658,7 @@ pub(crate) mod colored_icosahedron {
 	/// A nicer form of an instance that is yet to be converted into its raw counterpart (the raw
 	/// counterpart will be the one that gets stored in a `PartTable`).
 	pub(crate) struct PartColoredIcosahedronInstanceData {
-		model_matrix: [[f32; 4]; 4],
+		model_matrix: cgmath::Matrix4<f32>,
 		coloring_offset: u32,
 	}
 
@@ -648,7 +668,6 @@ pub(crate) mod colored_icosahedron {
 			texture_mapping_offset: IcosahedrongColoringOffset,
 		) -> PartColoredIcosahedronInstanceData {
 			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
-			let model_matrix = cgmath::conv::array4x4(model_matrix);
 			PartColoredIcosahedronInstanceData {
 				model_matrix,
 				coloring_offset: texture_mapping_offset.0,
@@ -657,11 +676,18 @@ pub(crate) mod colored_icosahedron {
 
 		/// Converts into the form that can be stored in a `PartTable`.
 		pub(crate) fn into_pod(self) -> PartColoredInstancePod {
+			let model_matrix = cgmath::conv::array4x4(self.model_matrix);
+			let inv_trans_model_matrix =
+				cgmath::conv::array4x4(self.model_matrix.transpose().invert().unwrap());
 			PartColoredInstancePod {
-				model_matrix_1_of_4: self.model_matrix[0],
-				model_matrix_2_of_4: self.model_matrix[1],
-				model_matrix_3_of_4: self.model_matrix[2],
-				model_matrix_4_of_4: self.model_matrix[3],
+				model_matrix_1_of_4: model_matrix[0],
+				model_matrix_2_of_4: model_matrix[1],
+				model_matrix_3_of_4: model_matrix[2],
+				model_matrix_4_of_4: model_matrix[3],
+				inv_trans_model_matrix_1_of_4: inv_trans_model_matrix[0],
+				inv_trans_model_matrix_2_of_4: inv_trans_model_matrix[1],
+				inv_trans_model_matrix_3_of_4: inv_trans_model_matrix[2],
+				inv_trans_model_matrix_4_of_4: inv_trans_model_matrix[3],
 				coloring_offset: self.coloring_offset,
 			}
 		}
@@ -721,7 +747,7 @@ pub(crate) mod colored_icosahedron {
 			normal.normalize()
 		}
 
-		fn subdivise(&self) -> [Face; 4] {
+		fn subdivide(&self) -> [Face; 4] {
 			// A d B
 			//  f e
 			//   C
@@ -746,7 +772,7 @@ pub(crate) mod colored_icosahedron {
 			.map(|triangle_indices_in_refs| {
 				Face(triangle_indices_in_refs.map(|index_in_refs| VERTICES_FOR_REF[index_in_refs]))
 			})
-			.flat_map(|face| face.subdivise())
+			.flat_map(|face| face.subdivide())
 			.map(|face| {
 				let mut positions = face
 					.0
