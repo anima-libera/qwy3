@@ -34,7 +34,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 	binding_thingies: BindingThingies,
 	output_format: wgpu::TextureFormat,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-	let skybox_vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SkyboxVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &SkyboxVertexPod::vertex_attributes(),
@@ -59,27 +59,26 @@ pub(crate) fn render_pipeline_and_bind_group(
 		],
 	});
 
-	let skybox_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Skybox Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("skybox.wgsl").into()),
 	});
-	let skybox_render_pipeline_layout =
-		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Skybox Render Pipeline Layout"),
-			bind_group_layouts: &[&bind_group_layout],
-			push_constant_ranges: &[],
-		});
+	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+		label: Some("Skybox Render Pipeline Layout"),
+		bind_group_layouts: &[&bind_group_layout],
+		push_constant_ranges: &[],
+	});
 
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Skybox Render Pipeline"),
-		layout: Some(&skybox_render_pipeline_layout),
+		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &skybox_shader,
+			module: &shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[skybox_vertex_buffer_layout],
+			buffers: &[vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &skybox_shader,
+			module: &shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,

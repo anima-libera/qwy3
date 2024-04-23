@@ -11,7 +11,7 @@ pub(crate) fn render_pipeline(
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-	let simple_line_vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SimpleLineVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &SimpleLineVertexPod::vertex_attributes(),
@@ -28,27 +28,26 @@ pub(crate) fn render_pipeline(
 		entries: &[binding_thingies.aspect_ratio_thingy.bind_group_entry(0)],
 	});
 
-	let simple_line_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Simple Line 2D Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("simple_line_2d.wgsl").into()),
 	});
-	let simple_line_render_pipeline_layout =
-		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Simple Line 2D Render Pipeline Layout"),
-			bind_group_layouts: &[&bind_group_layout],
-			push_constant_ranges: &[],
-		});
+	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+		label: Some("Simple Line 2D Render Pipeline Layout"),
+		bind_group_layouts: &[&bind_group_layout],
+		push_constant_ranges: &[],
+	});
 
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Simple Line 2D Render Pipeline"),
-		layout: Some(&simple_line_render_pipeline_layout),
+		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &simple_line_shader,
+			module: &shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[simple_line_vertex_buffer_layout],
+			buffers: &[vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &simple_line_shader,
+			module: &shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,

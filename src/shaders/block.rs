@@ -42,7 +42,7 @@ pub(crate) fn render_pipeline_and_bind_group(
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-	let block_vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<BlockVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &BlockVertexPod::vertex_attributes(),
@@ -79,27 +79,26 @@ pub(crate) fn render_pipeline_and_bind_group(
 		],
 	});
 
-	let block_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Block Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("block.wgsl").into()),
 	});
-	let block_render_pipeline_layout =
-		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Block Render Pipeline Layout"),
-			bind_group_layouts: &[&bind_group_layout],
-			push_constant_ranges: &[],
-		});
+	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+		label: Some("Block Render Pipeline Layout"),
+		bind_group_layouts: &[&bind_group_layout],
+		push_constant_ranges: &[],
+	});
 
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Block Render Pipeline"),
-		layout: Some(&block_render_pipeline_layout),
+		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &block_shader,
+			module: &shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[block_vertex_buffer_layout],
+			buffers: &[vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &block_shader,
+			module: &shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,

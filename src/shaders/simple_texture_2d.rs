@@ -34,7 +34,7 @@ pub(crate) fn render_pipeline(
 	output_format: wgpu::TextureFormat,
 	z_buffer_format: wgpu::TextureFormat,
 ) -> (wgpu::RenderPipeline, wgpu::BindGroup) {
-	let simple_texture_vertex_buffer_layout = wgpu::VertexBufferLayout {
+	let vertex_buffer_layout = wgpu::VertexBufferLayout {
 		array_stride: std::mem::size_of::<SimpleTextureVertexPod>() as wgpu::BufferAddress,
 		step_mode: wgpu::VertexStepMode::Vertex,
 		attributes: &SimpleTextureVertexPod::vertex_attributes(),
@@ -59,27 +59,26 @@ pub(crate) fn render_pipeline(
 		],
 	});
 
-	let simple_texture_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+	let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 		label: Some("Simple Texture 2D Shader"),
 		source: wgpu::ShaderSource::Wgsl(include_str!("simple_texture_2d.wgsl").into()),
 	});
-	let simple_texture_render_pipeline_layout =
-		device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-			label: Some("Simple Texture 2D Render Pipeline Layout"),
-			bind_group_layouts: &[&bind_group_layout],
-			push_constant_ranges: &[],
-		});
+	let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+		label: Some("Simple Texture 2D Render Pipeline Layout"),
+		bind_group_layouts: &[&bind_group_layout],
+		push_constant_ranges: &[],
+	});
 
 	let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
 		label: Some("Simple Texture 2D Render Pipeline"),
-		layout: Some(&simple_texture_render_pipeline_layout),
+		layout: Some(&render_pipeline_layout),
 		vertex: wgpu::VertexState {
-			module: &simple_texture_shader,
+			module: &shader,
 			entry_point: "vertex_shader_main",
-			buffers: &[simple_texture_vertex_buffer_layout],
+			buffers: &[vertex_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
-			module: &simple_texture_shader,
+			module: &shader,
 			entry_point: "fragment_shader_main",
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
