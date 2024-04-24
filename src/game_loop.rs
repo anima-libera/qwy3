@@ -363,10 +363,7 @@ pub fn init_and_run_game_loop() {
 									//);
 
 									game.chunk_grid.add_entity(
-										Entity::new_test_icosahedron(
-											game.player_phys.aligned_box().pos,
-											motion,
-										),
+										Entity::new_test_ball(game.player_phys.aligned_box().pos, motion),
 										game.save.as_ref(),
 									);
 								}

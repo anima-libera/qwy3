@@ -7,6 +7,7 @@ use std::{
 };
 
 use cgmath::{EuclideanSpace, InnerSpace, Zero};
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -54,10 +55,11 @@ enum EntityTyped {
 		#[serde(skip)]
 		part: PartHandler<TexturedCubePartKind>,
 	},
-	TestIcosahedron {
+	TestBall {
 		phys: AlignedPhysBox,
 		rotation_matrix: cgmath::Matrix4<f32>,
 		facing_direction: AngularDirection,
+		rolling_speed: f32,
 		#[serde(skip)]
 		ball_part: PartHandler<ColoredIcosahedronPartKind>,
 		#[serde(skip)]
@@ -86,19 +88,19 @@ impl Entity {
 		}
 	}
 
-	pub(crate) fn new_test_icosahedron(
-		pos: cgmath::Point3<f32>,
-		motion: cgmath::Vector3<f32>,
-	) -> Entity {
+	pub(crate) fn new_test_ball(pos: cgmath::Point3<f32>, motion: cgmath::Vector3<f32>) -> Entity {
 		Entity {
 			to_delete: false,
-			typed: EntityTyped::TestIcosahedron {
+			typed: EntityTyped::TestBall {
 				phys: AlignedPhysBox::new(
 					AlignedBox { pos, dims: cgmath::vec3(0.99, 0.99, 0.99) },
 					motion,
 				),
 				rotation_matrix: cgmath::Matrix4::from_angle_x(cgmath::Rad::zero()),
-				facing_direction: AngularDirection::from_angle_horizontal(0.0),
+				facing_direction: AngularDirection::from_angle_horizontal(
+					thread_rng().gen_range(0.0..TAU),
+				),
+				rolling_speed: thread_rng().gen_range(0.5..2.5),
 				ball_part: PartHandler::default(),
 				left_eye_part: PartHandler::default(),
 				right_eye_part: PartHandler::default(),
@@ -109,7 +111,7 @@ impl Entity {
 	pub(crate) fn pos(&self) -> cgmath::Point3<f32> {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => phys.aligned_box().pos,
-			EntityTyped::TestIcosahedron { phys, .. } => phys.aligned_box().pos,
+			EntityTyped::TestBall { phys, .. } => phys.aligned_box().pos,
 		}
 	}
 
@@ -121,30 +123,7 @@ impl Entity {
 	pub(crate) fn aligned_box(&self) -> Option<AlignedBox> {
 		match &self.typed {
 			EntityTyped::Block { phys, .. } => Some(phys.aligned_box().clone()),
-			EntityTyped::TestIcosahedron { phys, .. } => Some(phys.aligned_box().clone()),
-		}
-	}
-
-	fn _collides_with_blocks(
-		&self,
-		chunk_grid: &ChunkGrid,
-		block_type_table: &Arc<BlockTypeTable>,
-	) -> bool {
-		if let Some(aligned_box) = self.aligned_box() {
-			for coords in aligned_box.overlapping_block_coords_span().iter() {
-				if chunk_grid
-					.get_block(coords)
-					.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
-				{
-					return true;
-				}
-			}
-			false
-		} else {
-			let coords = self.pos().map(|x| x.round() as i32);
-			chunk_grid
-				.get_block(coords)
-				.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque())
+			EntityTyped::TestBall { phys, .. } => Some(phys.aligned_box().clone()),
 		}
 	}
 
@@ -229,16 +208,18 @@ impl Entity {
 				}
 			},
 
-			EntityTyped::TestIcosahedron { .. } => {
-				if let EntityTyped::TestIcosahedron { phys, rotation_matrix, .. } = &mut self.typed {
+			EntityTyped::TestBall { .. } => {
+				if let EntityTyped::TestBall {
+					phys,
+					rotation_matrix,
+					facing_direction,
+					rolling_speed,
+					..
+				} = &mut self.typed
+				{
 					let last_pos = phys.aligned_box().pos;
-					phys.apply_one_physics_step(
-						cgmath::vec3(1.0, 0.0, 0.0),
-						chunk_grid,
-						block_type_table,
-						dt,
-						true,
-					);
+					let walking = facing_direction.to_vec3() * *rolling_speed;
+					phys.apply_one_physics_step(walking, chunk_grid, block_type_table, dt, true);
 
 					let delta_pos = phys.aligned_box().pos - last_pos;
 					if phys.on_ground_and_not_overlapping() {
@@ -259,7 +240,7 @@ impl Entity {
 
 				// Manage the parts.
 				let pos = self.pos();
-				if let EntityTyped::TestIcosahedron {
+				if let EntityTyped::TestBall {
 					ball_part,
 					left_eye_part,
 					right_eye_part,
@@ -291,6 +272,7 @@ impl Entity {
 						},
 					);
 
+					let angle_horizontal = facing_direction.angle_horizontal;
 					let facing_direction = facing_direction.to_vec3() * 0.48;
 					let leftward_direction =
 						-facing_direction.cross(cgmath::vec3(0.0, 0.0, 1.0)).normalize();
@@ -318,8 +300,11 @@ impl Entity {
 							|instance| {
 								instance.set_model_matrix(
 									&(cgmath::Matrix4::<f32>::from_translation(
-										pos.to_vec() + facing_direction + left_or_right_offset,
-									) * cgmath::Matrix4::<f32>::from_nonuniform_scale(0.02, 0.05, 0.11)),
+										facing_direction + left_or_right_offset,
+									) * cgmath::Matrix4::<f32>::from_translation(pos.to_vec())
+										* cgmath::Matrix4::<f32>::from_angle_z(cgmath::Rad(
+											angle_horizontal,
+										)) * cgmath::Matrix4::<f32>::from_nonuniform_scale(0.02, 0.05, 0.11)),
 								);
 							},
 						);
@@ -339,7 +324,7 @@ impl Entity {
 			EntityTyped::Block { part, .. } => {
 				part.delete(&mut part_tables.textured_cubes);
 			},
-			EntityTyped::TestIcosahedron { ball_part, left_eye_part, right_eye_part, .. } => {
+			EntityTyped::TestBall { ball_part, left_eye_part, right_eye_part, .. } => {
 				ball_part.delete(&mut part_tables.colored_icosahedron);
 				left_eye_part.delete(&mut part_tables.colored_cubes);
 				right_eye_part.delete(&mut part_tables.colored_cubes);
