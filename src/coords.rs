@@ -481,7 +481,7 @@ impl OrientedFaceCoords {
 /// It makes wokring with some stuff eazier than via a normalized vector.
 ///
 /// Angles are in radians.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct AngularDirection {
 	/// Angle of the direction when projected on the horizontal plane.
 	/// It should range from `0.0` to `TAU` radians.

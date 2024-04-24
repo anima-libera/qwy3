@@ -116,6 +116,7 @@ impl<T: PartInstance> PartHandler<T> {
 /// All these tables are gathered in here.
 pub(crate) struct PartTables {
 	pub(crate) textured_cubes: PartTable<PartTexturedInstancePod>,
+	pub(crate) colored_cubes: PartTable<PartColoredInstancePod>,
 	pub(crate) colored_icosahedron: PartTable<PartColoredInstancePod>,
 	// NOTE: Added tables should also be added to the output of
 	// `PartTables::tables_for_rendering_textured` or `PartTables::tables_for_rendering_colored`.
@@ -125,7 +126,8 @@ pub(crate) struct PartTables {
 impl PartTables {
 	pub(crate) fn new(device: &wgpu::Device) -> PartTables {
 		PartTables {
-			textured_cubes: textured_cubes::textured_cube_part_table(device),
+			textured_cubes: textured_cube::textured_cube_part_table(device),
+			colored_cubes: colored_cube::colored_cube_part_table(device),
 			colored_icosahedron: colored_icosahedron::colored_icosahedron_part_table(device),
 		}
 	}
@@ -136,6 +138,7 @@ impl PartTables {
 		queue: &wgpu::Queue,
 	) {
 		self.textured_cubes.cup_to_gpu_update_if_required(device, queue);
+		self.colored_cubes.cup_to_gpu_update_if_required(device, queue);
 		self.colored_icosahedron.cup_to_gpu_update_if_required(device, queue);
 	}
 
@@ -151,8 +154,11 @@ impl PartTables {
 	/// for all the tables of colored parts.
 	/// The rendering can just iterate over this output,
 	/// no change is needed on the rendering part even when new part tables are added.
-	pub(crate) fn tables_for_rendering_colored(&self) -> [DataForPartTableRendering; 1] {
-		[self.colored_icosahedron.get_data_for_rendering()]
+	pub(crate) fn tables_for_rendering_colored(&self) -> [DataForPartTableRendering; 2] {
+		[
+			self.colored_cubes.get_data_for_rendering(),
+			self.colored_icosahedron.get_data_for_rendering(),
+		]
 	}
 }
 
@@ -295,6 +301,7 @@ pub(crate) struct TextureMappingAndColoringTable {
 #[derive(Hash, PartialEq, Eq)]
 enum WhichTextureMappingOrColoring {
 	BlockTextureMapping(BlockTypeId),
+	CubeColoringUni([u8; 3]),
 	IcosahedronColoring(WhichIcosahedronColoring),
 }
 
@@ -306,7 +313,9 @@ pub(crate) enum WhichIcosahedronColoring {
 /// An offset that points to some texture mappings made for a cube model.
 #[derive(Clone, Copy)]
 pub(crate) struct CubeTextureMappingOffset(u32);
-
+/// An offset that points to some coloring made for a cube model.
+#[derive(Clone, Copy)]
+pub(crate) struct CubeColoringOffset(u32);
 /// An offset that points to some coloring made for an icosahedron model.
 #[derive(Clone, Copy)]
 pub(crate) struct IcosahedrongColoringOffset(u32);
@@ -341,7 +350,7 @@ impl TextureMappingAndColoringTable {
 					BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
 					_ => return None,
 				};
-				let mappings = textured_cubes::texture_mappings_for_cube(texture_coords_on_atlas);
+				let mappings = textured_cube::texture_mappings_for_cube(texture_coords_on_atlas);
 				let data = bytemuck::cast_slice(&mappings);
 				let data_offset = self.next_offset_in_buffer_in_bytes;
 				queue.write_buffer(
@@ -355,6 +364,41 @@ impl TextureMappingAndColoringTable {
 				self.next_offset += mappings.len() as u32 * length_of_the_mapping_for_one_vertex;
 				vacant.insert(offset);
 				Some(CubeTextureMappingOffset(offset))
+			},
+		}
+	}
+
+	/// Get an offset in the array of colorings, specifically for a colored cube part.
+	/// The resulting offset may be given to an instance of the colored cube model.
+	/// If the requested coloring is not in the table, it is added.
+	pub(crate) fn get_offset_of_cube_coloring_uni(
+		&mut self,
+		color: [u8; 3],
+		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
+		queue: &wgpu::Queue,
+	) -> CubeColoringOffset {
+		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::CubeColoringUni(color));
+		match entry {
+			Entry::Occupied(occupied) => CubeColoringOffset(*occupied.get()),
+			Entry::Vacant(vacant) => {
+				let coloring = colored_cube::unicolor_for_cube(cgmath::vec3(
+					color[0] as f32 / 255.0,
+					color[1] as f32 / 255.0,
+					color[2] as f32 / 255.0,
+				));
+				let data = bytemuck::cast_slice(&coloring);
+				let data_offset = self.next_offset_in_buffer_in_bytes;
+				queue.write_buffer(
+					&texturing_and_coloring_array_thingy.resource,
+					data_offset as u64,
+					data,
+				);
+				self.next_offset_in_buffer_in_bytes += data.len() as u32;
+				let offset = self.next_offset;
+				let length_of_the_coloring_for_one_vertex = 3;
+				self.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
+				vacant.insert(offset);
+				CubeColoringOffset(offset)
 			},
 		}
 	}
@@ -425,7 +469,7 @@ impl PartInstance for PartColoredInstancePod {
 	}
 }
 
-pub(crate) mod textured_cubes {
+pub(crate) mod textured_cube {
 	//! Here are hanled the matters specific to the
 	//! textured cube entity parts and their `PartTable`.
 
@@ -607,7 +651,7 @@ pub(crate) mod textured_cubes {
 			let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
 			let mut handle_index = |index: usize| {
 				mappings_coords_on_atlas
-					.push(Vector2Pod { values: cgmath::conv::array2(coords_in_atlas_array[index]) });
+					.push(Vector2Pod { values: coords_in_atlas_array[index].into() });
 			};
 			if !reverse_order {
 				for indices_index in indices_indices_normal {
@@ -621,6 +665,148 @@ pub(crate) mod textured_cubes {
 		}
 
 		mappings_coords_on_atlas
+	}
+}
+
+pub(crate) mod colored_cube {
+	//! Here are hanled the matters specific to the
+	//! colored cube entity parts and their `PartTable`.
+
+	use cgmath::{Matrix, SquareMatrix};
+
+	use crate::shaders::{part_textured::PartVertexPod, Vector3Pod};
+
+	use super::*;
+
+	pub(super) fn colored_cube_part_table(
+		device: &wgpu::Device,
+	) -> PartTable<PartColoredInstancePod> {
+		let name = "Colored Cube Part";
+		PartTable {
+			mesh: cube_mesh(device, name),
+			instance_table: vec![],
+			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Instance Buffer")),
+				contents: &[],
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+			instance_table_allocator: TableAllocator::new(0, 200),
+			cpu_to_gpu_update_required_for_instances: false,
+			cpu_to_gpu_update_required_for_buffer_length_change: false,
+			name,
+		}
+	}
+
+	/// A nicer form of an instance that is yet to be converted into its raw counterpart (the raw
+	/// counterpart will be the one that gets stored in a `PartTable`).
+	pub(crate) struct PartColoredCubeInstanceData {
+		model_matrix: cgmath::Matrix4<f32>,
+		coloring_offset: u32,
+	}
+
+	impl PartColoredCubeInstanceData {
+		pub(crate) fn new(
+			pos: cgmath::Point3<f32>,
+			coloring_offset: CubeColoringOffset,
+		) -> PartColoredCubeInstanceData {
+			let model_matrix = cgmath::Matrix4::<f32>::from_translation(pos.to_vec());
+			PartColoredCubeInstanceData { model_matrix, coloring_offset: coloring_offset.0 }
+		}
+
+		/// Converts into the form that can be stored in a `PartTable`.
+		pub(crate) fn into_pod(self) -> PartColoredInstancePod {
+			let model_matrix = cgmath::conv::array4x4(self.model_matrix);
+			let inv_trans_model_matrix =
+				cgmath::conv::array4x4(self.model_matrix.transpose().invert().unwrap());
+			PartColoredInstancePod {
+				model_matrix_1_of_4: model_matrix[0],
+				model_matrix_2_of_4: model_matrix[1],
+				model_matrix_3_of_4: model_matrix[2],
+				model_matrix_4_of_4: model_matrix[3],
+				inv_trans_model_matrix_1_of_4: inv_trans_model_matrix[0],
+				inv_trans_model_matrix_2_of_4: inv_trans_model_matrix[1],
+				inv_trans_model_matrix_3_of_4: inv_trans_model_matrix[2],
+				inv_trans_model_matrix_4_of_4: inv_trans_model_matrix[3],
+				coloring_offset: self.coloring_offset,
+			}
+		}
+	}
+
+	// TODO: Recycle the textured cube mesh, these are exactly the same mesh, they could be the same
+	// Wgpu buffer that it would still work just fine.
+	//
+	/// Creates the mesh of the cube model.
+	fn cube_mesh(device: &wgpu::Device, name: &str) -> Mesh {
+		// There is a lot of code duplicated from `chunk_meshing::generate_block_face_mesh`.
+		// TODO: Factorize some code with there.
+
+		let mut vertices: Vec<PartVertexPod> = vec![];
+
+		let cube_center = cgmath::point3(0.0, 0.0, 0.0);
+		for direction in OrientedAxis::all_the_six_possible_directions() {
+			let normal: [f32; 3] = cgmath::conv::array3(direction.delta().map(|x| x as f32));
+
+			let face_center = cube_center + direction.delta().map(|x| x as f32) * 0.5;
+
+			let [other_axis_a, other_axis_b] = direction.axis.the_other_two_axes();
+
+			let mut coords_array = [face_center; 4];
+
+			coords_array[0][other_axis_a.index()] -= 0.5;
+			coords_array[0][other_axis_b.index()] -= 0.5;
+			coords_array[1][other_axis_a.index()] -= 0.5;
+			coords_array[1][other_axis_b.index()] += 0.5;
+			coords_array[2][other_axis_a.index()] += 0.5;
+			coords_array[2][other_axis_b.index()] -= 0.5;
+			coords_array[3][other_axis_a.index()] += 0.5;
+			coords_array[3][other_axis_b.index()] += 0.5;
+
+			let indices = [1, 0, 3, 3, 0, 2];
+
+			// Adjusting the order of the vertices to makeup for face culling.
+			let reverse_order = match direction.axis {
+				NonOrientedAxis::X => direction.orientation == AxisOrientation::Negativewards,
+				NonOrientedAxis::Y => direction.orientation == AxisOrientation::Positivewards,
+				NonOrientedAxis::Z => direction.orientation == AxisOrientation::Negativewards,
+			};
+			let indices_indices_normal = [0, 1, 2, 3, 4, 5];
+			let indices_indices_reversed = [0, 2, 1, 3, 5, 4];
+			let mut handle_index = |index: usize| {
+				vertices.push(PartVertexPod { position: coords_array[index].into(), normal });
+			};
+			if !reverse_order {
+				for indices_index in indices_indices_normal {
+					handle_index(indices[indices_index]);
+				}
+			} else {
+				for indices_index in indices_indices_reversed {
+					handle_index(indices[indices_index]);
+				}
+			}
+		}
+
+		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some(&format!("{name} Vertex Buffer")),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+
+		Mesh { vertex_count: vertices.len() as u32, buffer }
+	}
+
+	/// Creates a coloring (to apply to the cube mesh)
+	/// with the given color applied to all the vertices, the coube will have that one single color.
+	pub(crate) fn unicolor_for_cube(color: cgmath::Vector3<f32>) -> Vec<Vector3Pod> {
+		let mut colors: Vec<Vector3Pod> = vec![];
+
+		let number_of_faces = 6;
+		let number_of_triangles = 2 * number_of_faces;
+		let number_of_vertices = 3 * number_of_triangles;
+		for _i in 0..number_of_vertices {
+			colors.push(Vector3Pod { values: color.into() });
+		}
+
+		colors
 	}
 }
 
@@ -814,7 +1000,7 @@ pub(crate) mod colored_icosahedron {
 						*component = 1.0 - *component;
 					}
 				}
-				colors.push(Vector3Pod { values: cgmath::conv::array3(color) });
+				colors.push(Vector3Pod { values: color });
 			}
 		}
 		colors

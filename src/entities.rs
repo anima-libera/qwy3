@@ -6,17 +6,18 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::{EuclideanSpace, Zero};
+use cgmath::{EuclideanSpace, InnerSpace, Zero};
 use serde::{Deserialize, Serialize};
 
 use crate::{
 	block_types::BlockTypeTable,
 	chunk_blocks::Block,
 	chunks::ChunkGrid,
-	coords::{AlignedBox, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 	entity_parts::{
+		colored_cube::PartColoredCubeInstanceData,
 		colored_icosahedron::PartColoredIcosahedronInstanceData,
-		textured_cubes::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
+		textured_cube::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
 		TextureMappingAndColoringTable, WhichIcosahedronColoring,
 	},
 	physics::AlignedPhysBox,
@@ -51,13 +52,18 @@ enum EntityTyped {
 		block: Block,
 		phys: AlignedPhysBox,
 		#[serde(skip)]
-		part_handler: PartHandler<PartTexturedInstancePod>,
+		part: PartHandler<PartTexturedInstancePod>,
 	},
 	TestIcosahedron {
 		phys: AlignedPhysBox,
 		rotation_matrix: cgmath::Matrix4<f32>,
+		facing_direction: AngularDirection,
 		#[serde(skip)]
-		part_handler: PartHandler<PartColoredInstancePod>,
+		ball_part: PartHandler<PartColoredInstancePod>,
+		#[serde(skip)]
+		left_eye_part: PartHandler<PartColoredInstancePod>,
+		#[serde(skip)]
+		right_eye_part: PartHandler<PartColoredInstancePod>,
 	},
 }
 
@@ -75,7 +81,7 @@ impl Entity {
 					AlignedBox { pos, dims: cgmath::vec3(0.99, 0.99, 0.99) },
 					motion,
 				),
-				part_handler: PartHandler::default(),
+				part: PartHandler::default(),
 			},
 		}
 	}
@@ -92,7 +98,10 @@ impl Entity {
 					motion,
 				),
 				rotation_matrix: cgmath::Matrix4::from_angle_x(cgmath::Rad::zero()),
-				part_handler: PartHandler::default(),
+				facing_direction: AngularDirection::from_angle_horizontal(0.0),
+				ball_part: PartHandler::default(),
+				left_eye_part: PartHandler::default(),
+				right_eye_part: PartHandler::default(),
 			},
 		}
 	}
@@ -196,24 +205,21 @@ impl Entity {
 
 				// Manage the part.
 				let pos = self.pos();
-				if let EntityTyped::Block { block, part_handler, .. } = &mut self.typed {
-					part_handler.ensure_is_allocated(
-						&mut part_manipulation.part_tables.textured_cubes,
-						|| {
-							let texture_mapping_offset = part_manipulation
-								.texture_mapping_and_coloring_table
-								.get_offset_of_block(
-									block.type_id,
-									block_type_table,
-									part_manipulation.texturing_and_coloring_array_thingy,
-									part_manipulation.queue,
-								)
-								.unwrap();
-							PartTexturedCubeInstanceData::new(pos, texture_mapping_offset).into_pod()
-						},
-					);
+				if let EntityTyped::Block { block, part, .. } = &mut self.typed {
+					part.ensure_is_allocated(&mut part_manipulation.part_tables.textured_cubes, || {
+						let texture_mapping_offset = part_manipulation
+							.texture_mapping_and_coloring_table
+							.get_offset_of_block(
+								block.type_id,
+								block_type_table,
+								part_manipulation.texturing_and_coloring_array_thingy,
+								part_manipulation.queue,
+							)
+							.unwrap();
+						PartTexturedCubeInstanceData::new(pos, texture_mapping_offset).into_pod()
+					});
 
-					part_handler.modify_instance(
+					part.modify_instance(
 						&mut part_manipulation.part_tables.textured_cubes,
 						|instance| {
 							instance
@@ -251,12 +257,18 @@ impl Entity {
 					unreachable!()
 				};
 
-				// Manage the part.
+				// Manage the parts.
 				let pos = self.pos();
-				if let EntityTyped::TestIcosahedron { part_handler, rotation_matrix, .. } =
-					&mut self.typed
+				if let EntityTyped::TestIcosahedron {
+					ball_part,
+					left_eye_part,
+					right_eye_part,
+					rotation_matrix,
+					facing_direction,
+					..
+				} = &mut self.typed
 				{
-					part_handler.ensure_is_allocated(
+					ball_part.ensure_is_allocated(
 						&mut part_manipulation.part_tables.colored_icosahedron,
 						|| {
 							let coloring_offset = part_manipulation
@@ -269,8 +281,7 @@ impl Entity {
 							PartColoredIcosahedronInstanceData::new(pos, coloring_offset).into_pod()
 						},
 					);
-
-					part_handler.modify_instance(
+					ball_part.modify_instance(
 						&mut part_manipulation.part_tables.colored_icosahedron,
 						|instance| {
 							instance.set_model_matrix(
@@ -279,6 +290,40 @@ impl Entity {
 							);
 						},
 					);
+
+					let facing_direction = facing_direction.to_vec3() * 0.48;
+					let leftward_direction =
+						-facing_direction.cross(cgmath::vec3(0.0, 0.0, 1.0)).normalize();
+
+					let mut eye_parts = [left_eye_part, right_eye_part];
+					for left_or_right in [0, 1] {
+						let part = &mut eye_parts[left_or_right];
+						let left_or_right_offset =
+							leftward_direction * 0.1 * (left_or_right as f32 * 2.0 - 1.0);
+						part.ensure_is_allocated(
+							&mut part_manipulation.part_tables.colored_cubes,
+							|| {
+								let coloring_offset = part_manipulation
+									.texture_mapping_and_coloring_table
+									.get_offset_of_cube_coloring_uni(
+										[20, 20, 50],
+										part_manipulation.texturing_and_coloring_array_thingy,
+										part_manipulation.queue,
+									);
+								PartColoredCubeInstanceData::new(pos, coloring_offset).into_pod()
+							},
+						);
+						part.modify_instance(
+							&mut part_manipulation.part_tables.colored_cubes,
+							|instance| {
+								instance.set_model_matrix(
+									&(cgmath::Matrix4::<f32>::from_translation(
+										pos.to_vec() + facing_direction + left_or_right_offset,
+									) * cgmath::Matrix4::<f32>::from_nonuniform_scale(0.02, 0.05, 0.11)),
+								);
+							},
+						);
+					}
 				}
 			},
 		}
@@ -291,11 +336,13 @@ impl Entity {
 	/// visible and unmoving where they are until the game is closed).
 	fn handle_unloading_or_deletion(self, part_tables: &mut PartTables) {
 		match self.typed {
-			EntityTyped::Block { part_handler, .. } => {
-				part_handler.delete(&mut part_tables.textured_cubes);
+			EntityTyped::Block { part, .. } => {
+				part.delete(&mut part_tables.textured_cubes);
 			},
-			EntityTyped::TestIcosahedron { part_handler, .. } => {
-				part_handler.delete(&mut part_tables.colored_icosahedron);
+			EntityTyped::TestIcosahedron { ball_part, left_eye_part, right_eye_part, .. } => {
+				ball_part.delete(&mut part_tables.colored_icosahedron);
+				left_eye_part.delete(&mut part_tables.colored_icosahedron);
+				right_eye_part.delete(&mut part_tables.colored_icosahedron);
 			},
 		}
 	}
