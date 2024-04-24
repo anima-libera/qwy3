@@ -25,6 +25,7 @@ use std::{
 	sync::Arc,
 };
 
+use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
 use rustc_hash::FxHashMap;
 use wgpu::util::DeviceExt;
@@ -35,6 +36,11 @@ use crate::{
 	rendering_init::BindingThingy,
 	shaders::{part_colored::PartColoredInstancePod, part_textured::PartTexturedInstancePod},
 	table_allocator::{AllocationDecision, FreeingAdvice, TableAllocator},
+};
+
+use self::{
+	colored_cube::ColoredCubePartKind, colored_icosahedron::ColoredIcosahedronPartKind,
+	textured_cube::TexturedCubePartKind,
 };
 
 /// Handler to an entity part instance of type `T` which may or may not have been allocated yet.
@@ -51,7 +57,7 @@ use crate::{
 //
 // TODO: The variant discriminant doubles the size of the type. Make it smaller.
 #[derive(Clone, Default)]
-pub(crate) enum PartHandler<T: PartInstance> {
+pub(crate) enum PartHandler<T: PartKind> {
 	#[default]
 	NotAllocatedYet,
 	Allocated {
@@ -63,18 +69,18 @@ pub(crate) enum PartHandler<T: PartInstance> {
 		/// mysterious about what this really does to the compilation (but it can have an influence,
 		/// that was clear at least).
 		/// TODO: Look into it? (very low priority)
-		_marker: PhantomData<T>,
+		_marker: PhantomData<T::Instance>,
 	},
 }
 
-impl<T: PartInstance> PartHandler<T> {
+impl<T: PartKind> PartHandler<T> {
 	/// If the handler does not refer to an allocated part instance yet,
 	/// then now it does and the newly allocated part instance is initialized by `initialize`.
 	#[inline]
 	pub(crate) fn ensure_is_allocated(
 		&mut self,
 		part_table: &mut PartTable<T>,
-		initialize: impl FnOnce() -> T,
+		initialize: impl FnOnce() -> T::Instance,
 	) {
 		if let PartHandler::NotAllocatedYet = self {
 			let instance = initialize();
@@ -89,7 +95,7 @@ impl<T: PartInstance> PartHandler<T> {
 	pub(crate) fn modify_instance(
 		&mut self,
 		part_table: &mut PartTable<T>,
-		callback: impl FnOnce(&mut T),
+		callback: impl FnOnce(&mut T::Instance),
 	) {
 		if let PartHandler::Allocated { index, .. } = self {
 			if let Some(instance) = part_table.instance_table.get_mut(*index as usize) {
@@ -115,9 +121,9 @@ impl<T: PartInstance> PartHandler<T> {
 /// One part table holds a model mesh and all its instances.
 /// All these tables are gathered in here.
 pub(crate) struct PartTables {
-	pub(crate) textured_cubes: PartTable<PartTexturedInstancePod>,
-	pub(crate) colored_cubes: PartTable<PartColoredInstancePod>,
-	pub(crate) colored_icosahedron: PartTable<PartColoredInstancePod>,
+	pub(crate) textured_cubes: PartTable<TexturedCubePartKind>,
+	pub(crate) colored_cubes: PartTable<ColoredCubePartKind>,
+	pub(crate) colored_icosahedron: PartTable<ColoredIcosahedronPartKind>,
 	// NOTE: Added tables should also be added to the output of
 	// `PartTables::tables_for_rendering_textured` or `PartTables::tables_for_rendering_colored`.
 	// They should also be handled in `PartTables::cup_to_gpu_update_if_required`.
@@ -164,21 +170,25 @@ impl PartTables {
 
 /// Trait that declares that a type can be the raw data of a part instance.
 /// There can be a `PartTable` of these.
-pub(crate) trait PartInstance: bytemuck::Pod + bytemuck::Zeroable {
+pub(crate) trait PartInstance: bytemuck::Pod + bytemuck::Zeroable + Clone {
 	/// Set the transform matrix of the instance.
 	fn set_model_matrix(&mut self, model_matrix: &cgmath::Matrix4<f32>);
+}
+
+pub(crate) trait PartKind {
+	type Instance: PartInstance;
 }
 
 /// A table of entity parts.
 /// One such table holds a model (mesh) and all the instances of that model.
 /// It also handles the syncing of this data with the GPU.
-pub(crate) struct PartTable<T: PartInstance> {
+pub(crate) struct PartTable<T: PartKind> {
 	/// The mesh of the model for this table of instances.
 	mesh: Mesh,
 	/// The CPU-side table of all the instances for the model of this table.
 	/// As per `PartInstance`'s trait bounds requirements, all this data can be copied raw
 	/// to the GPU.
-	instance_table: Vec<T>,
+	instance_table: Vec<T::Instance>,
 	/// The GPU-side buffer that is given the data from `instance_table`.
 	instance_table_buffer: wgpu::Buffer,
 	/// The allocator that manages the allocation and freeing of the instances.
@@ -190,8 +200,8 @@ pub(crate) struct PartTable<T: PartInstance> {
 	name: &'static str,
 }
 
-impl<T: PartInstance> PartTable<T> {
-	pub(crate) fn allocate_instance(&mut self, instance: T) -> usize {
+impl<T: PartKind> PartTable<T> {
+	pub(crate) fn allocate_instance(&mut self, instance: T::Instance) -> usize {
 		match self.instance_table_allocator.allocate_one() {
 			AllocationDecision::AllocateIndex(index) => {
 				self.instance_table[index] = instance;
@@ -201,7 +211,7 @@ impl<T: PartInstance> PartTable<T> {
 			AllocationDecision::NeedsBiggerBuffer => {
 				let growing_factor = 1.25;
 				let new_length = (self.instance_table.len() as f32 * growing_factor) as usize + 4;
-				self.instance_table.resize(new_length, T::zeroed());
+				self.instance_table.resize(new_length, T::Instance::zeroed());
 				self.instance_table_allocator.length_increased_to(new_length);
 				let AllocationDecision::AllocateIndex(index) =
 					self.instance_table_allocator.allocate_one()
@@ -223,7 +233,7 @@ impl<T: PartInstance> PartTable<T> {
 	}
 
 	pub(crate) fn delete_instance(&mut self, index: usize) {
-		self.instance_table[index] = T::zeroed();
+		self.instance_table[index] = T::Instance::zeroed();
 		self.cpu_to_gpu_update_required_for_instances = true;
 		match self.instance_table_allocator.free_one(index) {
 			FreeingAdvice::NothingToDo => {},
@@ -479,9 +489,15 @@ pub(crate) mod textured_cube {
 
 	use super::*;
 
+	#[derive(Clone)]
+	pub(crate) struct TexturedCubePartKind;
+	impl PartKind for TexturedCubePartKind {
+		type Instance = PartTexturedInstancePod;
+	}
+
 	pub(super) fn textured_cube_part_table(
 		device: &wgpu::Device,
-	) -> PartTable<PartTexturedInstancePod> {
+	) -> PartTable<TexturedCubePartKind> {
 		let name = "Textured Cube Part";
 		PartTable {
 			mesh: cube_mesh(device, name),
@@ -678,9 +694,13 @@ pub(crate) mod colored_cube {
 
 	use super::*;
 
-	pub(super) fn colored_cube_part_table(
-		device: &wgpu::Device,
-	) -> PartTable<PartColoredInstancePod> {
+	#[derive(Clone)]
+	pub(crate) struct ColoredCubePartKind;
+	impl PartKind for ColoredCubePartKind {
+		type Instance = PartColoredInstancePod;
+	}
+
+	pub(super) fn colored_cube_part_table(device: &wgpu::Device) -> PartTable<ColoredCubePartKind> {
 		let name = "Colored Cube Part";
 		PartTable {
 			mesh: cube_mesh(device, name),
@@ -822,9 +842,15 @@ pub(crate) mod colored_icosahedron {
 
 	use super::*;
 
+	#[derive(Clone)]
+	pub(crate) struct ColoredIcosahedronPartKind;
+	impl PartKind for ColoredIcosahedronPartKind {
+		type Instance = PartColoredInstancePod;
+	}
+
 	pub(super) fn colored_icosahedron_part_table(
 		device: &wgpu::Device,
-	) -> PartTable<PartColoredInstancePod> {
+	) -> PartTable<ColoredIcosahedronPartKind> {
 		let name = "Colored Icosahedron Part";
 		PartTable {
 			mesh: icosahedron_mesh(device, name),

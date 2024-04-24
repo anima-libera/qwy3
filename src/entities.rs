@@ -15,15 +15,15 @@ use crate::{
 	chunks::ChunkGrid,
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
 	entity_parts::{
-		colored_cube::PartColoredCubeInstanceData,
-		colored_icosahedron::PartColoredIcosahedronInstanceData,
-		textured_cube::PartTexturedCubeInstanceData, PartHandler, PartInstance, PartTables,
-		TextureMappingAndColoringTable, WhichIcosahedronColoring,
+		colored_cube::{ColoredCubePartKind, PartColoredCubeInstanceData},
+		colored_icosahedron::{ColoredIcosahedronPartKind, PartColoredIcosahedronInstanceData},
+		textured_cube::{PartTexturedCubeInstanceData, TexturedCubePartKind},
+		PartHandler, PartInstance, PartTables, TextureMappingAndColoringTable,
+		WhichIcosahedronColoring,
 	},
 	physics::AlignedPhysBox,
 	rendering_init::BindingThingy,
 	saves::{Save, WhichChunkFile},
-	shaders::{part_colored::PartColoredInstancePod, part_textured::PartTexturedInstancePod},
 };
 
 /// In the world there are two sorts of things: static blocks and entities.
@@ -52,18 +52,18 @@ enum EntityTyped {
 		block: Block,
 		phys: AlignedPhysBox,
 		#[serde(skip)]
-		part: PartHandler<PartTexturedInstancePod>,
+		part: PartHandler<TexturedCubePartKind>,
 	},
 	TestIcosahedron {
 		phys: AlignedPhysBox,
 		rotation_matrix: cgmath::Matrix4<f32>,
 		facing_direction: AngularDirection,
 		#[serde(skip)]
-		ball_part: PartHandler<PartColoredInstancePod>,
+		ball_part: PartHandler<ColoredIcosahedronPartKind>,
 		#[serde(skip)]
-		left_eye_part: PartHandler<PartColoredInstancePod>,
+		left_eye_part: PartHandler<ColoredCubePartKind>,
 		#[serde(skip)]
-		right_eye_part: PartHandler<PartColoredInstancePod>,
+		right_eye_part: PartHandler<ColoredCubePartKind>,
 	},
 }
 
@@ -341,8 +341,8 @@ impl Entity {
 			},
 			EntityTyped::TestIcosahedron { ball_part, left_eye_part, right_eye_part, .. } => {
 				ball_part.delete(&mut part_tables.colored_icosahedron);
-				left_eye_part.delete(&mut part_tables.colored_icosahedron);
-				right_eye_part.delete(&mut part_tables.colored_icosahedron);
+				left_eye_part.delete(&mut part_tables.colored_cubes);
+				right_eye_part.delete(&mut part_tables.colored_cubes);
 			},
 		}
 	}
