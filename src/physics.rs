@@ -45,6 +45,9 @@ impl AlignedPhysBox {
 		self.aligned_box.pos += displacement;
 		self.on_faces.clear();
 	}
+	pub(crate) fn add_motion(&mut self, motion_to_add: cgmath::Vector3<f32>) {
+		self.motion += motion_to_add;
+	}
 
 	pub(crate) fn apply_one_physics_step(
 		&mut self,

@@ -6,7 +6,7 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::{EuclideanSpace, InnerSpace, Zero};
+use cgmath::{EuclideanSpace, InnerSpace, MetricSpace, Zero};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -223,6 +223,14 @@ impl Entity {
 				{
 					let mut walking = facing_direction.to_vec3() * *rolling_speed;
 
+					// TODO: Do not just look at the current chunk for colliding entities,
+					// we should look at all the chunks that are suceptible to contain an entity
+					// that is suceptible to be colliding with us.
+					// To do that, each chunk should be able to give a maximum of the dimensions of
+					// its entities, and here we should ask neighboring chunks and do some calculations
+					// to see for each neigboring chunk if its bigget entity migh be able to collide
+					// with us even from its chunk.
+
 					// Getting pushed out of other entities we overlap with.
 					for entity in chunk_entity_of_self.savable.entities.iter() {
 						if let Some(other_aligned_box) =
@@ -235,16 +243,22 @@ impl Entity {
 								} else {
 									displacement = displacement.normalize();
 								}
-								displacement *= 5.0;
-								walking += displacement;
+								let distance = phys.aligned_box().pos.distance(other_aligned_box.pos);
+								let overlap_factor = if distance.is_zero() {
+									1.0
+								} else {
+									(1.0 / (distance * 0.1)).clamp(0.0, 1.0)
+								};
+								phys.add_motion(displacement * overlap_factor * 0.01);
+								walking += displacement * 1.0;
 							}
 						}
 					}
 
 					let last_pos = phys.aligned_box().pos;
-
 					phys.apply_one_physics_step(walking, chunk_grid, block_type_table, dt, true);
 
+					// Make motion on the ground roll the ball.
 					let delta_pos = phys.aligned_box().pos - last_pos;
 					if phys.on_ground_and_not_overlapping() {
 						let radius = 0.5;
