@@ -659,4 +659,16 @@ impl AlignedBox {
 		let sup_included = (self.pos + self.dims / 2.0).map(|x| x.round() as i32);
 		CubicCoordsSpan::with_inf_sup_but_sup_is_included(inf, sup_included)
 	}
+
+	pub(crate) fn overlaps(&self, other: &AlignedBox) -> bool {
+		let self_inf = self.pos - self.dims / 2.0;
+		let self_sup = self.pos + self.dims / 2.0;
+		let other_inf = other.pos - other.dims / 2.0;
+		let other_sup = other.pos + other.dims / 2.0;
+		let no_overlap_x = other_sup.x <= self_inf.x || self_sup.x <= other_inf.x;
+		let no_overlap_y = other_sup.y <= self_inf.y || self_sup.y <= other_inf.y;
+		let no_overlap_z = other_sup.z <= self_inf.z || self_sup.z <= other_inf.z;
+		let no_overlap = no_overlap_x || no_overlap_y || no_overlap_z;
+		!no_overlap
+	}
 }

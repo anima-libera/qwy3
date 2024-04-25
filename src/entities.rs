@@ -128,9 +128,13 @@ impl Entity {
 	}
 
 	/// If an entity "does stuff", then it probably happens here.
+	///
+	/// The `chunk_entity_of_self` was taken out of the `chunk_grid`,
+	/// and `self` was taken out of the `chunk_entity_of_self`, beware.
 	fn apply_one_physics_step(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
+		chunk_entity_of_self: &mut ChunkEntities,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		part_manipulation: &mut ForPartManipulation,
@@ -217,8 +221,28 @@ impl Entity {
 					..
 				} = &mut self.typed
 				{
+					let mut walking = facing_direction.to_vec3() * *rolling_speed;
+
+					// Getting pushed out of other entities we overlap with.
+					for entity in chunk_entity_of_self.savable.entities.iter() {
+						if let Some(other_aligned_box) =
+							entity.as_ref().and_then(|entity| entity.aligned_box())
+						{
+							if other_aligned_box.overlaps(phys.aligned_box()) {
+								let mut displacement = phys.aligned_box().pos - other_aligned_box.pos;
+								if displacement.is_zero() {
+									displacement = cgmath::vec3(0.0, 0.0, 1.0);
+								} else {
+									displacement = displacement.normalize();
+								}
+								displacement *= 5.0;
+								walking += displacement;
+							}
+						}
+					}
+
 					let last_pos = phys.aligned_box().pos;
-					let walking = facing_direction.to_vec3() * *rolling_speed;
+
 					phys.apply_one_physics_step(walking, chunk_grid, block_type_table, dt, true);
 
 					let delta_pos = phys.aligned_box().pos - last_pos;
@@ -348,7 +372,9 @@ pub(crate) struct ChunkEntities {
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct ChunkEntitiesSavable {
-	/// The `Option` is always `Some` and is there to ease the moving of entities out of the vec.
+	/// The `Option` is almost always `Some`, except when it is not (>w<) which can mean:
+	/// - that we are in the process of migrating out and deleting entities from the chunk, or
+	/// - that the entity was temporarily taken out of the vec for it to borrow the rest of the vec.
 	entities: Vec<Option<Entity>>,
 }
 
@@ -384,13 +410,11 @@ impl ChunkEntities {
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 		part_manipulation: &mut ForPartManipulation,
 	) {
-		for entity in self.savable.entities.iter_mut() {
-			entity.as_mut().unwrap().apply_one_physics_step(
-				chunk_grid,
-				block_type_table,
-				dt,
-				part_manipulation,
-			);
+		let entity_indices = 0..self.savable.entities.len();
+		for entity_index in entity_indices {
+			let mut entity = self.savable.entities[entity_index].take().unwrap();
+			entity.apply_one_physics_step(chunk_grid, self, block_type_table, dt, part_manipulation);
+			self.savable.entities[entity_index] = Some(entity);
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
