@@ -42,7 +42,7 @@ futures = "0.3.30"
 fxhash = "0.2.1"
 image = "0.24.8"
 log = "0.4.20"
-rand = "0.8.5"
+rand = { version = "0.8.5", features = ["small_rng"] }
 rmp-serde = "1.1.2"
 rustc-hash = "1.1.0"
 serde = { version = "1.0.197", features = ["derive"] }

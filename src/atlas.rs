@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use cgmath::MetricSpace;
 use image::{GenericImage, GenericImageView};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 use crate::{saves::Save, texture_gen};
 
@@ -62,14 +62,40 @@ impl Atlas {
 			texture_gen::default_ground(view, world_gen_seed, 1);
 		}
 
+		// TODO: Make it deterministic (doc says `rand::rngs::SmallRng` is "not reproducible").
+		let mut rng = rand::rngs::SmallRng::seed_from_u64(u64::from_le_bytes(
+			(world_gen_seed as i64).to_le_bytes(),
+		));
+
+		// Grass color ranges.
+		let r_range = {
+			let inf = rng.gen_range(60..120);
+			let sup = inf + rng.gen_range(10..35);
+			inf..sup
+		};
+		let g_range = {
+			let sup = if rng.gen_bool(0.4) {
+				255
+			} else {
+				rng.gen_range(240..255)
+			};
+			let inf = sup - rng.gen_range(17..25);
+			inf..sup
+		};
+		let b_range = {
+			let inf = rng.gen_range(0..40);
+			let sup = inf + rng.gen_range(5..55);
+			inf..sup
+		};
+
 		// Grass block
 		{
 			let mut view = atlas.image.sub_image(16, 0, 16, 16);
 			for y in 0..16 {
 				for x in 0..16 {
-					let r = rand::thread_rng().gen_range(80..100);
-					let g = rand::thread_rng().gen_range(230..=255);
-					let b = rand::thread_rng().gen_range(10..30);
+					let r = rng.gen_range(r_range.clone());
+					let g = rng.gen_range(g_range.clone());
+					let b = rng.gen_range(b_range.clone());
 					view.put_pixel(x, y, image::Rgba::from([r, g, b, 255]));
 				}
 			}
@@ -86,9 +112,9 @@ impl Atlas {
 						(0, 0, 0, 0)
 					} else {
 						(
-							rand::thread_rng().gen_range(80..100),
-							rand::thread_rng().gen_range(230..=255),
-							rand::thread_rng().gen_range(10..30),
+							rng.gen_range(r_range.clone()),
+							rng.gen_range(g_range.clone()),
+							rng.gen_range(b_range.clone()),
 							255,
 						)
 					};
