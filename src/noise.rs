@@ -13,7 +13,7 @@
 
 use std::hash::Hasher;
 
-use rustc_hash::FxHasher;
+use fxhash::FxHasher64;
 
 fn positive_fract(x: f32) -> f32 {
 	x - f32::floor(x)
@@ -49,6 +49,7 @@ fn smoothcos(x: f32) -> f32 {
 /// and any value in betwee will lead to some interpolation between `dst_inf` and `dst_sup`.
 /// `x` is expected to be between `x_inf` (included) and `x_sup` (also included).
 /// The given `smoothing` function is used to smooth out the curve when x is near its edges.
+#[inline]
 fn interpolate(
 	smoothing: &dyn Fn(f32) -> f32,
 	x: f32,
@@ -62,35 +63,15 @@ fn interpolate(
 	dst_inf + smooth_ratio * (dst_sup - dst_inf)
 }
 
-#[derive(Clone, Copy)]
-enum CoordOrChannel {
-	Coord(f32),
-	Channel(i32),
+#[inline]
+fn raw_noise_node(hash: FxHasher64) -> f32 {
+	f32::cos(hash.finish() as f32) * 0.5 + 0.5
 }
 
-fn raw_noise_node(xs: &[CoordOrChannel]) -> f32 {
-	let mut hasher = FxHasher::default();
-	for x in xs.iter().copied() {
-		match x {
-			CoordOrChannel::Channel(x) => hasher.write_i32(x),
-			CoordOrChannel::Coord(_) => {
-				// TODO: Maybe we could use `unreachable_unchecked` here?
-				// This is a very hot path after all.
-				// It would probably not be necessary though, the branch predictor gets our back.
-				unreachable!()
-			},
-		}
-	}
-	f32::cos(hasher.finish() as f32) * 0.5 + 0.5
-}
-
-fn raw_noise_rec(xs: &mut [CoordOrChannel], min_coord_index: usize) -> f32 {
-	let coord_index_and_value_opt =
-		xs[min_coord_index..].iter().enumerate().find_map(|(i, x)| match x {
-			CoordOrChannel::Coord(value) => Some((min_coord_index + i, *value)),
-			_ => None,
-		});
-	if let Some((coord_index, coord_value)) = coord_index_and_value_opt {
+#[inline]
+fn raw_noise_rec(xs: &[f32], factor: f32, hash: FxHasher64) -> f32 {
+	if !xs.is_empty() {
+		let x = xs[0] * factor;
 		// For every continuous coordinate, we interpolate between
 		// the two closest discreet node values on that axis.
 		// In one dimension (with N <= x < N+1), it looks like this:
@@ -99,68 +80,63 @@ fn raw_noise_rec(xs: &mut [CoordOrChannel], min_coord_index: usize) -> f32 {
 		//      inf         sup
 		// And we can do that by calling this recursively
 		// with N and N+1 as additional channel parameters.
-		let channel_inf = f32::floor(coord_value) as i32;
-		xs[coord_index] = CoordOrChannel::Channel(channel_inf);
-		let sub_noise_inf = raw_noise_rec(xs, coord_index + 1);
+		let channel_inf = f32::floor(x) as i32;
+		let sub_noise_inf = {
+			let mut hash_inf = hash.clone();
+			hash_inf.write_i32(channel_inf);
+			raw_noise_rec(&xs[1..], factor, hash_inf)
+		};
 		let channel_sup = channel_inf + 1;
-		xs[coord_index] = CoordOrChannel::Channel(channel_sup);
-		let sub_noise_sup = raw_noise_rec(xs, coord_index + 1);
-		xs[coord_index] = CoordOrChannel::Coord(coord_value);
-		let x_fract = positive_fract(coord_value);
+		let sub_noise_sup = {
+			let mut hash_sup = hash.clone();
+			hash_sup.write_i32(channel_sup);
+			raw_noise_rec(&xs[1..], factor, hash_sup)
+		};
+		let x_fract = positive_fract(x);
 		interpolate(&smoothcos, x_fract, 0.0, 1.0, sub_noise_inf, sub_noise_sup)
 	} else {
 		// No more continuous coordinates, we are on a node and can get its noise value.
-		raw_noise_node(xs)
+		raw_noise_node(hash)
 	}
 }
 
-fn raw_noise(xs: &mut [CoordOrChannel]) -> f32 {
-	raw_noise_rec(xs, 0)
+#[inline]
+fn raw_noise(xs: &[f32], factor: f32, hash: FxHasher64) -> f32 {
+	raw_noise_rec(xs, factor, hash)
 }
 
-fn octaves_noise(number_of_octaves: u32, xs: &mut [CoordOrChannel]) -> f32 {
+fn octaves_noise(number_of_octaves: u32, xs: &[f32], hash: FxHasher64) -> f32 {
 	let mut value_sum = 0.0;
 	let mut coef_sum = 0.0;
 	let mut coef = 1.0;
+	let mut factor = 1.0;
 	for _i in 0..number_of_octaves {
-		value_sum += coef * raw_noise(xs);
+		value_sum += coef * raw_noise(xs, factor, hash.clone());
 		coef_sum += coef;
 		coef /= 2.0;
-		xs.iter_mut().for_each(|x| {
-			if let CoordOrChannel::Coord(x) = x {
-				*x *= 2.0
-			}
-		});
+		factor *= 2.0;
 	}
 	value_sum / coef_sum
 }
 
 pub(crate) struct OctavedNoise {
 	number_of_octaves: u32,
-	base_channels: Vec<i32>,
+	base_hash: FxHasher64,
 }
 
 impl OctavedNoise {
 	pub(crate) fn new(number_of_octaves: u32, base_channels: Vec<i32>) -> OctavedNoise {
-		OctavedNoise { number_of_octaves, base_channels }
+		let mut base_hash = FxHasher64::default();
+		base_channels.into_iter().for_each(|channel| base_hash.write_i32(channel));
+		OctavedNoise { number_of_octaves, base_hash }
 	}
 
 	pub(crate) fn sample(&self, xs: &[f32], additional_channels: &[&[i32]]) -> f32 {
-		let mut working_xs = smallvec::SmallVec::<[CoordOrChannel; 8]>::with_capacity(
-			xs.len() + self.base_channels.len() + additional_channels.len(),
-		);
-		for channel in self.base_channels.iter() {
-			working_xs.push(CoordOrChannel::Channel(*channel));
-		}
-		for channels in additional_channels {
-			for channel in *channels {
-				working_xs.push(CoordOrChannel::Channel(*channel));
-			}
-		}
-		for x in xs {
-			working_xs.push(CoordOrChannel::Coord(*x));
-		}
-		octaves_noise(self.number_of_octaves, &mut working_xs)
+		let mut hash = self.base_hash.clone();
+		additional_channels
+			.iter()
+			.for_each(|channels| channels.iter().for_each(|channel| hash.write_i32(*channel)));
+		octaves_noise(self.number_of_octaves, xs, hash)
 	}
 
 	pub(crate) fn sample_2d_1d(
