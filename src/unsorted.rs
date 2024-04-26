@@ -70,7 +70,7 @@ pub(crate) enum WorkerTask {
 		ChunkCoords,
 		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo, Option<ChunkEntities>)>,
 	),
-	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<ChunkMesh>),
+	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<Option<ChunkMesh>>),
 	/// The counter at the end is the number of faces already finished.
 	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
 	GenerateAtlas(std::sync::mpsc::Receiver<Atlas>),
@@ -92,7 +92,8 @@ impl CurrentWorkerTasks {
 		self.tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 		pool.enqueue_task(Box::new(move || {
 			let vertices = data_for_chunk_meshing.generate_mesh_vertices();
-			let mesh = ChunkMesh::from_vertices(&device, vertices);
+			let non_empty_mesh = !vertices.is_empty();
+			let mesh = non_empty_mesh.then(|| ChunkMesh::from_vertices(&device, vertices));
 			let _ = sender.send(mesh);
 		}));
 	}

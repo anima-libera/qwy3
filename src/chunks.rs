@@ -124,10 +124,14 @@ impl ChunkGrid {
 	pub(crate) fn add_chunk_meshing_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
-		chunk_mesh: ChunkMesh,
+		chunk_mesh: Option<ChunkMesh>,
 	) {
 		if self.is_loaded(chunk_coords) {
-			self.mesh_map.insert(chunk_coords, chunk_mesh);
+			if let Some(chunk_mesh) = chunk_mesh {
+				self.mesh_map.insert(chunk_coords, chunk_mesh);
+			} else {
+				self.mesh_map.remove(&chunk_coords);
+			}
 		} else {
 			// The chunk have been unloaded since the meshing was ordered.
 			// It really can happen, for example when the player travels very fast.
