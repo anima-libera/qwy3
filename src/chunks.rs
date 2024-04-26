@@ -80,11 +80,9 @@ impl ChunkGrid {
 			}
 
 			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
-			let doesnt_need_mesh = self
-				.culling_info_map
-				.get(&chunk_coords)
-				.is_some_and(|culling_info| culling_info.all_air)
-				|| !self.is_loaded(chunk_coords);
+			let is_only_air =
+				self.blocks_map.get(&chunk_coords).is_some_and(|blocks| blocks.contains_only_air());
+			let doesnt_need_mesh = is_only_air || !self.is_loaded(chunk_coords);
 
 			if doesnt_need_mesh {
 				remeshing_tasked.push(chunk_coords);

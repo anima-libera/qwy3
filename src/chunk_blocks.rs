@@ -102,6 +102,8 @@ struct ChunkBlocksSavable {
 	/// as modified. If we want to reduce the size of the saved data then we can avoid saving
 	/// non-modified chunks as we could always re-generate them, but modified chunks must be saved.
 	modified_since_generation: bool,
+	/// The key to the air block type, if it is in the palette.
+	air_key: Option<PaletteKey>,
 }
 
 impl ChunkBlocks {
@@ -116,6 +118,7 @@ impl ChunkBlocks {
 				next_never_used_palette_key: 0,
 				available_palette_keys: Vec::new(),
 				modified_since_generation: false,
+				air_key: None,
 			},
 		}
 	}
@@ -159,16 +162,17 @@ impl ChunkBlocks {
 		self.savable.palette.insert(
 			key,
 			BlockPaletteEntry {
-				instance_count: self.coords_span.cd.number_of_blocks() as u32,
+				instance_count: self.coords_span.cd.number_of_blocks_in_a_chunk() as u32,
 				block: Block::new_air(),
 			},
 		);
+		self.savable.air_key = Some(key);
 		// Then we allocate the bit vec and fill it with zeros (`key` is zero so it works).
 		assert_eq!(self.savable.block_key_size_in_bits, 0);
 		self.savable.block_key_size_in_bits = 1;
 		self.savable.block_keys_grid = BitVec::repeat(
 			false,
-			self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits,
+			self.coords_span.cd.number_of_blocks_in_a_chunk() * self.savable.block_key_size_in_bits,
 		);
 	}
 
@@ -178,7 +182,8 @@ impl ChunkBlocks {
 		// First we resize the bitvec.
 		let old_key_size = self.savable.block_key_size_in_bits;
 		self.savable.block_key_size_in_bits += 1;
-		let new_len = self.coords_span.cd.number_of_blocks() * self.savable.block_key_size_in_bits;
+		let new_len =
+			self.coords_span.cd.number_of_blocks_in_a_chunk() * self.savable.block_key_size_in_bits;
 		self.savable.block_keys_grid.resize(new_len, false);
 		// Then we move the old bitvec content to its new position.
 		// Now we have availble space at the end of the bitvec (after the old keys) and
@@ -186,7 +191,7 @@ impl ChunkBlocks {
 		// additional bit in its representation size.
 		// We can do it from the end, moving the last old key from its old position to its new
 		// position (which is further on the right, so we do not overwrite unmoved keys), etc.
-		for i in (0..self.coords_span.cd.number_of_blocks()).rev() {
+		for i in (0..self.coords_span.cd.number_of_blocks_in_a_chunk()).rev() {
 			// Get the last not-yet moved key from its old position.
 			let key: PaletteKey = {
 				let index_inf = i * old_key_size;
@@ -239,6 +244,9 @@ impl ChunkBlocks {
 			key
 		} else {
 			let key = self.get_new_key();
+			if block.type_id == BlockTypeTable::AIR_ID {
+				self.savable.air_key = Some(key);
+			}
 			self.savable.palette.insert(key, BlockPaletteEntry { instance_count: 1, block });
 			key
 		}
@@ -257,7 +265,10 @@ impl ChunkBlocks {
 				entry.instance_count -= 1;
 				if entry.instance_count == 0 {
 					// The palette entry is no longer used, we don't need it anymore.
-					occupied.remove();
+					let removed_block_entry = occupied.remove();
+					if removed_block_entry.block.type_id == BlockTypeTable::AIR_ID {
+						self.savable.air_key = None;
+					}
 					self.give_back_key_no_longer_in_use(key);
 				}
 			},
@@ -284,7 +295,8 @@ impl ChunkBlocks {
 			// Make sure that we have allocated the block keys if that is needed.
 			if self.savable.block_keys_grid.is_empty() {
 				if block.type_id == BlockTypeTable::AIR_ID {
-					// Setting a block to air, but we are already empty, we have nothing to do.
+					// Setting a block to air, but we are already empty (which means full of air)
+					// so we have nothing to do.
 					return;
 				} else {
 					// Setting a block to non-air, but we were empty (all air, no setup),
@@ -294,6 +306,7 @@ impl ChunkBlocks {
 			}
 
 			// All is good, we just have to get the block's palette key and put it in the grid.
+			// The block that it replaces has to be removed.
 			let index = self.coords_span.internal_index(coords).unwrap();
 			let key_of_block_to_remove = self.get_block_key_from_grid(index);
 			self.remove_one_block_instance_from_palette(key_of_block_to_remove);
@@ -303,8 +316,23 @@ impl ChunkBlocks {
 		}
 	}
 
-	fn may_contain_non_air(&self) -> bool {
-		!self.savable.block_keys_grid.is_empty()
+	/// Just a look-up, no expensive counting.
+	pub(crate) fn contains_only_air(&self) -> bool {
+		if self.savable.block_keys_grid.is_empty() {
+			// Being empty represents being full of air.
+			true
+		} else if let Some(air_key) = self.savable.air_key {
+			let air_count = self.savable.palette[&air_key].instance_count;
+			let block_count = self.coords_span.cd.number_of_blocks_in_a_chunk() as u32;
+			air_count == block_count
+		} else {
+			// Air is not even in the palette, there is no air in the chunk.
+			false
+		}
+	}
+
+	fn contains_non_air(&self) -> bool {
+		!self.contains_only_air()
 	}
 
 	pub(crate) fn was_modified_since_generation(&self) -> bool {
@@ -378,90 +406,68 @@ impl ChunkBlocksBeingGenerated {
 /// Information that can be used to decide if some chunks should not be loaded or be unloaded.
 #[derive(Clone)]
 pub(crate) struct ChunkCullingInfo {
-	pub(crate) all_air: bool,
-	pub(crate) _all_opaque: bool,
-	pub(crate) all_opaque_faces: Vec<OrientedAxis>,
-	pub(crate) all_air_faces: Vec<OrientedAxis>,
+	/// Faces are given in the order of `OrientedAxis::all_the_six_possible_directions`.
+	pub(crate) faces: [FaceCullingInfo; 6],
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum FaceCullingInfo {
+	AllAir,
+	AllOpaque,
+	SomeAirSomeOpaque,
 }
 
 impl ChunkCullingInfo {
+	fn new_all_air() -> ChunkCullingInfo {
+		ChunkCullingInfo { faces: [FaceCullingInfo::AllAir; 6] }
+	}
+
 	pub(crate) fn compute_from_blocks(
 		blocks: &ChunkBlocks,
 		block_type_table: &Arc<BlockTypeTable>,
 	) -> ChunkCullingInfo {
-		if !blocks.may_contain_non_air() {
-			return ChunkCullingInfo {
-				all_air: true,
-				_all_opaque: false,
-				all_opaque_faces: vec![],
-				all_air_faces: OrientedAxis::all_the_six_possible_directions().collect(),
-			};
+		if !blocks.contains_non_air() {
+			return ChunkCullingInfo::new_all_air();
 		}
 
-		let mut all_air = true;
-		let mut all_opaque = true;
-		for coords in blocks.coords_span.iter_coords() {
-			let block = blocks.get(coords).unwrap();
-			let block_type = block_type_table.get(block.type_id).unwrap();
-			if !block_type.is_air() {
-				all_air = false;
-			}
-			if !block_type.is_opaque() {
-				all_opaque = false;
-			}
-			if (!all_air) && (!all_opaque) {
-				break;
-			}
+		let mut culling_info = ChunkCullingInfo::new_all_air();
+
+		for (face_index, face) in OrientedAxis::all_the_six_possible_directions().enumerate() {
+			let face_culling_info =
+				ChunkCullingInfo::get_face_culling_info(face, blocks, block_type_table);
+			culling_info.faces[face_index] = face_culling_info;
 		}
 
-		let mut all_opaque_faces = vec![];
-		for face in OrientedAxis::all_the_six_possible_directions() {
-			if ChunkCullingInfo::face_is_all_opaque(face, blocks, block_type_table) {
-				all_opaque_faces.push(face);
-			}
-		}
-
-		let mut all_air_faces = vec![];
-		for face in OrientedAxis::all_the_six_possible_directions() {
-			if ChunkCullingInfo::face_is_all_air(face, blocks, block_type_table) {
-				all_air_faces.push(face);
-			}
-		}
-
-		ChunkCullingInfo { all_air, _all_opaque: all_opaque, all_opaque_faces, all_air_faces }
+		culling_info
 	}
 
-	fn face_is_all_opaque(
+	fn get_face_culling_info(
 		face: OrientedAxis,
 		blocks: &ChunkBlocks,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> bool {
+	) -> FaceCullingInfo {
+		let mut all_air = true;
 		let mut all_opaque = true;
 		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
 			let block_type_id = blocks.get(block_coords).unwrap().type_id;
 			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_opaque() {
 				all_opaque = false;
-				break;
 			}
-		}
-		all_opaque
-	}
-
-	fn face_is_all_air(
-		face: OrientedAxis,
-		blocks: &ChunkBlocks,
-		block_type_table: &Arc<BlockTypeTable>,
-	) -> bool {
-		let mut all_air = true;
-		for block_coords in blocks.coords_span.iter_block_coords_on_chunk_face(face) {
-			let block_type_id = blocks.get(block_coords).unwrap().type_id;
-			let block_type = block_type_table.get(block_type_id).unwrap();
 			if !block_type.is_air() {
 				all_air = false;
+			}
+			if !all_air && !all_opaque {
 				break;
 			}
 		}
-		all_air
+
+		if all_air {
+			FaceCullingInfo::AllAir
+		} else if all_opaque {
+			FaceCullingInfo::AllOpaque
+		} else {
+			FaceCullingInfo::SomeAirSomeOpaque
+		}
 	}
 }

@@ -30,7 +30,7 @@ impl From<i32> for ChunkDimensions {
 }
 
 impl ChunkDimensions {
-	pub(crate) fn number_of_blocks(self) -> usize {
+	pub(crate) fn number_of_blocks_in_a_chunk(self) -> usize {
 		self.edge.pow(3) as usize
 	}
 

@@ -389,7 +389,7 @@ pub fn init_and_run_game_loop() {
 				{
 					let fps = 1.0 / dt.as_secs_f32();
 					let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
-					let block_count = chunk_count * game.cd.number_of_blocks();
+					let block_count = chunk_count * game.cd.number_of_blocks_in_a_chunk();
 					let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
 					let player_block_coords = (game.player_phys.aligned_box().pos
 						- cgmath::Vector3::<f32>::unit_z()

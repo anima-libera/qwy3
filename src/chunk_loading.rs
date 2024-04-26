@@ -5,7 +5,7 @@ use rand::Rng;
 
 use crate::{
 	block_types::BlockTypeTable,
-	chunk_blocks::{ChunkBlocks, ChunkCullingInfo},
+	chunk_blocks::{ChunkBlocks, ChunkCullingInfo, FaceCullingInfo},
 	chunks::ChunkGrid,
 	coords::{iter_3d_cube_center_radius, ChunkCoords, OrientedAxis},
 	entities::ChunkEntities,
@@ -184,17 +184,19 @@ impl LoadingManager {
 		// - Propagating with lower priority through air-only chunk faces makes it so that chunks
 		// that are likely nothing but air get loaded later, so that the loading can focus on more
 		// instresting chunks (that are likely to require a mesh).
-		for straight_direction in OrientedAxis::all_the_six_possible_directions() {
-			if !chunk_culling_info.all_opaque_faces.contains(&straight_direction) {
-				let delta = straight_direction.delta();
-				let adjacent_chunk_coords = chunk_coords + delta;
-				let is_priority = !chunk_culling_info.all_air_faces.contains(&straight_direction);
-				(if is_priority {
-					&mut self.front_high_priority
-				} else {
-					&mut self.front_low_priority
-				})
-				.push(adjacent_chunk_coords);
+		for (face_index, straight_direction) in
+			OrientedAxis::all_the_six_possible_directions().enumerate()
+		{
+			let delta = straight_direction.delta();
+			let adjacent_chunk_coords = chunk_coords + delta;
+			match chunk_culling_info.faces[face_index] {
+				FaceCullingInfo::AllOpaque => {},
+				FaceCullingInfo::AllAir => {
+					self.front_low_priority.push(adjacent_chunk_coords);
+				},
+				FaceCullingInfo::SomeAirSomeOpaque => {
+					self.front_high_priority.push(adjacent_chunk_coords);
+				},
 			}
 		}
 	}
