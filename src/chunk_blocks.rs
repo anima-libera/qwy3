@@ -374,6 +374,9 @@ impl ChunkBlocks {
 	}
 }
 
+// TODO: Add a counter for air blocks and opaque blocks for each face,
+// so that `finish_generation` can make a `ChunkCullingInfo` for free (without expensive counting).
+//
 /// Wrapper around `ChunkBlocks` to be used for generating chunk blocks.
 /// It ensures that even after modifying the chunk blocks (in the process of generating it)
 /// the resulting `ChunkBlocks` will not be flagged as `modified`.

@@ -91,8 +91,8 @@ impl CurrentWorkerTasks {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		self.tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 		pool.enqueue_task(Box::new(move || {
-			let mut mesh = data_for_chunk_meshing.generate_mesh();
-			mesh.update_gpu_data(&device);
+			let vertices = data_for_chunk_meshing.generate_mesh_vertices();
+			let mesh = ChunkMesh::from_vertices(&device, vertices);
 			let _ = sender.send(mesh);
 		}));
 	}

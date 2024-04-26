@@ -25,7 +25,7 @@ pub(crate) struct DataForChunkMeshing {
 }
 
 impl DataForChunkMeshing {
-	pub(crate) fn generate_mesh(self) -> ChunkMesh {
+	pub(crate) fn generate_mesh_vertices(self) -> Vec<BlockVertexPod> {
 		let is_opaque = |coords: BlockCoords, for_ambiant_occlusion: bool| {
 			if let Some(block) = self.chunk_blocks.get(coords) {
 				self.block_type_table.get(block.type_id).unwrap().is_opaque()
@@ -126,36 +126,26 @@ impl DataForChunkMeshing {
 				},
 			}
 		}
-		ChunkMesh::from_vertices(block_vertices)
+		block_vertices
 	}
 }
 
 pub(crate) struct ChunkMesh {
-	pub(crate) block_vertices: Vec<BlockVertexPod>,
-	pub(crate) block_vertex_buffer: Option<wgpu::Buffer>,
-	/// When `block_vertices` is modified, `block_vertex_buffer` becomes out of sync
-	/// and must be updated. This is what this field keeps track of.
-	cpu_to_gpu_update_required: bool,
+	pub(crate) block_vertex_count: usize,
+	pub(crate) block_vertex_buffer: wgpu::Buffer,
 }
 
 impl ChunkMesh {
-	fn from_vertices(block_vertices: Vec<BlockVertexPod>) -> ChunkMesh {
-		let cpu_to_gpu_update_required = !block_vertices.is_empty();
-		ChunkMesh {
-			block_vertices,
-			block_vertex_buffer: None,
-			cpu_to_gpu_update_required,
-		}
-	}
-
-	pub(crate) fn update_gpu_data(&mut self, device: &wgpu::Device) {
+	pub(crate) fn from_vertices(
+		device: &wgpu::Device,
+		block_vertices: Vec<BlockVertexPod>,
+	) -> ChunkMesh {
 		let block_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
 			label: Some("Block Vertex Buffer"),
-			contents: bytemuck::cast_slice(&self.block_vertices),
+			contents: bytemuck::cast_slice(&block_vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-		self.block_vertex_buffer = Some(block_vertex_buffer);
-		self.cpu_to_gpu_update_required = false;
+		ChunkMesh { block_vertex_count: block_vertices.len(), block_vertex_buffer }
 	}
 }
 

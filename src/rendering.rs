@@ -75,8 +75,8 @@ impl<'a> DataForRendering<'a> {
 			render_pass.set_pipeline(&self.rendering.block_shadow_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.block_shadow_bind_group, &[]);
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
-				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-				render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
+				render_pass.draw(0..(mesh.block_vertex_count as u32), 0..1);
 			}
 
 			// Entity parts textured.
@@ -150,8 +150,8 @@ impl<'a> DataForRendering<'a> {
 			render_pass.set_pipeline(&self.rendering.block_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.block_bind_group, &[]);
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
-				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.as_ref().unwrap().slice(..));
-				render_pass.draw(0..(mesh.block_vertices.len() as u32), 0..1);
+				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
+				render_pass.draw(0..(mesh.block_vertex_count as u32), 0..1);
 			}
 
 			// Entity parts textured.
