@@ -73,26 +73,27 @@ impl ChunkGrid {
 		font: &Arc<Font>,
 		device: &Arc<wgpu::Device>,
 	) {
-		let mut remeshing_tasked = vec![];
+		let mut remeshing_request_handled = vec![];
 		for chunk_coords in self.remeshing_required_set.iter().copied() {
 			if worker_tasks.tasks.len() >= pool.number_of_workers() {
 				break;
 			}
 
-			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
 			let is_only_air =
 				self.blocks_map.get(&chunk_coords).is_some_and(|blocks| blocks.contains_only_air());
-			let doesnt_need_mesh = is_only_air || !self.is_loaded(chunk_coords);
+			let has_mesh = self.mesh_map.contains_key(&chunk_coords);
+			let doesnt_need_mesh = (is_only_air && !has_mesh) || !self.is_loaded(chunk_coords);
+			let is_being_meshed = worker_tasks.is_being_meshed(chunk_coords);
 
 			if doesnt_need_mesh {
-				remeshing_tasked.push(chunk_coords);
+				remeshing_request_handled.push(chunk_coords);
 			} else if is_being_meshed {
 				// Let the request be, it will be remeshed later.
 				// We wait for this chunk because it is already being meshed (from some past state)
 				// and we may not want to clog up the task queue with remeshing tasks for one chunk.
 			} else {
 				// Asking a worker for the meshing or remeshing of the chunk.
-				remeshing_tasked.push(chunk_coords);
+				remeshing_request_handled.push(chunk_coords);
 				let data_for_chunk_meshing = self
 					.get_data_for_chunk_meshing(
 						chunk_coords,
@@ -108,7 +109,7 @@ impl ChunkGrid {
 				);
 			}
 		}
-		for chunk_coords in remeshing_tasked {
+		for chunk_coords in remeshing_request_handled {
 			self.remeshing_required_set.remove(&chunk_coords);
 		}
 	}
