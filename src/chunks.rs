@@ -24,12 +24,20 @@ use crate::{
 
 pub(crate) struct ChunkGrid {
 	cd: ChunkDimensions,
+	/// The block data for each loaded chunk.
 	blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
+	/// The culling data for each loaded chunk that hadn't underwent modification since loading.
 	// TODO: Remove it? This map is never used.
 	culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
+	/// The mesh for each chunk that needs one.
 	mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
+	/// The chunks that should be checked for remeshing.
 	remeshing_required_set: FxHashSet<ChunkCoords>,
+	/// The entities in chunks, for each chunk that has some.
 	entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
+	/// The chunks that were already generated once
+	/// (and thus shall not have their entities generated again).
+	generated_set: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
@@ -41,6 +49,7 @@ impl ChunkGrid {
 			mesh_map: HashMap::default(),
 			remeshing_required_set: HashSet::default(),
 			entities_map: HashMap::default(),
+			generated_set: HashSet::default(),
 		}
 	}
 
@@ -50,6 +59,10 @@ impl ChunkGrid {
 
 	pub(crate) fn is_loaded(&self, chunk_coords: ChunkCoords) -> bool {
 		self.blocks_map.contains_key(&chunk_coords)
+	}
+
+	pub(crate) fn was_already_generated_before(&self, chunk_coords: ChunkCoords) -> bool {
+		self.generated_set.contains(&chunk_coords)
 	}
 
 	pub(crate) fn iter_loaded_chunk_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
@@ -288,6 +301,7 @@ impl ChunkGrid {
 		if let Some(chunk_entities) = chunk_entities {
 			self.add_chunk_entities(chunk_entities);
 		}
+		self.generated_set.insert(chunk_coords);
 	}
 
 	fn unload_chunk(

@@ -109,6 +109,7 @@ impl CurrentWorkerTasks {
 		&mut self,
 		pool: &mut ThreadPool,
 		chunk_coords: ChunkCoords,
+		was_already_generated_before: bool,
 		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
 		block_type_table: &Arc<BlockTypeTable>,
 		save: Option<&Arc<Save>>,
@@ -131,7 +132,12 @@ impl CurrentWorkerTasks {
 				.as_ref()
 				.and_then(|save| ChunkBlocks::load_from_save(coords_span, save))
 				.unwrap_or_else(|| {
-					chunk_generator.generate_chunk_blocks(coords_span, &block_type_table)
+					let generate_entities = !was_already_generated_before;
+					chunk_generator.generate_chunk_blocks(
+						coords_span,
+						generate_entities,
+						&block_type_table,
+					)
 				});
 			let chunk_culling_info =
 				ChunkCullingInfo::compute_from_blocks(&chunk_blocks, &block_type_table);

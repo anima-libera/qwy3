@@ -148,6 +148,7 @@ impl LoadingManager {
 				worker_tasks.run_chunk_loading_task(
 					pool,
 					chunk_coords,
+					chunk_grid.was_already_generated_before(chunk_coords),
 					world_generator,
 					block_type_table,
 					save,
