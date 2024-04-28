@@ -7,16 +7,14 @@ use wgpu::util::DeviceExt;
 
 use crate::{
 	atlas::Atlas,
-	block_types::BlockTypeTable,
 	chunk_blocks::{ChunkBlocks, ChunkCullingInfo},
+	chunk_loading::DataForChunkLoading,
 	chunk_meshing::{ChunkMesh, DataForChunkMeshing},
-	coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	coords::{ChunkCoords, ChunkCoordsSpan},
 	entities::ChunkEntities,
-	saves::Save,
 	shaders::{self, simple_texture_2d::SimpleTextureVertexPod},
 	skybox::SkyboxFaces,
 	threadpool::ThreadPool,
-	world_gen::WorldGenerator,
 };
 
 #[derive(Clone, Copy)]
@@ -109,22 +107,22 @@ impl CurrentWorkerTasks {
 		&mut self,
 		pool: &mut ThreadPool,
 		chunk_coords: ChunkCoords,
-		was_already_generated_before: bool,
-		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
-		block_type_table: &Arc<BlockTypeTable>,
-		save: Option<&Arc<Save>>,
-		cd: ChunkDimensions,
+		data_for_chunk_loading: DataForChunkLoading,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		self.tasks.push(WorkerTask::LoadChunkBlocksAndEntities(
 			chunk_coords,
 			receiver,
 		));
-		let chunk_generator = Arc::clone(world_generator);
-		let coords_span = ChunkCoordsSpan { cd, chunk_coords };
-		let block_type_table = Arc::clone(block_type_table);
-		let save = save.cloned();
 		pool.enqueue_task(Box::new(move || {
+			let DataForChunkLoading {
+				was_already_generated_before,
+				world_generator,
+				block_type_table,
+				save,
+				cd,
+			} = data_for_chunk_loading;
+			let coords_span = ChunkCoordsSpan { cd, chunk_coords };
 			// Loading a chunk means either loading from save (disk)
 			// if there is a save and the chunk was already generated and saved in the past,
 			// or else generating it.
@@ -133,7 +131,7 @@ impl CurrentWorkerTasks {
 				.and_then(|save| ChunkBlocks::load_from_save(coords_span, save))
 				.unwrap_or_else(|| {
 					let generate_entities = !was_already_generated_before;
-					chunk_generator.generate_chunk_blocks(
+					world_generator.generate_chunk_blocks(
 						coords_span,
 						generate_entities,
 						&block_type_table,

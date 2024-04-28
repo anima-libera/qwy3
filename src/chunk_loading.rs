@@ -7,7 +7,7 @@ use crate::{
 	block_types::BlockTypeTable,
 	chunk_blocks::{ChunkBlocks, ChunkCullingInfo, FaceCullingInfo},
 	chunks::ChunkGrid,
-	coords::{iter_3d_cube_center_radius, ChunkCoords, OrientedAxis},
+	coords::{iter_3d_cube_center_radius, ChunkCoords, ChunkDimensions, OrientedAxis},
 	entities::ChunkEntities,
 	saves::Save,
 	threadpool::ThreadPool,
@@ -145,15 +145,14 @@ impl LoadingManager {
 			if (!blocks_was_loaded) && (!blocks_is_being_loaded) {
 				// Asking a worker for the generation of chunk blocks.
 				slot_count -= 1;
-				worker_tasks.run_chunk_loading_task(
-					pool,
-					chunk_coords,
-					chunk_grid.was_already_generated_before(chunk_coords),
-					world_generator,
-					block_type_table,
-					save,
-					chunk_grid.cd(),
-				);
+				let data_for_chunk_loading = DataForChunkLoading {
+					was_already_generated_before: chunk_grid.was_already_generated_before(chunk_coords),
+					world_generator: world_generator.clone(),
+					block_type_table: block_type_table.clone(),
+					save: save.cloned(),
+					cd: chunk_grid.cd(),
+				};
+				worker_tasks.run_chunk_loading_task(pool, chunk_coords, data_for_chunk_loading);
 			}
 		}
 	}
@@ -201,4 +200,14 @@ impl LoadingManager {
 			}
 		}
 	}
+}
+
+/// All the data that is needed to load the chunk (its block data and its entities),
+/// be it generated or loaded from a save.
+pub(crate) struct DataForChunkLoading {
+	pub(crate) was_already_generated_before: bool,
+	pub(crate) world_generator: Arc<dyn WorldGenerator + Sync + Send>,
+	pub(crate) block_type_table: Arc<BlockTypeTable>,
+	pub(crate) save: Option<Arc<Save>>,
+	pub(crate) cd: ChunkDimensions,
 }
