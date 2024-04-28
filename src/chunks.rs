@@ -25,6 +25,7 @@ use crate::{
 pub(crate) struct ChunkGrid {
 	cd: ChunkDimensions,
 	blocks_map: FxHashMap<ChunkCoords, Arc<ChunkBlocks>>,
+	// TODO: Remove it? This map is never used.
 	culling_info_map: FxHashMap<ChunkCoords, ChunkCullingInfo>,
 	mesh_map: FxHashMap<ChunkCoords, ChunkMesh>,
 	remeshing_required_set: FxHashSet<ChunkCoords>,

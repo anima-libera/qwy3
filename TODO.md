@@ -88,6 +88,8 @@
 
 ## Entities
 
+- Make the world generation place entities in the world.
+  - Beware the saves. Make sure that entities are not generated again (one more time, while their previous generation is still in the world) when thir chunk of origin gets unloaded then generated again (for example in a `only_save_modified_chunks` save).
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
 - Support the throwing of X-shaped blocks.
 - Particles, like when breaking blocks.
@@ -128,6 +130,7 @@
 ## Saves
 
 - Make the saves be more resistant to panics. For now, even the `StateSavable` is lost if the game panics before being closed for the first time in a save. Loaded entities are lost on a panic. Changes made to the blocks of the loaded chunks are lost on a panic. This is too fragile and may lead to lots of frustration.
+- Consider (maybe or maybe not) using the `sqlx` crate to put a save in a `.db` file instead of creating lots (too much) files for each save. `sqlx` is pure Rust and has compile-time verified queries(!).
 
 ## Multiplayer
 
