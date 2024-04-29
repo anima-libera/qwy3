@@ -334,6 +334,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 				placing_head.map(|x| x as f32),
 				ball_radius,
 			);
+			// Haha there is an animal on each boulder at generation time.
 			context.place_entity(Entity::new_test_ball(
 				placing_head.map(|x| x as f32),
 				cgmath::vec3(0.0, 0.0, 0.0),

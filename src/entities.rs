@@ -311,7 +311,7 @@ impl Entity {
 					);
 
 					let angle_horizontal = facing_direction.angle_horizontal;
-					let facing_direction = facing_direction.to_vec3() * 0.48;
+					let facing_direction = facing_direction.to_vec3() * 0.485;
 					let leftward_direction =
 						-facing_direction.cross(cgmath::vec3(0.0, 0.0, 1.0)).normalize();
 
