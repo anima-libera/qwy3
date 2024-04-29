@@ -7,6 +7,8 @@
 Wanna-be Minecraft-like in Rust using <a href="url">Wgpu</a>, very early stage.
 </p>
 
+<p align="center"><img src="./pics/pic-06.png" width="95%" alt="Screenshot of the ball animals"/></>
+
 <p align="center"><img src="./pics/pic-02.png" width="95%" alt="Beautiful screenshot"/></>
 
 <p align="center"><img src="./pics/pic-03.png" width="95%" alt="An other nice screenshot"/></>
