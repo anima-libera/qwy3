@@ -7,7 +7,7 @@ use std::{
 	sync::{Arc, RwLock},
 };
 
-use rustc_hash::FxHashMap;
+use fxhash::FxHashMap;
 
 use crate::coords::{ChunkCoords, OrientedAxis};
 

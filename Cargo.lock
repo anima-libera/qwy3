@@ -1528,7 +1528,6 @@ dependencies = [
  "log",
  "rand",
  "rmp-serde",
- "rustc-hash",
  "serde",
  "smallvec",
  "wgpu",

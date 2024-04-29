@@ -6,7 +6,7 @@ use std::sync::atomic::{self, AtomicI32};
 use std::sync::Arc;
 
 use cgmath::EuclideanSpace;
-use rustc_hash::FxHashMap;
+use fxhash::FxHashMap;
 
 use crate::unsorted::{RectInAtlas, SimpleTextureMesh};
 use crate::{

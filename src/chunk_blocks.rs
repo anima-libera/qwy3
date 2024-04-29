@@ -5,7 +5,7 @@ use std::{
 };
 
 use bitvec::{field::BitField, vec::BitVec};
-use rustc_hash::FxHashMap;
+use fxhash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{

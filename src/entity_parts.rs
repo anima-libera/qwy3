@@ -27,7 +27,7 @@ use std::{
 
 use bytemuck::Zeroable;
 use cgmath::{EuclideanSpace, Matrix, SquareMatrix};
-use rustc_hash::FxHashMap;
+use fxhash::FxHashMap;
 use wgpu::util::DeviceExt;
 
 use crate::{

@@ -4,7 +4,7 @@ use std::{
 };
 
 use cgmath::MetricSpace;
-use rustc_hash::{FxHashMap, FxHashSet};
+use fxhash::{FxHashMap, FxHashSet};
 
 use crate::{
 	block_types::BlockTypeTable,
@@ -37,11 +37,14 @@ pub(crate) struct ChunkGrid {
 	entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
 	/// The chunks that were already generated once
 	/// (and thus shall not have their entities generated again).
-	generated_set: FxHashSet<ChunkCoords>,
+	already_generated_set: FxHashSet<ChunkCoords>,
 }
 
 impl ChunkGrid {
-	pub(crate) fn new(cd: ChunkDimensions) -> ChunkGrid {
+	pub(crate) fn new(
+		cd: ChunkDimensions,
+		already_generated_set: Option<FxHashSet<ChunkCoords>>,
+	) -> ChunkGrid {
 		ChunkGrid {
 			cd,
 			blocks_map: HashMap::default(),
@@ -49,7 +52,7 @@ impl ChunkGrid {
 			mesh_map: HashMap::default(),
 			remeshing_required_set: HashSet::default(),
 			entities_map: HashMap::default(),
-			generated_set: HashSet::default(),
+			already_generated_set: already_generated_set.unwrap_or_default(),
 		}
 	}
 
@@ -62,7 +65,10 @@ impl ChunkGrid {
 	}
 
 	pub(crate) fn was_already_generated_before(&self, chunk_coords: ChunkCoords) -> bool {
-		self.generated_set.contains(&chunk_coords)
+		self.already_generated_set.contains(&chunk_coords)
+	}
+	pub(crate) fn set_of_already_generated_chunks(&self) -> &FxHashSet<ChunkCoords> {
+		&self.already_generated_set
 	}
 
 	pub(crate) fn iter_loaded_chunk_coords(&self) -> impl Iterator<Item = ChunkCoords> + '_ {
@@ -301,7 +307,7 @@ impl ChunkGrid {
 		if let Some(chunk_entities) = chunk_entities {
 			self.add_chunk_entities(chunk_entities);
 		}
-		self.generated_set.insert(chunk_coords);
+		self.already_generated_set.insert(chunk_coords);
 	}
 
 	fn unload_chunk(

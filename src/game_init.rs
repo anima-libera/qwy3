@@ -42,6 +42,7 @@ use crate::{
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
 
+use fxhash::FxHashSet;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +52,7 @@ struct StateSavable {
 	world_gen_seed: i32,
 	which_world_generator: WhichWorldGenerator,
 	only_save_modified_chunks: bool,
+	set_of_already_generated_chunks: FxHashSet<ChunkCoords>,
 	player_pos: [f32; 3],
 	player_angular_direction: [f32; 2],
 	world_time: Duration,
@@ -65,6 +67,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		world_gen_seed: game.world_gen_seed,
 		which_world_generator: game.which_world_generator,
 		only_save_modified_chunks: game.only_save_modified_chunks,
+		set_of_already_generated_chunks: game.chunk_grid.set_of_already_generated_chunks().clone(),
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
 		world_time: game.world_time,
@@ -467,7 +470,11 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 	let chunk_edge =
 		saved_state.as_ref().map(|state| state.chunk_dimensions_edge).unwrap_or(chunk_edge as i32);
 	let cd = ChunkDimensions::from(chunk_edge as i32);
-	let chunk_grid = ChunkGrid::new(cd);
+	let already_generated_set = saved_state.as_ref().map(|state| {
+		// TODO: Avoid cloning here.
+		state.set_of_already_generated_chunks.clone()
+	});
+	let chunk_grid = ChunkGrid::new(cd, already_generated_set);
 
 	let margin_before_unloading = 60.0;
 	let loading_manager = LoadingManager::new(loading_distance, margin_before_unloading);
