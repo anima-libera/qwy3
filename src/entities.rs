@@ -436,7 +436,7 @@ impl ChunkEntities {
 		}
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
-				// The entity was flagged for deletion and is now deletd.
+				// The entity was flagged for deletion and is now deleted.
 				entity.take().unwrap().handle_unloading_or_deletion(part_manipulation.part_tables);
 				false
 			} else {

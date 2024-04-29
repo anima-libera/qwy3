@@ -36,7 +36,7 @@ pub(crate) struct ChunkGrid {
 	/// The entities in chunks, for each chunk that has some.
 	entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
 	/// The chunks that were already generated once
-	/// (and thus shall not have their entities generated again).
+	/// (and thus that shall not have their entities generated again).
 	already_generated_set: FxHashSet<ChunkCoords>,
 }
 

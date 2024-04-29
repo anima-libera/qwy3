@@ -6,6 +6,7 @@ use crate::{
 	block_types::{BlockTypeId, BlockTypeTable},
 	chunk_blocks::ChunkBlocksBeingGenerated,
 	coords::{BlockCoords, CubicCoordsSpan},
+	entities::{ChunkEntities, Entity},
 	noise::OctavedNoise,
 };
 
@@ -148,9 +149,11 @@ pub(crate) struct StructureInstanceGenerationContext<'a> {
 	/// The chunk that is being generated and for which we generate a structure.
 	/// We are only generating this chunk now, so all the blocks placed by the structure outside
 	/// of this chunk will be discarded. Other chunks that this structure might place blocks into
-	/// will also generate this structure (in the exact same way) so the blcosk that are discarded
+	/// will also generate this structure (in the exact same way) so the blocks that are discarded
 	/// now are not lost, but just the matter of an other chunk generation task.
 	pub(crate) chunk_blocks: &'a mut ChunkBlocksBeingGenerated,
+	/// See `chunk_blocks`, the same goes for the entities.
+	pub(crate) chunk_entities: &'a mut ChunkEntities,
 	/// Structures are allowed to see the origins of other structures and maybe react to it.
 	pub(crate) _origin_generator: &'a dyn StructureOriginGenerator,
 	pub(crate) block_type_table: &'a Arc<BlockTypeTable>,
@@ -197,6 +200,14 @@ impl<'a> StructureInstanceGenerationContext<'a> {
 					self.place_block(block_placing, coords);
 				}
 			}
+		}
+	}
+
+	pub(crate) fn place_entity(&mut self, entity: Entity) {
+		let chunk_span = self.chunk_entities.coords_span;
+		let in_the_chunk = entity.chunk_coords(chunk_span.cd) == chunk_span.chunk_coords;
+		if in_the_chunk {
+			self.chunk_entities.add_entity(entity);
 		}
 	}
 }

@@ -13,7 +13,7 @@ use crate::{
 	coords::{
 		iter_3d_rect_inf_sup_excluded, BlockCoords, ChunkCoordsSpan, CubicCoordsSpan, NonOrientedAxis,
 	},
-	entities::ChunkEntities,
+	entities::{ChunkEntities, Entity},
 	noise,
 };
 
@@ -334,6 +334,10 @@ impl WorldGenerator for DefaultWorldGenerator {
 				placing_head.map(|x| x as f32),
 				ball_radius,
 			);
+			context.place_entity(Entity::new_test_ball(
+				placing_head.map(|x| x as f32),
+				cgmath::vec3(0.0, 0.0, 0.0),
+			));
 		};
 
 		let structure_types: [&StructureTypeInstanceGenerator; 2] =
@@ -345,6 +349,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 
 		// Now we generate the block data in the chunk.
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		let mut chunk_entities = ChunkEntities::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span().iter_coords() {
@@ -362,6 +367,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 				origin,
 				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
+				chunk_entities: &mut chunk_entities,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
 				terrain_generator: &coords_to_terrain,
@@ -369,10 +375,7 @@ impl WorldGenerator for DefaultWorldGenerator {
 			structure_types[origin.type_id.index](context);
 		}
 
-		(
-			chunk_blocks.finish_generation(),
-			ChunkEntities::new_empty(coords_span),
-		)
+		(chunk_blocks.finish_generation(), chunk_entities)
 	}
 }
 
@@ -3451,6 +3454,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 
 		// Now we generate the block data in the chunk.
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		let mut chunk_entities = ChunkEntities::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span().iter_coords() {
@@ -3468,6 +3472,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 				origin,
 				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
+				chunk_entities: &mut chunk_entities,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
 				terrain_generator: &coords_to_terrain,
@@ -3475,10 +3480,7 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			structure_types[origin.type_id.index](context);
 		}
 
-		(
-			chunk_blocks.finish_generation(),
-			ChunkEntities::new_empty(coords_span),
-		)
+		(chunk_blocks.finish_generation(), chunk_entities)
 	}
 }
 
@@ -3571,6 +3573,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 
 		// Now we generate the block data in the chunk.
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		let mut chunk_entities = ChunkEntities::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span().iter_coords() {
@@ -3588,6 +3591,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 				origin,
 				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
+				chunk_entities: &mut chunk_entities,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
 				terrain_generator: &coords_to_terrain,
@@ -3595,10 +3599,7 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			structure_types[origin.type_id.index](context);
 		}
 
-		(
-			chunk_blocks.finish_generation(),
-			ChunkEntities::new_empty(coords_span),
-		)
+		(chunk_blocks.finish_generation(), chunk_entities)
 	}
 }
 
@@ -4046,6 +4047,7 @@ mod procedural_structures_poc {
 
 			// Now we generate the block data in the chunk.
 			let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+			let mut chunk_entities = ChunkEntities::new_empty(coords_span);
 
 			// Generate terrain in the chunk.
 			for coords in chunk_blocks.coords_span().iter_coords() {
@@ -4063,6 +4065,7 @@ mod procedural_structures_poc {
 					origin,
 					allowed_span,
 					chunk_blocks: &mut chunk_blocks,
+					chunk_entities: &mut chunk_entities,
 					_origin_generator: &structure_origin_generator,
 					block_type_table,
 					terrain_generator: &coords_to_terrain,
@@ -4070,10 +4073,7 @@ mod procedural_structures_poc {
 				generate_structure(context);
 			}
 
-			(
-				chunk_blocks.finish_generation(),
-				ChunkEntities::new_empty(coords_span),
-			)
+			(chunk_blocks.finish_generation(), chunk_entities)
 		}
 	}
 }
@@ -4249,6 +4249,7 @@ impl WorldGenerator for WorldGeneratorStructuresArcs {
 
 		// Now we generate the block data in the chunk.
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
+		let mut chunk_entities = ChunkEntities::new_empty(coords_span);
 
 		// Generate terrain in the chunk.
 		for coords in chunk_blocks.coords_span().iter_coords() {
@@ -4266,6 +4267,7 @@ impl WorldGenerator for WorldGeneratorStructuresArcs {
 				origin,
 				allowed_span,
 				chunk_blocks: &mut chunk_blocks,
+				chunk_entities: &mut chunk_entities,
 				_origin_generator: &structure_origin_generator,
 				block_type_table,
 				terrain_generator: &coords_to_terrain,
@@ -4273,9 +4275,6 @@ impl WorldGenerator for WorldGeneratorStructuresArcs {
 			structure_types[origin.type_id.index](context);
 		}
 
-		(
-			chunk_blocks.finish_generation(),
-			ChunkEntities::new_empty(coords_span),
-		)
+		(chunk_blocks.finish_generation(), chunk_entities)
 	}
 }
