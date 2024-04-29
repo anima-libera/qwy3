@@ -404,6 +404,10 @@ impl ChunkEntities {
 		);
 		self.savable.entities.append(&mut other.savable.entities);
 	}
+	pub(crate) fn merged(mut self, other: ChunkEntities) -> ChunkEntities {
+		self.merge_to(other);
+		self
+	}
 
 	pub(crate) fn iter_entities(&self) -> impl Iterator<Item = &Entity> {
 		self.savable.entities.iter().map(|entity| entity.as_ref().unwrap())

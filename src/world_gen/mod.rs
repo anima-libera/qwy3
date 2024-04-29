@@ -13,6 +13,7 @@ use crate::{
 	coords::{
 		iter_3d_rect_inf_sup_excluded, BlockCoords, ChunkCoordsSpan, CubicCoordsSpan, NonOrientedAxis,
 	},
+	entities::ChunkEntities,
 	noise,
 };
 
@@ -22,12 +23,11 @@ use self::structure_engine::{
 };
 
 pub(crate) trait WorldGenerator {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks;
+	) -> (ChunkBlocks, ChunkEntities);
 }
 
 #[derive(Clone, Copy, ValueEnum, Serialize, Deserialize)]
@@ -143,12 +143,11 @@ pub(crate) struct DefaultWorldGenerator {
 }
 
 impl WorldGenerator for DefaultWorldGenerator {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
@@ -370,19 +369,21 @@ impl WorldGenerator for DefaultWorldGenerator {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
 struct FlatWorldGenerator {}
 
 impl WorldGenerator for FlatWorldGenerator {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 		for coords in chunk_blocks.coords_span().iter_coords() {
 			let block = match coords.z.cmp(&0) {
@@ -392,19 +393,21 @@ impl WorldGenerator for FlatWorldGenerator {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
 struct EmptyWorldGenerator {}
 
 impl WorldGenerator for EmptyWorldGenerator {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let mut chunk_blocks = ChunkBlocksBeingGenerated::new_empty(coords_span);
 		for coords in chunk_blocks.coords_span().iter_coords() {
 			let block =
@@ -415,7 +418,10 @@ impl WorldGenerator for EmptyWorldGenerator {
 				};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -424,12 +430,11 @@ struct WorldGeneratorLines01 {
 }
 
 impl WorldGenerator for WorldGeneratorLines01 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let noise_no_grass = noise::OctavedNoise::new(5, vec![self.seed, 3]);
@@ -492,7 +497,10 @@ impl WorldGenerator for WorldGeneratorLines01 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -501,12 +509,11 @@ struct WorldGeneratorVolumes01 {
 }
 
 impl WorldGenerator for WorldGeneratorVolumes01 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
@@ -529,7 +536,10 @@ impl WorldGenerator for WorldGeneratorVolumes01 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -538,12 +548,11 @@ struct WorldGeneratorBallsSameSize {
 }
 
 impl WorldGenerator for WorldGeneratorBallsSameSize {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -575,7 +584,10 @@ impl WorldGenerator for WorldGeneratorBallsSameSize {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -584,12 +596,11 @@ struct WorldGeneratorBallsDifferentSizes {
 }
 
 impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -630,7 +641,10 @@ impl WorldGenerator for WorldGeneratorBallsDifferentSizes {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -654,12 +668,11 @@ struct WorldGeneratorLinksXRaw {
 }
 
 impl WorldGenerator for WorldGeneratorLinksXRaw {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -699,7 +712,10 @@ impl WorldGenerator for WorldGeneratorLinksXRaw {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -708,12 +724,11 @@ struct WorldGeneratorLinksX {
 }
 
 impl WorldGenerator for WorldGeneratorLinksX {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -768,7 +783,10 @@ impl WorldGenerator for WorldGeneratorLinksX {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -777,12 +795,11 @@ struct WorldGeneratorLinks {
 }
 
 impl WorldGenerator for WorldGeneratorLinks {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -847,7 +864,10 @@ impl WorldGenerator for WorldGeneratorLinks {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -856,12 +876,11 @@ struct WorldGeneratorLinksGround {
 }
 
 impl WorldGenerator for WorldGeneratorLinksGround {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -932,7 +951,10 @@ impl WorldGenerator for WorldGeneratorLinksGround {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -941,12 +963,11 @@ struct WorldGeneratorLinksCaves {
 }
 
 impl WorldGenerator for WorldGeneratorLinksCaves {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -1014,7 +1035,10 @@ impl WorldGenerator for WorldGeneratorLinksCaves {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1023,12 +1047,11 @@ struct WorldGeneratorLinks02 {
 }
 
 impl WorldGenerator for WorldGeneratorLinks02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -1119,7 +1142,10 @@ impl WorldGenerator for WorldGeneratorLinks02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1128,12 +1154,11 @@ struct WorldGeneratorLinksFlat {
 }
 
 impl WorldGenerator for WorldGeneratorLinksFlat {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -1240,7 +1265,10 @@ impl WorldGenerator for WorldGeneratorLinksFlat {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1249,12 +1277,11 @@ struct WorldGeneratorSkyIslands {
 }
 
 impl WorldGenerator for WorldGeneratorSkyIslands {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(1, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(1, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(1, vec![self.seed, 3]);
@@ -1336,7 +1363,10 @@ impl WorldGenerator for WorldGeneratorSkyIslands {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1345,12 +1375,11 @@ struct WorldGeneratorVolumes02 {
 }
 
 impl WorldGenerator for WorldGeneratorVolumes02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
@@ -1387,7 +1416,10 @@ impl WorldGenerator for WorldGeneratorVolumes02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1396,12 +1428,11 @@ struct WorldGeneratorVolumes03 {
 }
 
 impl WorldGenerator for WorldGeneratorVolumes03 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
@@ -1431,7 +1462,10 @@ impl WorldGenerator for WorldGeneratorVolumes03 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1440,12 +1474,11 @@ struct WorldGeneratorHeight01 {
 }
 
 impl WorldGenerator for WorldGeneratorHeight01 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let coords_to_height = |coords: BlockCoords| -> bool {
@@ -1482,7 +1515,10 @@ impl WorldGenerator for WorldGeneratorHeight01 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1491,12 +1527,11 @@ struct WorldGeneratorPlane01 {
 }
 
 impl WorldGenerator for WorldGeneratorPlane01 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let coords_to_void = |coords: BlockCoords| -> f32 {
@@ -1530,7 +1565,10 @@ impl WorldGenerator for WorldGeneratorPlane01 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1539,12 +1577,11 @@ struct WorldGeneratorWierdTerrain01 {
 }
 
 impl WorldGenerator for WorldGeneratorWierdTerrain01 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let coords_to_void = |coords: BlockCoords| -> f32 {
@@ -1578,7 +1615,10 @@ impl WorldGenerator for WorldGeneratorWierdTerrain01 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1587,12 +1627,11 @@ struct WorldGeneratorPlane02 {
 }
 
 impl WorldGenerator for WorldGeneratorPlane02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let coords_to_void = |coords: BlockCoords| -> f32 {
@@ -1625,7 +1664,10 @@ impl WorldGenerator for WorldGeneratorPlane02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1634,12 +1676,11 @@ struct WorldGeneratorWierdTerrain02 {
 }
 
 impl WorldGenerator for WorldGeneratorWierdTerrain02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_m = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 2]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 3]);
@@ -1670,7 +1711,10 @@ impl WorldGenerator for WorldGeneratorWierdTerrain02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1679,12 +1723,11 @@ struct WorldGeneratorHeight02 {
 }
 
 impl WorldGenerator for WorldGeneratorHeight02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
@@ -1722,7 +1765,10 @@ impl WorldGenerator for WorldGeneratorHeight02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1731,12 +1777,11 @@ struct WorldGeneratorHeightBiomes {
 }
 
 impl WorldGenerator for WorldGeneratorHeightBiomes {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		fn interpolate(
 			smoothing: &dyn Fn(f32) -> f32,
 			x: f32,
@@ -1820,7 +1865,10 @@ impl WorldGenerator for WorldGeneratorHeightBiomes {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1829,12 +1877,11 @@ struct WorldGeneratorHeightBiomesVolume {
 }
 
 impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		fn interpolate(
 			smoothing: &dyn Fn(f32) -> f32,
 			x: f32,
@@ -1912,7 +1959,10 @@ impl WorldGenerator for WorldGeneratorHeightBiomesVolume {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1921,12 +1971,11 @@ struct WorldGeneratorHeight03 {
 }
 
 impl WorldGenerator for WorldGeneratorHeight03 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
 			let coordsf = coords.map(|x| x as f32);
@@ -1950,7 +1999,10 @@ impl WorldGenerator for WorldGeneratorHeight03 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -1959,12 +2011,11 @@ struct WorldGeneratorStructuresPoc {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresPoc {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -2116,7 +2167,10 @@ impl WorldGenerator for WorldGeneratorStructuresPoc {
 			}
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2125,12 +2179,11 @@ struct WorldGeneratorStructuresLinksPoc {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -2386,7 +2439,10 @@ impl WorldGenerator for WorldGeneratorStructuresLinksPoc {
 			}
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2395,12 +2451,11 @@ struct WorldGeneratorStructuresTrees {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresTrees {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -2574,7 +2629,10 @@ impl WorldGenerator for WorldGeneratorStructuresTrees {
 			}
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2583,12 +2641,11 @@ struct WorldGeneratorStructuresSpikes {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresSpikes {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -2786,7 +2843,10 @@ impl WorldGenerator for WorldGeneratorStructuresSpikes {
 			}
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2795,12 +2855,11 @@ struct WorldGeneratorLines02 {
 }
 
 impl WorldGenerator for WorldGeneratorLines02 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(5, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(5, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(5, vec![self.seed, 3]);
@@ -2866,7 +2925,10 @@ impl WorldGenerator for WorldGeneratorLines02 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2875,12 +2937,11 @@ struct WorldGeneratorLines03 {
 }
 
 impl WorldGenerator for WorldGeneratorLines03 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
@@ -2952,7 +3013,10 @@ impl WorldGenerator for WorldGeneratorLines03 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -2961,12 +3025,11 @@ struct WorldGeneratorStructuresLinksSmooth {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -3241,7 +3304,10 @@ impl WorldGenerator for WorldGeneratorStructuresLinksSmooth {
 			}
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -3250,12 +3316,11 @@ struct WorldGeneratorStructuresEnginePoc {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -3410,7 +3475,10 @@ impl WorldGenerator for WorldGeneratorStructuresEnginePoc {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -3419,12 +3487,11 @@ struct WorldGeneratorStructuresGeneratedBlocks {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -3528,7 +3595,10 @@ impl WorldGenerator for WorldGeneratorStructuresGeneratedBlocks {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -3537,12 +3607,11 @@ struct WorldGeneratorWierdTerrain03 {
 }
 
 impl WorldGenerator for WorldGeneratorWierdTerrain03 {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		let noise_a = noise::OctavedNoise::new(4, vec![self.seed, 1]);
 		let noise_b = noise::OctavedNoise::new(4, vec![self.seed, 2]);
 		let noise_c = noise::OctavedNoise::new(4, vec![self.seed, 3]);
@@ -3574,7 +3643,10 @@ impl WorldGenerator for WorldGeneratorWierdTerrain03 {
 			};
 			chunk_blocks.set_id(coords, block);
 		}
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }
 
@@ -3918,12 +3990,11 @@ mod procedural_structures_poc {
 	}
 
 	impl WorldGenerator for WorldGeneratorStructuresProceduralPoc {
-		fn generate_chunk_blocks(
+		fn generate_chunk_blocks_and_entities(
 			&self,
 			coords_span: ChunkCoordsSpan,
-			_generate_entities: bool,
 			block_type_table: &Arc<BlockTypeTable>,
-		) -> ChunkBlocks {
+		) -> (ChunkBlocks, ChunkEntities) {
 			// Define the terrain generation as a deterministic coords->block function.
 			let noise_terrain = OctavedNoise::new(3, vec![self.seed, 1]);
 			let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -3999,7 +4070,10 @@ mod procedural_structures_poc {
 				generate_structure(context);
 			}
 
-			chunk_blocks.finish_generation()
+			(
+				chunk_blocks.finish_generation(),
+				ChunkEntities::new_empty(coords_span),
+			)
 		}
 	}
 }
@@ -4009,12 +4083,11 @@ struct WorldGeneratorStructuresArcs {
 }
 
 impl WorldGenerator for WorldGeneratorStructuresArcs {
-	fn generate_chunk_blocks(
+	fn generate_chunk_blocks_and_entities(
 		&self,
 		coords_span: ChunkCoordsSpan,
-		_generate_entities: bool,
 		block_type_table: &Arc<BlockTypeTable>,
-	) -> ChunkBlocks {
+	) -> (ChunkBlocks, ChunkEntities) {
 		// Define the terrain generation as a deterministic coords->block function.
 		let noise_terrain = noise::OctavedNoise::new(3, vec![self.seed, 1]);
 		let coords_to_ground = |coords: BlockCoords| -> bool {
@@ -4200,6 +4273,9 @@ impl WorldGenerator for WorldGeneratorStructuresArcs {
 			structure_types[origin.type_id.index](context);
 		}
 
-		chunk_blocks.finish_generation()
+		(
+			chunk_blocks.finish_generation(),
+			ChunkEntities::new_empty(coords_span),
+		)
 	}
 }

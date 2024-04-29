@@ -123,26 +123,58 @@ impl CurrentWorkerTasks {
 				cd,
 			} = data_for_chunk_loading;
 			let coords_span = ChunkCoordsSpan { cd, chunk_coords };
+
 			// Loading a chunk means either loading from save (disk)
 			// if there is a save and the chunk was already generated and saved in the past,
 			// or else generating it.
-			let chunk_blocks = save
-				.as_ref()
-				.and_then(|save| ChunkBlocks::load_from_save(coords_span, save))
-				.unwrap_or_else(|| {
-					let generate_entities = !was_already_generated_before;
-					world_generator.generate_chunk_blocks(
-						coords_span,
-						generate_entities,
-						&block_type_table,
-					)
-				});
-			let chunk_culling_info =
-				ChunkCullingInfo::compute_from_blocks(&chunk_blocks, &block_type_table);
-			let chunk_entities = save.as_ref().and_then(|save| {
+
+			// The block data and the entities are not to be handled in the same way.
+			//
+			// The blocks may or may not have been saved even if already generated (it depends
+			// on if they were modified since generation and the `only_save_modified_chunks` setting).
+			//
+			// The entities are always saved, and sometimes even saved in chunks that were never
+			// generated (it can happen if an entity goes into a chunk that is outside of the area
+			// in which chunks are allowed to be loaded). An entity that does not decide to disappear
+			// is never lost (always saved) so once it is generated it must not be generated again
+			// because the first one is still around.
+
+			// First we load what we have from the save (if any).
+			let blocks_from_save =
+				save.as_ref().and_then(|save| ChunkBlocks::load_from_save(coords_span, save));
+			let entities_from_save = save.as_ref().and_then(|save| {
 				ChunkEntities::load_from_save_while_removing_the_save(coords_span, save)
 			});
-			let _ = sender.send((chunk_blocks, chunk_culling_info, chunk_entities));
+
+			// If the entities were already generated, then they have been saved, and we must not
+			// generate then an other time to avoid duplicating them.
+			let keep_generated_entities = !was_already_generated_before;
+			// If the blocks were not saved, then we have to generate to get the blocks.
+			let generation_needed = blocks_from_save.is_none() || keep_generated_entities;
+
+			// Now the generation happens if needed.
+			let blocks_and_entities_from_gen = generation_needed.then(|| {
+				world_generator.generate_chunk_blocks_and_entities(coords_span, &block_type_table)
+			});
+			let (blocks_from_gen, entities_from_gen) = match blocks_and_entities_from_gen {
+				Some((blocks, entities)) => (Some(blocks), Some(entities)),
+				None => (None, None),
+			};
+			let entities_from_gen = keep_generated_entities.then_some(entities_from_gen).flatten();
+
+			// Sorting what we got. At the end, we must have one `ChunkBlocks`
+			// and one `Option<ChunkEntities>` (which should be `None` if empty).
+			let blocks = blocks_from_save.or(blocks_from_gen).unwrap();
+			let entities = match (entities_from_save, entities_from_gen) {
+				(Some(entities_save), Some(entities_gen)) => Some(entities_save.merged(entities_gen)),
+				(Some(entities), _) | (_, Some(entities)) => Some(entities),
+				(None, None) => None,
+			};
+			let entities = entities.filter(|entities| entities.count_entities() >= 1);
+
+			let culling_info = ChunkCullingInfo::compute_from_blocks(&blocks, &block_type_table);
+
+			let _ = sender.send((blocks, culling_info, entities));
 		}));
 	}
 
