@@ -88,8 +88,6 @@
 
 ## Entities
 
-- Make the world generation place entities in the world.
-  - Beware the saves. Make sure that entities are not generated again (one more time, while their previous generation is still in the world) when thir chunk of origin gets unloaded then generated again (for example in a `only_save_modified_chunks` save).
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
 - Support the throwing of X-shaped blocks.
 - Particles, like when breaking blocks.

@@ -16,15 +16,15 @@ pub(crate) struct StructureTypeId {
 }
 
 /// A structure origin is a first step in the generation of a structure.
-/// Before even generating the blocks of an instance of some type of structure,
+/// Before even generating the blocks and entities of an instance of some type of structure,
 /// we have to decide (in a deterministic way, etc.) where (i.e. from which block)
 /// should structures of which type can generate. A structure origin describes
 /// where and which type a structure should generate.
 ///
 /// Generating structure origins and having some size limits on structure generations
-/// (constraining how far from its origin a structure can place/remove blocks)
-/// allows for a chunk to know which origins could place/remove blocks in the chunk
-/// and thus should actually have their structure generated.
+/// (constraining how far from its origin a structure can place blocks and entities)
+/// allows for a chunk to know which origins could place blocks and entities in itself (the chunk)
+/// and thus should actually have their (the origin's) structure generated.
 #[derive(Clone, Copy)]
 pub(crate) struct StructureOrigin {
 	pub(crate) coords: BlockCoords,
@@ -33,6 +33,7 @@ pub(crate) struct StructureOrigin {
 
 /// Handles generation of structure origins.
 pub(crate) trait StructureOriginGenerator {
+	/// Returns the list of all the structure origins that are in the given `span`.
 	fn get_origins_in_span(&self, span: CubicCoordsSpan) -> Vec<StructureOrigin>;
 }
 
@@ -144,7 +145,7 @@ type TerrainGenerator<'a> = dyn Fn(BlockCoords) -> BlockTypeId + 'a;
 pub(crate) struct StructureInstanceGenerationContext<'a> {
 	/// The origin of the structure that we generate now.
 	pub(crate) origin: StructureOrigin,
-	/// The span in which the structure is allowed to place blocks.
+	/// The span in which the structure is allowed to place blocks and entities.
 	pub(crate) allowed_span: CubicCoordsSpan,
 	/// The chunk that is being generated and for which we generate a structure.
 	/// We are only generating this chunk now, so all the blocks placed by the structure outside
@@ -152,7 +153,8 @@ pub(crate) struct StructureInstanceGenerationContext<'a> {
 	/// will also generate this structure (in the exact same way) so the blocks that are discarded
 	/// now are not lost, but just the matter of an other chunk generation task.
 	pub(crate) chunk_blocks: &'a mut ChunkBlocksBeingGenerated,
-	/// See `chunk_blocks`, the same goes for the entities.
+	/// Structures are allowed to generate entities.
+	/// What goes for `chunk_blocks` also goes for the entities.
 	pub(crate) chunk_entities: &'a mut ChunkEntities,
 	/// Structures are allowed to see the origins of other structures and maybe react to it.
 	pub(crate) _origin_generator: &'a dyn StructureOriginGenerator,
@@ -194,7 +196,9 @@ impl<'a> StructureInstanceGenerationContext<'a> {
 		let ball_sup = (center + cgmath::vec3(1.0, 1.0, 1.0) * radius).map(|x| x.ceil() as i32);
 		let ball_span = CubicCoordsSpan::with_inf_sup_but_sup_is_included(ball_inf, ball_sup);
 		let chunk_span = CubicCoordsSpan::from_chunk_span(self.chunk_blocks.coords_span());
-		if let Some(span) = chunk_span.intersection(&ball_span) {
+		let span =
+			chunk_span.intersection(&ball_span).and_then(|span| span.intersection(&self.allowed_span));
+		if let Some(span) = span {
 			for coords in span.iter() {
 				if coords.map(|x| x as f32).distance(center) < radius {
 					self.place_block(block_placing, coords);
@@ -207,7 +211,10 @@ impl<'a> StructureInstanceGenerationContext<'a> {
 		let chunk_span = self.chunk_entities.coords_span;
 		let in_the_chunk = entity.chunk_coords(chunk_span.cd) == chunk_span.chunk_coords;
 		if in_the_chunk {
-			self.chunk_entities.add_entity(entity);
+			let block_containing_pos = entity.pos().map(|x| x.round() as i32);
+			if self.allowed_span.contains(block_containing_pos) {
+				self.chunk_entities.add_entity(entity);
+			}
 		}
 	}
 }
