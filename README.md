@@ -41,6 +41,7 @@ Advice:
 - Read `controls.qwy3_controls` to get a list of controls and see what can be done once the game run.
 - Some useful default controls: WASD to move, P to toggle physics (fly) and mouse wheel to go up and down, U to toggle the interface, K to let the mouse escape, left/right click to remove/place blocks.
 - Adding `--mode play` will disable some controls for the sake of (work-in-progress) gameplay.
+- Adding `--only-modified` when there is a save will make the chunk blocks only save themselves to the disk if they were modified, which makes the save smaller.
 
 ### Implemented features
 
@@ -51,7 +52,9 @@ Advice:
 - Taking and placing back blocks, can also throw them.
 - Saving/loading to/from disk, named saves.
 - AABB vs voxels collision resolution.
-- Entities (falling blocks for now) that get saved/loaded, fast rendering (can handle tens of thousands).
+- Entities that get saved/loaded, fast rendering (can handle tens of thousands).
+  - Block entities for when blocks are thrown around.
+  - Tiny ball animals (cute imho!) that roll around.
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.
 - Fog effect (blocks in the distance fading in the skybox).
