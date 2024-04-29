@@ -224,6 +224,7 @@ impl ChunkGrid {
 				dt,
 				&mut changes_of_chunk,
 				part_manipulation,
+				save,
 			);
 			if chunk_entities.count_entities() > 0 {
 				self.add_chunk_entities(chunk_entities);

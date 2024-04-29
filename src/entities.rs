@@ -138,6 +138,7 @@ impl Entity {
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		part_manipulation: &mut ForPartManipulation,
+		save: Option<&Arc<Save>>,
 	) {
 		match self.typed {
 			EntityTyped::Block { .. } => {
@@ -257,6 +258,21 @@ impl Entity {
 
 					let last_pos = phys.aligned_box().pos;
 					phys.apply_one_physics_step(walking, chunk_grid, block_type_table, dt, true);
+
+					// Just to see if it worked, it sometimes throw a leaf block.
+					let test_leaf_throwing_probability = 0.01 * dt.as_secs_f64();
+					if test_leaf_throwing_probability <= 1.0
+						&& rand::thread_rng().gen_bool(test_leaf_throwing_probability)
+					{
+						chunk_grid.add_entity(
+							Entity::new_block(
+								Block { type_id: block_type_table.kinda_leaf_id(), data: None },
+								last_pos,
+								cgmath::vec3(0.0, 0.0, 0.2),
+							),
+							save,
+						);
+					}
 
 					// Make motion on the ground roll the ball.
 					let delta_pos = phys.aligned_box().pos - last_pos;
@@ -427,11 +443,19 @@ impl ChunkEntities {
 		dt: std::time::Duration,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 		part_manipulation: &mut ForPartManipulation,
+		save: Option<&Arc<Save>>,
 	) {
 		let entity_indices = 0..self.savable.entities.len();
 		for entity_index in entity_indices {
 			let mut entity = self.savable.entities[entity_index].take().unwrap();
-			entity.apply_one_physics_step(chunk_grid, self, block_type_table, dt, part_manipulation);
+			entity.apply_one_physics_step(
+				chunk_grid,
+				self,
+				block_type_table,
+				dt,
+				part_manipulation,
+				save,
+			);
 			self.savable.entities[entity_index] = Some(entity);
 		}
 		self.savable.entities.retain_mut(|entity| {
