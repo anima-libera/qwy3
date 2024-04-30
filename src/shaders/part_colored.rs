@@ -107,11 +107,13 @@ pub(crate) fn render_pipeline_and_bind_group(
 		vertex: wgpu::VertexState {
 			module: &shader,
 			entry_point: "vertex_shader_main",
+			compilation_options: wgpu::PipelineCompilationOptions::default(),
 			buffers: &[vertex_buffer_layout, instance_buffer_layout],
 		},
 		fragment: Some(wgpu::FragmentState {
 			module: &shader,
 			entry_point: "fragment_shader_main",
+			compilation_options: wgpu::PipelineCompilationOptions::default(),
 			targets: &[Some(wgpu::ColorTargetState {
 				format: output_format,
 				// See same spot in the `block` pipeline for an explanation.

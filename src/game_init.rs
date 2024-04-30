@@ -168,7 +168,7 @@ pub(crate) struct Game {
 	pub(crate) enable_fullscreen: bool,
 }
 
-pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
+pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game {
 	// Wgpu uses the `log`/`env_logger` crates to log errors and stuff,
 	// and we do want to see the errors very much.
 	env_logger::init();
@@ -213,17 +213,13 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		std::process::exit(0);
 	}
 
-	let event_loop = winit::event_loop::EventLoop::new().unwrap();
-	event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-
 	let enable_fullscreen = fullscreen;
-	let window = winit::window::WindowBuilder::new()
+	let window_attributes = winit::window::Window::default_attributes()
 		.with_title("Qwy3")
 		.with_maximized(true)
 		.with_resizable(true)
-		.with_fullscreen(enable_fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-		.build(&event_loop)
-		.unwrap();
+		.with_fullscreen(enable_fullscreen.then_some(winit::window::Fullscreen::Borderless(None)));
+	let window = event_loop.create_window(window_attributes).unwrap();
 	let window = Arc::new(window);
 
 	let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
@@ -620,7 +616,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		println!("End of initialization");
 	}
 
-	let game = Game {
+	Game {
 		window,
 		window_surface,
 		device,
@@ -700,8 +696,7 @@ pub(crate) fn init_game() -> (Game, winit::event_loop::EventLoop<()>) {
 		enable_display_entity_boxes,
 		enable_fog,
 		enable_fullscreen,
-	};
-	(game, event_loop)
+	}
 }
 
 impl Game {
