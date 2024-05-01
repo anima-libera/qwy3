@@ -209,7 +209,7 @@ impl winit::application::ApplicationHandler for App {
 					},
 					(Action::TogglePhysics, true) => {
 						if game.playing_mode == PlayingMode::Free {
-							game.enable_physics = !game.enable_physics;
+							game.enable_player_physics = !game.enable_player_physics;
 						}
 					},
 					(Action::ToggleWorldGeneration, true) => {
@@ -740,7 +740,11 @@ impl winit::application::ApplicationHandler for App {
 
 		// Walking.
 		let walking_vector = {
-			let walking_factor = if game.enable_physics { 12.0 } else { 50.0 };
+			let walking_factor = if game.enable_player_physics {
+				12.0
+			} else {
+				50.0
+			};
 			let walking_forward_factor =
 				if game.walking_forward { 1 } else { 0 } + if game.walking_backward { -1 } else { 0 };
 			let walking_rightward_factor =
@@ -759,7 +763,7 @@ impl winit::application::ApplicationHandler for App {
 		};
 
 		// Player physics.
-		if game.enable_physics {
+		if game.enable_player_physics {
 			game.player_phys.apply_one_physics_step(
 				walking_vector,
 				&game.chunk_grid,

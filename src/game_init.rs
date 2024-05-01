@@ -57,6 +57,7 @@ struct StateSavable {
 	player_angular_direction: [f32; 2],
 	world_time: Duration,
 	player_held_block: Option<Block>,
+	enable_player_physics: bool,
 }
 
 pub(crate) fn save_savable_state(game: &Game) {
@@ -72,6 +73,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		player_angular_direction: game.camera_direction.into(),
 		world_time: game.world_time,
 		player_held_block: game.player_held_block.clone(),
+		enable_player_physics: game.enable_player_physics,
 	};
 	let data = rmp_serde::encode::to_vec(&savable).unwrap();
 	state_file.write_all(&data).unwrap();
@@ -155,7 +157,7 @@ pub(crate) struct Game {
 	pub(crate) walking_backward: bool,
 	pub(crate) walking_leftward: bool,
 	pub(crate) walking_rightward: bool,
-	pub(crate) enable_physics: bool,
+	pub(crate) enable_player_physics: bool,
 	pub(crate) enable_world_generation: bool,
 	pub(crate) selected_camera: WhichCameraToUse,
 	pub(crate) enable_display_phys_box: bool,
@@ -411,7 +413,8 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		cgmath::vec3(0.0, 0.0, 0.0),
 	);
 	let player_jump_manager = PlayerJumpManager::new();
-	let enable_physics = true;
+	let enable_player_physics =
+		saved_state.as_ref().map(|state| state.enable_player_physics).unwrap_or(true);
 	let enable_display_phys_box = false;
 
 	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
@@ -685,7 +688,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		walking_backward,
 		walking_leftward,
 		walking_rightward,
-		enable_physics,
+		enable_player_physics,
 		enable_world_generation,
 		selected_camera,
 		enable_display_phys_box,
