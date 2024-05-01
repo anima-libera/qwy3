@@ -263,8 +263,9 @@ impl Entity {
 						);
 
 					// Getting pushed out of other entities we overlap with.
+					//
+					// TODO: Make it so that one entity of the pair does not get priority.
 					for entity in other_entities_iterator {
-						//for entity in chunk_entity_of_self.savable.entities.iter() {
 						if let Some(other_aligned_box) = entity.aligned_box() {
 							if other_aligned_box.overlaps(phys.aligned_box()) {
 								let mut displacement = phys.aligned_box().pos - other_aligned_box.pos;
