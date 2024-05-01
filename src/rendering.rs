@@ -76,7 +76,7 @@ impl<'a> DataForRendering<'a> {
 			render_pass.set_bind_group(0, &self.rendering.block_shadow_bind_group, &[]);
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
 				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
-				render_pass.draw(0..(mesh.block_vertex_count as u32), 0..1);
+				render_pass.draw(0..mesh.block_vertex_count, 0..1);
 			}
 
 			// Entity parts textured.
@@ -151,7 +151,7 @@ impl<'a> DataForRendering<'a> {
 			render_pass.set_bind_group(0, &self.rendering.block_bind_group, &[]);
 			for mesh in self.chunk_grid.iter_chunk_meshes() {
 				render_pass.set_vertex_buffer(0, mesh.block_vertex_buffer.slice(..));
-				render_pass.draw(0..(mesh.block_vertex_count as u32), 0..1);
+				render_pass.draw(0..mesh.block_vertex_count, 0..1);
 			}
 
 			// Entity parts textured.
@@ -188,9 +188,9 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, self.player_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(self.player_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..self.player_box_mesh.vertex_count, 0..1);
 				render_pass.set_vertex_buffer(0, self.player_blocks_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(self.player_blocks_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..self.player_blocks_box_mesh.vertex_count, 0..1);
 			}
 
 			if let Some(targeted_block_box_mesh) = &self.targeted_face_mesh_opt {
@@ -198,7 +198,7 @@ impl<'a> DataForRendering<'a> {
 					render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
 					render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 					render_pass.set_vertex_buffer(0, targeted_block_box_mesh.vertex_buffer.slice(..));
-					render_pass.draw(0..(targeted_block_box_mesh.vertices.len() as u32), 0..1);
+					render_pass.draw(0..targeted_block_box_mesh.vertex_count, 0..1);
 				}
 			}
 
@@ -206,21 +206,21 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..chunk_box_mesh.vertex_count, 0..1);
 			}
 
 			for entity_box_mesh in self.entities_box_meshes.iter() {
 				render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, entity_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(entity_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..entity_box_mesh.vertex_count, 0..1);
 			}
 
 			for chunk_box_mesh in self.chunk_with_entities_box_meshes.iter() {
 				render_pass.set_pipeline(&self.rendering.simple_line_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, chunk_box_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(chunk_box_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..chunk_box_mesh.vertex_count, 0..1);
 			}
 		}
 
@@ -285,7 +285,7 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_pipeline(&self.rendering.simple_line_2d_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_2d_bind_group, &[]);
 				render_pass.set_vertex_buffer(0, self.cursor_mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(self.cursor_mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..self.cursor_mesh.vertex_count, 0..1);
 			}
 
 			if self.enable_display_interface && !matches!(self.selected_camera, WhichCameraToUse::Sun)
@@ -294,13 +294,13 @@ impl<'a> DataForRendering<'a> {
 				render_pass.set_bind_group(0, &self.rendering.simple_texture_2d_bind_group, &[]);
 				let mesh = &self.interface_simple_texture_mesh;
 				render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..mesh.vertex_count, 0..1);
 
 				render_pass.set_pipeline(&self.rendering.simple_line_2d_render_pipeline);
 				render_pass.set_bind_group(0, &self.rendering.simple_line_2d_bind_group, &[]);
 				let mesh = &self.interface_simple_line_mesh;
 				render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-				render_pass.draw(0..(mesh.vertices.len() as u32), 0..1);
+				render_pass.draw(0..mesh.vertex_count, 0..1);
 			}
 		}
 

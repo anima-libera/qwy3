@@ -189,7 +189,7 @@ impl CurrentWorkerTasks {
 }
 
 pub(crate) struct SimpleTextureMesh {
-	pub(crate) vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
+	pub(crate) vertex_count: u32,
 	pub(crate) vertex_buffer: wgpu::Buffer,
 }
 
@@ -203,7 +203,7 @@ impl SimpleTextureMesh {
 			contents: bytemuck::cast_slice(&vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-		SimpleTextureMesh { vertices, vertex_buffer }
+		SimpleTextureMesh { vertex_count: vertices.len() as u32, vertex_buffer }
 	}
 
 	fn _from_rect(

@@ -131,7 +131,7 @@ impl DataForChunkMeshing {
 }
 
 pub(crate) struct ChunkMesh {
-	pub(crate) block_vertex_count: usize,
+	pub(crate) block_vertex_count: u32,
 	pub(crate) block_vertex_buffer: wgpu::Buffer,
 }
 
@@ -145,7 +145,10 @@ impl ChunkMesh {
 			contents: bytemuck::cast_slice(&block_vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-		ChunkMesh { block_vertex_count: block_vertices.len(), block_vertex_buffer }
+		ChunkMesh {
+			block_vertex_count: block_vertices.len() as u32,
+			block_vertex_buffer,
+		}
 	}
 }
 

@@ -10,7 +10,7 @@ use crate::{
 ///
 /// Can be used (for example) to display hit boxes for debugging purposes.
 pub(crate) struct SimpleLineMesh {
-	pub(crate) vertices: Vec<SimpleLineVertexPod>,
+	pub(crate) vertex_count: u32,
 	pub(crate) vertex_buffer: wgpu::Buffer,
 }
 
@@ -24,7 +24,7 @@ impl SimpleLineMesh {
 			contents: bytemuck::cast_slice(&vertices),
 			usage: wgpu::BufferUsages::VERTEX,
 		});
-		SimpleLineMesh { vertices, vertex_buffer }
+		SimpleLineMesh { vertex_count: vertices.len() as u32, vertex_buffer }
 	}
 
 	pub(crate) fn from_aligned_box(
