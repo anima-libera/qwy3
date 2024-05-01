@@ -34,7 +34,7 @@ impl ChunkDimensions {
 		self.edge.pow(3) as usize
 	}
 
-	pub(crate) fn _dimensions(self) -> cgmath::Vector3<i32> {
+	pub(crate) fn dimensions(self) -> cgmath::Vector3<i32> {
 		(self.edge, self.edge, self.edge).into()
 	}
 }
@@ -75,7 +75,7 @@ impl ChunkCoordsSpan {
 		face_orientation: OrientedAxis,
 	) -> impl Iterator<Item = BlockCoords> {
 		let mut inf = self.block_coords_inf();
-		let mut dims = self.cd._dimensions();
+		let mut dims = self.cd.dimensions();
 		// We just flatten the area along the right axis.
 		dims[face_orientation.axis.index()] = 1;
 		// We also make sure the flatten area touches the right face.

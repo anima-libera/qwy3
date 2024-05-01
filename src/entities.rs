@@ -9,12 +9,16 @@ use std::{
 use cgmath::{EuclideanSpace, InnerSpace, MetricSpace, Zero};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 
 use crate::{
 	block_types::BlockTypeTable,
 	chunk_blocks::Block,
 	chunks::ChunkGrid,
-	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	coords::{
+		iter_3d_cube_center_radius, AlignedBox, AngularDirection, ChunkCoords, ChunkCoordsSpan,
+		ChunkDimensions,
+	},
 	entity_parts::{
 		colored_cube::{ColoredCubePartKind, PartColoredCubeInstanceData},
 		colored_icosahedron::{ColoredIcosahedronPartKind, PartColoredIcosahedronInstanceData},
@@ -224,19 +228,44 @@ impl Entity {
 				{
 					let mut walking = facing_direction.to_vec3() * *rolling_speed;
 
-					// TODO: Do not just look at the current chunk for colliding entities,
-					// we should look at all the chunks that are suceptible to contain an entity
-					// that is suceptible to be colliding with us.
-					// To do that, each chunk should be able to give a maximum of the dimensions of
-					// its entities, and here we should ask neighboring chunks and do some calculations
-					// to see for each neigboring chunk if its bigget entity migh be able to collide
-					// with us even from its chunk.
+					// We do not just look at the current chunk for colliding entities,
+					// we should look at all the neighboring chunks that contain
+					// an entity that is suceptible to be colliding with us.
+					// To do that, each chunk knows the maximum of the dimensions of
+					// its entities, and here we ask neighboring chunks for that and do some
+					// calculations to see for each neigboring chunk if its biggest entity might
+					// be able to collide with us even from its chunk.
+					let block_coords = phys.aligned_box().pos.map(|x| x.round() as i32);
+					let chunk_coords =
+						chunk_grid.cd().world_coords_to_containing_chunk_coords(block_coords);
+					let mut chunk_to_iterate: SmallVec<[ChunkCoords; 4]> = SmallVec::new();
+					for neigboring_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
+						if neigboring_chunk_coords == chunk_coords {
+							continue;
+						}
+						if chunk_grid.can_entity_in_chunk_maybe_collide_with_box(
+							neigboring_chunk_coords,
+							phys.aligned_box(),
+						) {
+							chunk_to_iterate.push(neigboring_chunk_coords);
+						}
+					}
+					let other_entities_iterator = chunk_to_iterate
+						.into_iter()
+						.filter_map(|chunk_coords| chunk_grid.iter_entities_in_chunk(chunk_coords))
+						.flatten()
+						.chain(
+							chunk_entity_of_self
+								.savable
+								.entities
+								.iter()
+								.filter_map(|entity| entity.as_ref()),
+						);
 
 					// Getting pushed out of other entities we overlap with.
-					for entity in chunk_entity_of_self.savable.entities.iter() {
-						if let Some(other_aligned_box) =
-							entity.as_ref().and_then(|entity| entity.aligned_box())
-						{
+					for entity in other_entities_iterator {
+						//for entity in chunk_entity_of_self.savable.entities.iter() {
+						if let Some(other_aligned_box) = entity.aligned_box() {
 							if other_aligned_box.overlaps(phys.aligned_box()) {
 								let mut displacement = phys.aligned_box().pos - other_aligned_box.pos;
 								if displacement.is_zero() {
@@ -406,11 +435,21 @@ struct ChunkEntitiesSavable {
 	/// - that we are in the process of migrating out and deleting entities from the chunk, or
 	/// - that the entity was temporarily taken out of the vec for it to borrow the rest of the vec.
 	entities: Vec<Option<Entity>>,
+	/// Dimensions of a bounding box that could contain any entity in this chunk.
+	/// This allows for entities E in neighboring chunks to know if this chunk contains
+	/// an entity big enough to be able to collide with E.
+	max_entity_dims: cgmath::Vector3<f32>,
 }
 
 impl ChunkEntities {
 	pub(crate) fn new_empty(coords_span: ChunkCoordsSpan) -> ChunkEntities {
-		ChunkEntities { coords_span, savable: ChunkEntitiesSavable { entities: vec![] } }
+		ChunkEntities {
+			coords_span,
+			savable: ChunkEntitiesSavable {
+				entities: vec![],
+				max_entity_dims: cgmath::vec3(0.0, 0.0, 0.0),
+			},
+		}
 	}
 
 	pub(crate) fn merge_to(&mut self, mut other: ChunkEntities) {
@@ -431,8 +470,24 @@ impl ChunkEntities {
 	pub(crate) fn count_entities(&self) -> usize {
 		self.savable.entities.len()
 	}
+	pub(crate) fn max_entity_dims(&self) -> cgmath::Vector3<f32> {
+		self.savable.max_entity_dims
+	}
+
+	fn extended_max_entity_dims(max_entity_dims: &mut cgmath::Vector3<f32>, entity: &Entity) {
+		if let Some(aligned_box) = entity.aligned_box() {
+			let max_dims = *max_entity_dims;
+			let dims = aligned_box.dims;
+			*max_entity_dims = cgmath::vec3(
+				max_dims.x.max(dims.x),
+				max_dims.y.max(dims.y),
+				max_dims.z.max(dims.z),
+			);
+		}
+	}
 
 	pub(crate) fn add_entity(&mut self, entity: Entity) {
+		ChunkEntities::extended_max_entity_dims(&mut self.savable.max_entity_dims, &entity);
 		self.savable.entities.push(Some(entity));
 	}
 
@@ -458,6 +513,7 @@ impl ChunkEntities {
 			);
 			self.savable.entities[entity_index] = Some(entity);
 		}
+		self.savable.max_entity_dims = cgmath::vec3(0.0, 0.0, 0.0);
 		self.savable.entities.retain_mut(|entity| {
 			if entity.as_ref().unwrap().to_delete {
 				// The entity was flagged for deletion and is now deleted.
@@ -474,6 +530,10 @@ impl ChunkEntities {
 					});
 					false
 				} else {
+					ChunkEntities::extended_max_entity_dims(
+						&mut self.savable.max_entity_dims,
+						entity.as_ref().unwrap(),
+					);
 					true
 				}
 			}

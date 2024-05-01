@@ -3,7 +3,7 @@ use std::{
 	sync::Arc,
 };
 
-use cgmath::MetricSpace;
+use cgmath::{EuclideanSpace, MetricSpace};
 use fxhash::{FxHashMap, FxHashSet};
 
 use crate::{
@@ -11,8 +11,8 @@ use crate::{
 	chunk_blocks::{Block, BlockView, ChunkBlocks, ChunkCullingInfo},
 	chunk_meshing::ChunkMesh,
 	coords::{
-		iter_3d_rect_inf_sup_included, BlockCoords, ChunkCoords, ChunkCoordsSpan, ChunkDimensions,
-		CubicCoordsSpan,
+		iter_3d_rect_inf_sup_included, AlignedBox, BlockCoords, ChunkCoords, ChunkCoordsSpan,
+		ChunkDimensions, CubicCoordsSpan,
 	},
 	entities::{ChunkEntities, Entity, ForPartManipulation},
 	entity_parts::PartTables,
@@ -236,6 +236,36 @@ impl ChunkGrid {
 		for change_of_chunk in changes_of_chunk.into_iter() {
 			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity, save);
 		}
+	}
+
+	pub(crate) fn can_entity_in_chunk_maybe_collide_with_box(
+		&self,
+		chunk_coords: ChunkCoords,
+		aligned_box: &AlignedBox,
+	) -> bool {
+		self.entities_map.get(&chunk_coords).is_some_and(|entity_chunk| {
+			let max_entity_dims = entity_chunk.max_entity_dims();
+			let chunk_dims = self.cd.dimensions().map(|x| x as f32);
+			let chunk_span = ChunkCoordsSpan { cd: self.cd, chunk_coords };
+			let chunk_center_coords = chunk_span
+				.block_coords_inf()
+				.map(|x| x as f32 - 0.5)
+				.midpoint(chunk_span.block_coords_sup_excluded().map(|x| x as f32 - 0.5));
+			let chunk_aligned_box = AlignedBox { pos: chunk_center_coords, dims: chunk_dims };
+			let chunk_max_entity_reach_box = {
+				let mut reach_box = chunk_aligned_box;
+				reach_box.dims += max_entity_dims;
+				reach_box
+			};
+			aligned_box.overlaps(&chunk_max_entity_reach_box)
+		})
+	}
+
+	pub(crate) fn iter_entities_in_chunk(
+		&self,
+		chunk_coords: ChunkCoords,
+	) -> Option<impl Iterator<Item = &Entity> + '_> {
+		self.entities_map.get(&chunk_coords).map(|entity_chunk| entity_chunk.iter_entities())
 	}
 
 	/// To insert or re-insert a `ChunkEntities` in the map, using this method ensures that
