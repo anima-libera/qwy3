@@ -11,7 +11,7 @@ use crate::{
 	chunk_loading::DataForChunkLoading,
 	chunk_meshing::{ChunkMesh, DataForChunkMeshing},
 	coords::{ChunkCoords, ChunkCoordsSpan},
-	entities::ChunkEntities,
+	entities::{ChunkEntities, IdGenerator},
 	shaders::{self, simple_texture_2d::SimpleTextureVertexPod},
 	skybox::SkyboxFaces,
 	threadpool::ThreadPool,
@@ -108,6 +108,7 @@ impl CurrentWorkerTasks {
 		pool: &mut ThreadPool,
 		chunk_coords: ChunkCoords,
 		data_for_chunk_loading: DataForChunkLoading,
+		id_generator: Arc<IdGenerator>,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		self.tasks.push(WorkerTask::LoadChunkBlocksAndEntities(
@@ -154,7 +155,11 @@ impl CurrentWorkerTasks {
 
 			// Now the generation happens if needed.
 			let blocks_and_entities_from_gen = generation_needed.then(|| {
-				world_generator.generate_chunk_blocks_and_entities(coords_span, &block_type_table)
+				world_generator.generate_chunk_blocks_and_entities(
+					coords_span,
+					&block_type_table,
+					&id_generator,
+				)
 			});
 			let (blocks_from_gen, entities_from_gen) = match blocks_and_entities_from_gen {
 				Some((blocks, entities)) => (Some(blocks), Some(entities)),

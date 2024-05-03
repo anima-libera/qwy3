@@ -8,7 +8,7 @@ use crate::{
 	chunk_blocks::{ChunkBlocks, ChunkCullingInfo, FaceCullingInfo},
 	chunks::ChunkGrid,
 	coords::{iter_3d_cube_center_radius, ChunkCoords, ChunkDimensions, OrientedAxis},
-	entities::ChunkEntities,
+	entities::{ChunkEntities, IdGenerator},
 	saves::Save,
 	threadpool::ThreadPool,
 	unsorted::CurrentWorkerTasks,
@@ -54,6 +54,7 @@ impl LoadingManager {
 		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
 		block_type_table: &Arc<BlockTypeTable>,
 		save: Option<&Arc<Save>>,
+		id_generator: &Arc<IdGenerator>,
 	) {
 		if !self.loading_enabled {
 			return;
@@ -152,7 +153,12 @@ impl LoadingManager {
 					save: save.cloned(),
 					cd: chunk_grid.cd(),
 				};
-				worker_tasks.run_chunk_loading_task(pool, chunk_coords, data_for_chunk_loading);
+				worker_tasks.run_chunk_loading_task(
+					pool,
+					chunk_coords,
+					data_for_chunk_loading,
+					Arc::clone(id_generator),
+				);
 			}
 		}
 	}

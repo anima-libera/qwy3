@@ -14,7 +14,7 @@ use crate::{
 		iter_3d_rect_inf_sup_included, AlignedBox, BlockCoords, ChunkCoords, ChunkCoordsSpan,
 		ChunkDimensions, CubicCoordsSpan,
 	},
-	entities::{ChunkEntities, Entity, ForPartManipulation},
+	entities::{ChunkEntities, Entity, ForPartManipulation, IdGenerator},
 	entity_parts::PartTables,
 	font::Font,
 	saves::Save,
@@ -208,8 +208,9 @@ impl ChunkGrid {
 		&mut self,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-		save: Option<&Arc<Save>>,
 		part_manipulation: &mut ForPartManipulation,
+		save: Option<&Arc<Save>>,
+		id_generator: &IdGenerator,
 	) {
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
@@ -225,6 +226,7 @@ impl ChunkGrid {
 				&mut changes_of_chunk,
 				part_manipulation,
 				save,
+				id_generator,
 			);
 			if chunk_entities.count_entities() > 0 {
 				self.add_chunk_entities(chunk_entities);

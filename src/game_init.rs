@@ -15,6 +15,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
+	entities::IdGenerator,
 	entity_parts::{PartTables, TextureMappingAndColoringTable},
 	font::{self, Font},
 	interface::Interface,
@@ -146,6 +147,7 @@ pub(crate) struct Game {
 	pub(crate) world_time: Duration,
 	pub(crate) playing_mode: PlayingMode,
 	pub(crate) player_health: Option<u32>,
+	pub(crate) id_generator: Arc<IdGenerator>,
 
 	pub(crate) worker_tasks: CurrentWorkerTasks,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -324,6 +326,8 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		.as_ref()
 		.map(|state| state.world_gen_seed)
 		.unwrap_or(world_gen_seed.unwrap_or_else(|| rand::thread_rng().gen()));
+
+	let id_generator = Arc::new(IdGenerator::new());
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
@@ -677,6 +681,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		world_time,
 		playing_mode,
 		player_health,
+		id_generator,
 
 		worker_tasks,
 		pool,

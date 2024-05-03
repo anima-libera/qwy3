@@ -314,6 +314,7 @@ impl winit::application::ApplicationHandler for App {
 							let motion = game.camera_direction.to_vec3() * 0.5;
 							game.chunk_grid.add_entity(
 								Entity::new_block(
+									&game.id_generator,
 									block_to_throw,
 									game.player_phys.aligned_box().pos,
 									motion,
@@ -360,6 +361,7 @@ impl winit::application::ApplicationHandler for App {
 							let motion = game.camera_direction.to_vec3() * 0.5;
 							game.chunk_grid.add_entity(
 								Entity::new_block(
+									&game.id_generator,
 									block_to_throw,
 									game.player_phys.aligned_box().pos,
 									motion,
@@ -393,7 +395,11 @@ impl winit::application::ApplicationHandler for App {
 								//);
 
 								game.chunk_grid.add_entity(
-									Entity::new_test_ball(game.player_phys.aligned_box().pos, motion),
+									Entity::new_test_ball(
+										&game.id_generator,
+										game.player_phys.aligned_box().pos,
+										motion,
+									),
 									game.save.as_ref(),
 								);
 							}
@@ -725,6 +731,7 @@ impl winit::application::ApplicationHandler for App {
 			&game.world_generator,
 			&game.block_type_table,
 			game.save.as_ref(),
+			&game.id_generator,
 		);
 
 		// Unload chunks that are a bit too far.
@@ -779,13 +786,14 @@ impl winit::application::ApplicationHandler for App {
 		game.chunk_grid.apply_one_physics_step(
 			&game.block_type_table,
 			dt,
-			game.save.as_ref(),
 			&mut ForPartManipulation {
 				part_tables: &mut game.part_tables,
 				texture_mapping_and_coloring_table: &mut game.texture_mapping_table,
 				texturing_and_coloring_array_thingy: &game.texturing_and_coloring_array_thingy,
 				queue: &game.queue,
 			},
+			game.save.as_ref(),
+			&game.id_generator,
 		);
 
 		game.queue.write_buffer(
