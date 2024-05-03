@@ -86,13 +86,24 @@ impl IdGenerator {
 	pub(crate) fn new() -> IdGenerator {
 		IdGenerator { next_id_value: Mutex::new(0) }
 	}
+
+	pub(crate) fn from_state(state: IdGeneratorState) -> IdGenerator {
+		IdGenerator { next_id_value: Mutex::new(state.0) }
+	}
+
 	fn generate_id(&self) -> Id {
 		let mut locked = self.next_id_value.lock().unwrap();
 		let id_value = *locked;
 		*locked += 1;
 		Id(id_value)
 	}
+
+	pub(crate) fn state(&self) -> IdGeneratorState {
+		IdGeneratorState(*self.next_id_value.lock().unwrap())
+	}
 }
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct IdGeneratorState(u64);
 
 impl Entity {
 	pub(crate) fn new_block(

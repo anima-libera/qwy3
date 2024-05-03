@@ -15,7 +15,7 @@ use crate::{
 	chunks::ChunkGrid,
 	cmdline, commands,
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
-	entities::IdGenerator,
+	entities::{IdGenerator, IdGeneratorState},
 	entity_parts::{PartTables, TextureMappingAndColoringTable},
 	font::{self, Font},
 	interface::Interface,
@@ -59,6 +59,7 @@ struct StateSavable {
 	world_time: Duration,
 	player_held_block: Option<Block>,
 	enable_player_physics: bool,
+	id_generator_state: IdGeneratorState,
 }
 
 pub(crate) fn save_savable_state(game: &Game) {
@@ -75,6 +76,7 @@ pub(crate) fn save_savable_state(game: &Game) {
 		world_time: game.world_time,
 		player_held_block: game.player_held_block.clone(),
 		enable_player_physics: game.enable_player_physics,
+		id_generator_state: game.id_generator.state(),
 	};
 	let data = rmp_serde::encode::to_vec(&savable).unwrap();
 	state_file.write_all(&data).unwrap();
@@ -327,7 +329,12 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		.map(|state| state.world_gen_seed)
 		.unwrap_or(world_gen_seed.unwrap_or_else(|| rand::thread_rng().gen()));
 
-	let id_generator = Arc::new(IdGenerator::new());
+	let id_generator = Arc::new(
+		saved_state
+			.as_ref()
+			.map(|state| IdGenerator::from_state(state.id_generator_state.clone()))
+			.unwrap_or_else(IdGenerator::new),
+	);
 
 	let block_type_table = Arc::new(BlockTypeTable::new());
 
