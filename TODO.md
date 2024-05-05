@@ -3,20 +3,27 @@
 
 ## Performance
 
-- Apply optimizations mentioned in https://youtu.be/40JzyaOYJeY (some of which are very clever)!
+- Apply optimizations mentioned in https://youtu.be/40JzyaOYJeY (some of which seem pretty nice).
 - Measure time taken by chunk management alone and make it better (stuff like deciding which chunk to mesh or generate is so bad currently that it is easy to speed up).
   - Minimize iterations over large numbers of chunks at every frame.
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
 - Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.
-- Faster noise.
-  - Allow to generate N values at once (to sample vectors instead of single values) in one sampling call.
-  - Pre hash all the per-noise channel values.
-  - Cache some node values?
 
-## Correction
+## Noise
 
 - Make the distribution of noise values at nodes of the noise implementation to be uniform by using the same technique that random number generators use to generate floats in uniform distrucbutions. A certain crate does [this](https://github.com/engusmaze/frand/blob/2305cf97832a26dddfd0f7d5679f56b061f6c834/src/gen/float.rs#L9) and cite [this](https://mina86.com/2016/random-reals/) as a source which links to [this](https://github.com/mina86/random-reals/blob/3a614a9c9f2d1298682321d1c7abd463ab8f68f3/make-real.h#L65). The we could actually assume that sampling the noise at the nodes (all integer parameters) would pick values in a uniform distribution.
+- Faster noise.
+  - Allow to generate N values at once (to sample vectors instead of single values) in one sampling call.
+  - Cache some node values?
+  - Add a node at the center of the lattice cells to divide the cubic cells in 2*N regions (where N is the number of dimensions) so that there is only 2^N/2+1 to interpolate between when sampling instead of 2^N, while keeing the math simple. The ideal would be to get a lattice of the simplest N-dimensional shape for each N to only have to sample N+1 points but that may be way harder.
+- PRNG.
+  - Use noise and a value on a single axis sample space as the PRNG state to get a type that is easy to use to get integer and float random values.
+  - Replace the improvised PRNGs in the texture generation code with the proper PRNG type.
+- Variety in noise functions and implementations.
+  - Gradient noise implementation. It has a different (better?) feel.
+  - Look into simplex noise.
+  - Get some unified implementation for noise used to place points in the sample space and return them or return distance to closest, etc.
 
 ## Graphics
 
