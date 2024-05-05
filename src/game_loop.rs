@@ -28,15 +28,15 @@ use rand::Rng;
 use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
 
 /// See `init_and_run_game_loop`.
-struct App {
+struct StateUsedInEventLoop {
 	game_opt: Option<Game>,
 }
 
-impl winit::application::ApplicationHandler for App {
+impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 	fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
 		if self.game_opt.is_none() {
 			// Here goes the initialization.
-			// It happens here because winit > 0.30.0 requires that the window be created
+			// It happens here because winit >= 0.30.0 requires that the window be created
 			// inside the running event loop, and the initialization depends on the window
 			// for matters like wgpu (that wants the window's surface).
 			self.game_opt = Some(init_game(event_loop));
@@ -1068,6 +1068,6 @@ impl winit::application::ApplicationHandler for App {
 pub fn init_and_run_game_loop() {
 	let event_loop = winit::event_loop::EventLoop::new().unwrap();
 	event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-	let mut app = App { game_opt: None };
-	event_loop.run_app(&mut app).unwrap();
+	let mut state_in_loop = StateUsedInEventLoop { game_opt: None };
+	event_loop.run_app(&mut state_in_loop).unwrap();
 }

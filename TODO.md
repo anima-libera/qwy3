@@ -102,6 +102,7 @@
   - Procedurally generated goals.
 - Make it so that the entities are managed by an other thread (so that the framerate is not going down due to the CPU-side handling of entities). That would also allow to make the entities be handled with a smaller frequency, independant from the framerate. That would require some interpolation between entity handling steps.
   - Maybe do so with double buffering of the entities?
+- Subdivide entity chunks when a chunk holds many entities (into 8, 27, etc. sub chunks) to reduce the number of iterations on potentially colliding pairs of entities.
 
 ## Sound
 
