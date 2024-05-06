@@ -228,7 +228,6 @@ impl ChunkGrid {
 				dt,
 				&mut changes_of_chunk,
 				part_manipulation,
-				save,
 				id_generator,
 			);
 		}

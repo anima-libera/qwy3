@@ -181,7 +181,6 @@ impl Entity {
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		part_manipulation: &mut ForPartManipulation,
-		save: Option<&Arc<Save>>,
 		id_generator: &IdGenerator,
 	) {
 		match self.typed {
@@ -303,7 +302,8 @@ impl Entity {
 					let other_entities_iterator = chunk_to_iterate
 						.into_iter()
 						.filter_map(|chunk_coords| chunk_grid.iter_entities_in_chunk(chunk_coords))
-						.flatten();
+						.flatten()
+						.filter(|entity| entity.id != self.id);
 
 					// Getting pushed out of other entities we overlap with.
 					//
@@ -542,7 +542,6 @@ impl ChunkEntities {
 		dt: std::time::Duration,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 		part_manipulation: &mut ForPartManipulation,
-		save: Option<&Arc<Save>>,
 		id_generator: &IdGenerator,
 	) {
 		let mut entities_for_next_step = vec![];
@@ -553,7 +552,6 @@ impl ChunkEntities {
 				block_type_table,
 				dt,
 				part_manipulation,
-				save,
 				id_generator,
 			);
 		}
