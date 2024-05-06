@@ -572,7 +572,6 @@ impl ChunkEntities {
 		entities_for_next_step: Vec<Entity>,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 	) {
-		self.savable.max_entity_dims = cgmath::vec3(0.0, 0.0, 0.0);
 		// Using `extract_if` would be ideal here, however it is not stable yet at the time, see
 		// https://github.com/rust-lang/rust/issues/43244 for `extract_if` stabilization status.
 		// TODO: Wait faster for the stabilization of `extract_if` and then use it.
@@ -586,8 +585,7 @@ impl ChunkEntities {
 					entity,
 				});
 			} else {
-				ChunkEntities::extended_max_entity_dims(&mut self.savable.max_entity_dims, &entity);
-				self.savable.entities.push(entity);
+				self.add_entity(entity);
 			}
 		}
 	}

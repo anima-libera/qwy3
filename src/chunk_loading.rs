@@ -208,7 +208,7 @@ impl LoadingManager {
 	}
 }
 
-/// All the data that is needed to load the chunk (its block data and its entities),
+/// Data that is needed to load one chunk (its block data and its entities),
 /// be it generated or loaded from a save.
 pub(crate) struct DataForChunkLoading {
 	pub(crate) was_already_generated_before: bool,

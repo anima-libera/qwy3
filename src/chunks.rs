@@ -215,32 +215,42 @@ impl ChunkGrid {
 		let mut next_entities_map: FxHashMap<ChunkCoords, ChunkEntities> = HashMap::default();
 		let mut actions_on_world = vec![];
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
+		let mut chunk_entities_to_preserve = vec![];
 		let mut changes_of_chunk = vec![];
 		for chunk_coords in chunk_coords_list.into_iter() {
-			if !self.is_loaded(chunk_coords) {
-				continue;
+			if self.is_loaded(chunk_coords) {
+				// Run physics on entities in loaded chunks.
+				ChunkEntities::apply_one_physics_step(
+					ChunkCoordsSpan { cd: self.cd, chunk_coords },
+					&self.entities_map,
+					&mut next_entities_map,
+					self,
+					&mut actions_on_world,
+					block_type_table,
+					dt,
+					&mut changes_of_chunk,
+					part_manipulation,
+					id_generator,
+				);
+			} else {
+				// Preserve the entities in non-loaded chunks but they don't get physics done.
+				chunk_entities_to_preserve.push(chunk_coords);
 			}
-			ChunkEntities::apply_one_physics_step(
-				ChunkCoordsSpan { cd: self.cd, chunk_coords },
-				&self.entities_map,
-				&mut next_entities_map,
-				self,
-				&mut actions_on_world,
-				block_type_table,
-				dt,
-				&mut changes_of_chunk,
-				part_manipulation,
-				id_generator,
-			);
 		}
 
 		std::mem::swap(&mut self.entities_map, &mut next_entities_map);
+		let mut old_entities_map = next_entities_map;
+
+		for chunk_coords in chunk_entities_to_preserve {
+			let chunk_entities = old_entities_map.remove(&chunk_coords).unwrap();
+			self.add_chunk_entities(chunk_entities);
+		}
 
 		for action_on_world in actions_on_world.into_iter() {
 			self.apply_actions_on_world(action_on_world, save, id_generator);
 		}
 
-		// The entities that got out of their chunks are now put in their new chunks.
+		// The entities that got out of their chunk are now put in their new chunk.
 		for change_of_chunk in changes_of_chunk.into_iter() {
 			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity, save);
 		}
