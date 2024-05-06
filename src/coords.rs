@@ -465,7 +465,7 @@ impl OrientedAxis {
 /// the face between A and B can have two orientations: from A to B and from B et A.
 /// One of these two blocks is the "interior" block (field `interior_coords`)
 /// and the other is the "exterior" block (method `exterior_coords`).
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct OrientedFaceCoords {
 	pub(crate) interior_coords: BlockCoords,
 	pub(crate) direction_to_exterior: OrientedAxis,

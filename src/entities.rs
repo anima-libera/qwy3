@@ -206,7 +206,7 @@ impl Entity {
 
 				// Place itself on the block grid if on the ground and there is room.
 				if try_to_place {
-					let coords = self.pos().map(|x| x.round() as i32);
+					let coords = next_block.pos().map(|x| x.round() as i32);
 					let coords_are_empty = !chunk_grid
 						.get_block(coords)
 						.is_some_and(|block| block_type_table.get(block.type_id).unwrap().is_opaque());
@@ -216,27 +216,25 @@ impl Entity {
 					if coords_below_are_empty {
 						if let EntityTyped::Block { phys, .. } = &mut next_block.typed {
 							phys.impose_position(coords.map(|x| x as f32));
-						} else {
-							unreachable!();
+							phys.impose_null_horizontal_motion();
 						};
 					} else if coords_are_empty {
 						let chunk_coords =
 							chunk_grid.cd().world_coords_to_containing_chunk_coords(coords);
 						let is_loaded = chunk_grid.is_loaded(chunk_coords);
 						if is_loaded {
-							let block = if let EntityTyped::Block { block, .. } = &self.typed {
-								block.clone()
-							} else {
-								unreachable!()
-							};
-							actions_on_world.push(ActionOnWorld::PlaceBlockWithoutLoss { block, coords });
+							if let EntityTyped::Block { block, .. } = &next_block.typed {
+								let block = block.clone();
+								actions_on_world
+									.push(ActionOnWorld::PlaceBlockWithoutLoss { block, coords });
+							}
 							delete_self = true;
 						}
 					}
 				}
 
 				// Manage the part.
-				let pos = self.pos();
+				let pos = next_block.pos();
 				if let EntityTyped::Block { block, part, .. } = &mut next_block.typed {
 					part.ensure_is_allocated(&mut part_manipulation.part_tables.textured_cubes, || {
 						let texture_mapping_offset = part_manipulation
@@ -261,7 +259,7 @@ impl Entity {
 				}
 
 				if delete_self {
-					self.handle_unloading_or_deletion(part_manipulation.part_tables);
+					next_block.handle_unloading_or_deletion(part_manipulation.part_tables);
 				} else {
 					entities_for_next_step.push(next_block);
 				}
@@ -364,7 +362,7 @@ impl Entity {
 				};
 
 				// Manage the parts.
-				let pos = self.pos();
+				let pos = next_ball.pos();
 				if let EntityTyped::TestBall {
 					ball_part,
 					left_eye_part,
@@ -575,6 +573,9 @@ impl ChunkEntities {
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
 	) {
 		self.savable.max_entity_dims = cgmath::vec3(0.0, 0.0, 0.0);
+		// Using `extract_if` would be ideal here, however it is not stable yet at the time, see
+		// https://github.com/rust-lang/rust/issues/43244 for `extract_if` stabilization status.
+		// TODO: Wait faster for the stabilization of `extract_if` and then use it.
 		for entity in entities_for_next_step.into_iter() {
 			let entity_chunk_coords = entity.chunk_coords(self.coords_span.cd);
 			if entity_chunk_coords != self.coords_span.chunk_coords {
