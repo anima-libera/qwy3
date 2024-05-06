@@ -212,14 +212,17 @@ impl ChunkGrid {
 		save: Option<&Arc<Save>>,
 		id_generator: &IdGenerator,
 	) {
+		let mut next_entities_map: FxHashMap<ChunkCoords, ChunkEntities> = HashMap::default();
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
 		for chunk_coords in chunk_coords_list.into_iter() {
 			if !self.is_loaded(chunk_coords) {
 				continue;
 			}
-			let mut chunk_entities = self.entities_map.remove(&chunk_coords).unwrap();
-			chunk_entities.apply_one_physics_step(
+			ChunkEntities::apply_one_physics_step(
+				ChunkCoordsSpan { cd: self.cd, chunk_coords },
+				&self.entities_map,
+				&mut next_entities_map,
 				self,
 				block_type_table,
 				dt,
@@ -228,12 +231,10 @@ impl ChunkGrid {
 				save,
 				id_generator,
 			);
-			if chunk_entities.count_entities() > 0 {
-				self.add_chunk_entities(chunk_entities);
-			} else {
-				// The chunk is now devoid of entities, it doesn't need a `ChunkEntities` anymore.
-			}
 		}
+
+		std::mem::swap(&mut self.entities_map, &mut next_entities_map);
+
 		// The entities that got out of their chunks are now put in their new chunks.
 		for change_of_chunk in changes_of_chunk.into_iter() {
 			self.put_entity_in_chunk(change_of_chunk.new_chunk, change_of_chunk.entity, save);

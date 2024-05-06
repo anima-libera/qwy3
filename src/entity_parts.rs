@@ -109,9 +109,9 @@ impl<T: PartKind> PartHandler<T> {
 
 	/// If the handler refered to an allocated instance,
 	/// then the instance is released from its existence.
-	pub(crate) fn delete(self, part_table: &mut PartTable<T>) {
+	pub(crate) fn delete(&self, part_table: &mut PartTable<T>) {
 		if let PartHandler::Allocated { index, .. } = self {
-			part_table.delete_instance(index as usize);
+			part_table.delete_instance(*index as usize);
 			part_table.cpu_to_gpu_update_required_for_instances = true;
 		}
 	}
