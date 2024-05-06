@@ -104,7 +104,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 						game.command_line_content.pop();
 						game.last_command_line_interaction = Some(std::time::Instant::now());
 					} else if let Key::Character(string) = logical_key {
-						game.command_line_content += &string;
+						game.command_line_content += string;
 						game.last_command_line_interaction = Some(std::time::Instant::now());
 					}
 				} else if !repeat {
@@ -369,7 +369,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 								game.save.as_ref(),
 							);
 						} else if game.playing_mode == PlayingMode::Free {
-							if false {
+							if true {
 								for _ in 0..10 {
 									let mut motion = game.camera_direction.to_vec3();
 									let perturbation = loop {
@@ -401,18 +401,18 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 											.generated_test_id(rand::thread_rng().gen_range(0..10)),
 									);
 
-									let motion = game.camera_direction.to_vec3();
-									//let perturbation = loop {
-									//	let perturbation = cgmath::vec3(
-									//		rand::thread_rng().gen_range(-1.0..1.0),
-									//		rand::thread_rng().gen_range(-1.0..1.0),
-									//		rand::thread_rng().gen_range(-1.0..1.0),
-									//	);
-									//	if perturbation.magnitude() <= 1.0 {
-									//		break perturbation;
-									//	}
-									//};
-									//motion = motion * 0.8 + perturbation * 0.1;
+									let mut motion = game.camera_direction.to_vec3();
+									let perturbation = loop {
+										let perturbation = cgmath::vec3(
+											rand::thread_rng().gen_range(-1.0..1.0),
+											rand::thread_rng().gen_range(-1.0..1.0),
+											rand::thread_rng().gen_range(-1.0..1.0),
+										);
+										if perturbation.magnitude() <= 1.0 {
+											break perturbation;
+										}
+									};
+									motion = motion * 0.8 + perturbation * 0.1;
 
 									game.chunk_grid.add_entity(
 										Entity::new_block(
@@ -1027,6 +1027,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			queue: &game.queue,
 			window_surface: &game.window_surface,
 			window_surface_config: &game.window_surface_config,
+			force_block_on_the_presentation: !game.no_vsync,
 			rendering: &game.rendering,
 			sun_cameras: &game.sun_cameras,
 			sun_camera_matrices_thingy: &game.sun_camera_matrices_thingy,

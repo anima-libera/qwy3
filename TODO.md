@@ -87,8 +87,6 @@
 
 ## Entities
 
-- Better collision physics.
-  - Make it so that one entity of the iterated over pair does not get the priority over the other. For now, the first entity to be iterated over and to notice a collision is pushed away from the other one stronger.
 - Make it so that chunks load ahead of the entities instead of waiting for entities to get "stuck" in unloaded chunks to start loading them.
 - Support the throwing of X-shaped blocks, and text blocks, and any kind of mesh block.
 - Better hitboxes, with shapes that actually correspond to the entity part models.

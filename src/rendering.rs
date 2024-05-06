@@ -15,6 +15,7 @@ pub(crate) struct DataForRendering<'a> {
 	pub(crate) queue: &'a wgpu::Queue,
 	pub(crate) window_surface: &'a wgpu::Surface<'static>,
 	pub(crate) window_surface_config: &'a wgpu::SurfaceConfiguration,
+	pub(crate) force_block_on_the_presentation: bool,
 	pub(crate) rendering: &'a RenderPipelinesAndBindGroups,
 	pub(crate) sun_cameras: &'a [CameraOrthographicSettings],
 	pub(crate) sun_camera_matrices_thingy: &'a BindingThingy<wgpu::Buffer>,
@@ -304,8 +305,20 @@ impl<'a> DataForRendering<'a> {
 			}
 		}
 
-		self.queue.submit(std::iter::once(encoder.finish()));
+		let submission = self.queue.submit(std::iter::once(encoder.finish()));
 
 		window_texture.present();
+
+		if self.force_block_on_the_presentation {
+			// This allows to reduce the CPU usage by a lot with V-sync on.
+			// Without that blocking, for some reason (on my machine)
+			// with V-sync on (`wgpu::PresentMode::Fifo`) the fps
+			// (computed in the event loop, so the real fps) are capped at the
+			// screen refresh rate, but the CPU usage is uncapped and gets to 100% for one
+			// virtual core, as if the fps was not capped.
+			// Strange, but also fixed by this block, so we do not have to worry about that.
+			// Written when using wgpu 0.20.0, this may be fixed later.
+			self.device.poll(wgpu::Maintain::wait_for(submission));
+		}
 	}
 }
