@@ -202,3 +202,9 @@ impl Atlas {
 		self.image.save_with_format(atlas_texture_file_path, image::ImageFormat::Png).unwrap();
 	}
 }
+
+#[derive(Clone, Copy)]
+pub(crate) struct RectInAtlas {
+	pub(crate) texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+	pub(crate) texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+}

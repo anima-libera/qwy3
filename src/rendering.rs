@@ -4,10 +4,10 @@ use crate::{
 	camera::{CameraOrthographicSettings, Matrix4x4Pod},
 	chunks::ChunkGrid,
 	entity_parts::{DataForPartTableRendering, PartTables},
-	line_meshes::SimpleLineMesh,
+	game_init::WhichCameraToUse,
 	rendering_init::{BindingThingy, RenderPipelinesAndBindGroups},
+	simple_meshes::{SimpleLineMesh, SimpleTextureMesh},
 	skybox::SkyboxMesh,
-	unsorted::{SimpleTextureMesh, WhichCameraToUse},
 };
 
 pub(crate) struct DataForRendering<'a> {

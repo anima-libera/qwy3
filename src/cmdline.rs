@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use crate::{unsorted::PlayingMode, world_gen::WhichWorldGenerator};
+use crate::{game_init::PlayingMode, world_gen::WhichWorldGenerator};
 
 #[derive(Parser)]
 #[command(color = clap::ColorChoice::Auto)]

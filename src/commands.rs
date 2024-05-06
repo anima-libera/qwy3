@@ -1,6 +1,39 @@
 use std::{collections::HashMap, io::Write};
 
-use crate::unsorted::{Action, Control};
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum Control {
+	KeyboardKey(winit::keyboard::Key),
+	MouseButton(winit::event::MouseButton),
+}
+pub(crate) struct ControlEvent {
+	pub(crate) control: Control,
+	pub(crate) pressed: bool,
+}
+pub(crate) enum Action {
+	WalkForward,
+	WalkBackward,
+	WalkLeftward,
+	WalkRightward,
+	Jump,
+	TogglePhysics,
+	ToggleWorldGeneration,
+	CycleFirstAndThirdPersonViews,
+	ToggleDisplayPlayerBox,
+	ToggleSunView,
+	ToggleCursorCaptured,
+	PrintCoords,
+	PlaceOrRemoveBlockUnderPlayer,
+	PlaceBlockAtTarget,
+	RemoveBlockAtTarget,
+	ToggleDisplayInterface,
+	OpenCommandLine,
+	ToggleDisplayNotSurroundedChunksAsBoxes,
+	ToggleDisplayInterfaceDebugBoxes,
+	ToggleFog,
+	ToggleFullscreen,
+	ThrowBlock,
+	ToggleDisplayChunksWithEntitiesAsBoxes,
+}
 
 pub(crate) fn parse_control_binding_file() -> HashMap<Control, Action> {
 	let mut control_bindings: HashMap<Control, Action> = HashMap::new();

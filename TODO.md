@@ -71,6 +71,8 @@
 - Add a way to define new typed global variables.
 - Add a way to set variables.
 - Add floating point numbers.
+- Consider getting Lua or some already implemented scripting language in there.
+- Consider setting up a simpler language with less static typing.
 
 ## World gen
 
@@ -93,6 +95,7 @@
   - Have a ball hitbox.
     - `AlignedPhysBox::on_faces` might have to be extended to also support block edges and block vertices (after all, a ball touching only an edge or even a vertex acts differently than if it was touching a face).
 - Particles, like when breaking blocks.
+- **Fix** the fact that block entities can't place themselves nor are pushed out of bushes, because bushes are not air but also not colliding.
 - Animals >w< or something (in progress).
 - Procedurally generated types of animals.
   - Procedurally generated anatomy.
@@ -107,6 +110,11 @@
 - Get some sound going!
   - Play a sound effect.
   - Make it so that sounds comming from farer have lower volume (inverse square distance law?).
+
+## Architecture
+
+- Decouple the graphics and interface from the rest. This will allow to run the graphics only on clients and not on servers (when we will have clients and servers), and it will also allow to run the game at some clock rate that is not influenced and that does not influence the framerate of the window.
+  - Put the interface in its own thread, while everything else runs in the thread pool and an other main thread. The interface thread shall hold all the wgpu stuff and winit stuff and widgets and all.
 
 ## Mechanics and Gameplay
 
@@ -155,7 +163,6 @@
 
 - Profile (maybe with https://github.com/killercup/cargo-flamegraph or something else).
 - Profile but with https://github.com/plasma-umass/coz maybe?
-- Reduce the length of `lib.rs` and the `run_game_loop` function.
+- Reduce the length of `game_loop.rs` and the `StateUsedInEventLoop::about_to_wait` method.
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
-- Move the code in `unsorted.rs` to better suited modules.

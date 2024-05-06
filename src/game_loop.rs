@@ -1,25 +1,24 @@
 use std::f32::consts::TAU;
 
 use crate::{
+	atlas::RectInAtlas,
 	camera::{aspect_ratio, CameraSettings},
 	chunk_blocks::{Block, BlockData},
+	commands::{Action, Control, ControlEvent},
 	coords::{
 		iter_3d_cube_center_radius, AlignedBox, AxisOrientation, BlockCoords, ChunkCoordsSpan,
 		NonOrientedAxis, OrientedAxis, OrientedFaceCoords,
 	},
 	entities::{Entity, ForPartManipulation},
 	font,
-	game_init::{init_game, save_savable_state, Game},
+	game_init::{init_game, save_savable_state, Game, PlayingMode, WhichCameraToUse},
 	lang::{self, LogItem},
-	line_meshes::SimpleLineMesh,
 	rendering,
 	rendering_init::{make_z_buffer_texture_view, update_atlas_texture, update_skybox_texture},
 	shaders::{Vector2Pod, Vector3Pod},
+	simple_meshes::{SimpleLineMesh, SimpleTextureMesh},
 	skybox::SkyboxMesh,
-	unsorted::{
-		Action, Control, ControlEvent, PlayingMode, RectInAtlas, SimpleTextureMesh, WhichCameraToUse,
-		WorkerTask,
-	},
+	tasks::WorkerTask,
 	widgets::{InterfaceMeshesVertices, Widget, WidgetLabel},
 };
 

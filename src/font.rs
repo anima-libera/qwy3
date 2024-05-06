@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use crate::{
-	shaders::simple_texture_2d::SimpleTextureVertexPod,
-	unsorted::{RectInAtlas, SimpleTextureMesh},
+	atlas::RectInAtlas, shaders::simple_texture_2d::SimpleTextureVertexPod,
+	simple_meshes::SimpleTextureMesh,
 };
 
 #[derive(Clone)]

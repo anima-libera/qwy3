@@ -13,14 +13,14 @@ use crate::{
 	chunk_blocks::Block,
 	chunk_loading::LoadingManager,
 	chunks::ChunkGrid,
-	cmdline, commands,
+	cmdline,
+	commands::{self, Action, Control, ControlEvent},
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
 	entities::{IdGenerator, IdGeneratorState},
 	entity_parts::{PartTables, TextureMappingAndColoringTable},
 	font::{self, Font},
 	interface::Interface,
 	lang,
-	line_meshes::SimpleLineMesh,
 	physics::{AlignedPhysBox, PlayerJumpManager},
 	rendering_init::{
 		self, init_aspect_ratio_thingy, init_atlas_stuff, init_camera_matrix_thingy, init_fog_stuff,
@@ -31,18 +31,18 @@ use crate::{
 	},
 	saves::Save,
 	shaders::{Vector2Pod, Vector3Pod},
+	simple_meshes::SimpleLineMesh,
 	skybox::{
 		default_skybox_painter, default_skybox_painter_3, generate_skybox_cubemap_faces_images,
 		SkyboxFaces,
 	},
+	tasks::{CurrentWorkerTasks, WorkerTask},
 	threadpool,
-	unsorted::{
-		Action, Control, ControlEvent, CurrentWorkerTasks, PlayingMode, WhichCameraToUse, WorkerTask,
-	},
 	widgets::Widget,
 	world_gen::{WhichWorldGenerator, WorldGenerator},
 };
 
+use clap::ValueEnum;
 use fxhash::FxHashSet;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -723,4 +723,22 @@ impl Game {
 			.map(|x| x.round() as i32);
 		self.cd.world_coords_to_containing_chunk_coords(player_block_coords)
 	}
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum PlayingMode {
+	/// Playing the game and facing its challenges without cheating being allowed by the game.
+	Play,
+	/// Free from the limitations of the `Play` mode.
+	Free,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum WhichCameraToUse {
+	FirstPerson,
+	ThirdPersonNear,
+	ThirdPersonFar,
+	ThirdPersonVeryFar,
+	ThirdPersonTooFar,
+	Sun,
 }

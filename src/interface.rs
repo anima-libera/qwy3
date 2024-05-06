@@ -1,6 +1,6 @@
 use crate::{
+	atlas::RectInAtlas,
 	font,
-	unsorted::RectInAtlas,
 	widgets::{
 		BoxContentPlacement, BoxDimensions, ListAlignmentHorizontal, ListAlignmentVertical,
 		ListOrientationAndAlignment, ListOrientationHorizontal, ListOrientationVertical, Widget,

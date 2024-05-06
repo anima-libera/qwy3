@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 
 use crate::{
 	coords::{AlignedBox, OrientedAxis},
-	shaders::simple_line::SimpleLineVertexPod,
+	shaders::{self, simple_line::SimpleLineVertexPod, simple_texture_2d::SimpleTextureVertexPod},
 };
 
 /// Mesh of simple lines.
@@ -145,5 +145,100 @@ impl SimpleLineMesh {
 			SimpleLineVertexPod { position: [0.0, size, 0.5], color },
 		];
 		SimpleLineMesh::from_vertices(device, vertices)
+	}
+}
+
+/// Mesh of simple textured triangles.
+///
+/// Can be used (for example) to display font character textures in UI text.
+pub(crate) struct SimpleTextureMesh {
+	pub(crate) vertex_count: u32,
+	pub(crate) vertex_buffer: wgpu::Buffer,
+}
+
+impl SimpleTextureMesh {
+	pub(crate) fn from_vertices(
+		device: &wgpu::Device,
+		vertices: Vec<shaders::simple_texture_2d::SimpleTextureVertexPod>,
+	) -> SimpleTextureMesh {
+		let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Simple Texture Vertex Buffer"),
+			contents: bytemuck::cast_slice(&vertices),
+			usage: wgpu::BufferUsages::VERTEX,
+		});
+		SimpleTextureMesh { vertex_count: vertices.len() as u32, vertex_buffer }
+	}
+
+	fn _from_rect(
+		device: &wgpu::Device,
+		center: cgmath::Point3<f32>,
+		dimensions: cgmath::Vector2<f32>,
+		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+	) -> SimpleTextureMesh {
+		let vertices = SimpleTextureMesh::vertices_for_rect(
+			center,
+			dimensions,
+			texture_rect_in_atlas_xy,
+			texture_rect_in_atlas_wh,
+			[1.0, 1.0, 1.0],
+		);
+		SimpleTextureMesh::from_vertices(device, vertices)
+	}
+
+	pub(crate) fn vertices_for_rect(
+		top_left: cgmath::Point3<f32>,
+		dimensions: cgmath::Vector2<f32>,
+		texture_rect_in_atlas_xy: cgmath::Point2<f32>,
+		texture_rect_in_atlas_wh: cgmath::Vector2<f32>,
+		color_factor: [f32; 3],
+	) -> Vec<SimpleTextureVertexPod> {
+		let mut vertices = vec![];
+
+		let a = top_left + cgmath::vec3(0.0, 0.0, 0.0);
+		let b = top_left + cgmath::vec3(dimensions.x, 0.0, 0.0);
+		let c = top_left + cgmath::vec3(0.0, -dimensions.y, 0.0);
+		let d = top_left + cgmath::vec3(dimensions.x, -dimensions.y, 0.0);
+		let atlas_a = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(0.0, 0.0));
+		let atlas_b = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(1.0, 0.0));
+		let atlas_c = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(0.0, 1.0));
+		let atlas_d = texture_rect_in_atlas_xy
+			+ texture_rect_in_atlas_wh.mul_element_wise(cgmath::vec2(1.0, 1.0));
+
+		vertices.push(SimpleTextureVertexPod {
+			position: a.into(),
+			coords_in_atlas: atlas_a.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: c.into(),
+			coords_in_atlas: atlas_c.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: b.into(),
+			coords_in_atlas: atlas_b.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: c.into(),
+			coords_in_atlas: atlas_c.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: d.into(),
+			coords_in_atlas: atlas_d.into(),
+			color_factor,
+		});
+		vertices.push(SimpleTextureVertexPod {
+			position: b.into(),
+			coords_in_atlas: atlas_b.into(),
+			color_factor,
+		});
+
+		vertices
 	}
 }

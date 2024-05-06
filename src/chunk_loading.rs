@@ -10,8 +10,8 @@ use crate::{
 	coords::{iter_3d_cube_center_radius, ChunkCoords, ChunkDimensions, OrientedAxis},
 	entities::{ChunkEntities, IdGenerator},
 	saves::Save,
+	tasks::CurrentWorkerTasks,
 	threadpool::ThreadPool,
-	unsorted::CurrentWorkerTasks,
 	world_gen::WorldGenerator,
 };
 

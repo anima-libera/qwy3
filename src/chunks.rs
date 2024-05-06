@@ -18,8 +18,8 @@ use crate::{
 	entity_parts::PartTables,
 	font::Font,
 	saves::Save,
+	tasks::CurrentWorkerTasks,
 	threadpool::ThreadPool,
-	unsorted::CurrentWorkerTasks,
 };
 
 pub(crate) struct ChunkGrid {

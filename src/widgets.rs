@@ -8,7 +8,8 @@ use std::sync::Arc;
 use cgmath::EuclideanSpace;
 use fxhash::FxHashMap;
 
-use crate::unsorted::{RectInAtlas, SimpleTextureMesh};
+use crate::atlas::RectInAtlas;
+use crate::simple_meshes::SimpleTextureMesh;
 use crate::{
 	font,
 	shaders::{simple_line::SimpleLineVertexPod, simple_texture_2d::SimpleTextureVertexPod},
@@ -474,7 +475,7 @@ impl Widget {
 				// TODO: Make something cooler!
 				// For now it is just some text that changes to represent a loading bar >_<.
 				let mut text = String::new();
-				text += &"skybox generation: ";
+				text += "skybox generation: ";
 				text.push('[');
 				for _ in 0..counter_value {
 					text.push('█');
