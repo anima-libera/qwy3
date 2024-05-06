@@ -213,6 +213,7 @@ impl ChunkGrid {
 		id_generator: &IdGenerator,
 	) {
 		let mut next_entities_map: FxHashMap<ChunkCoords, ChunkEntities> = HashMap::default();
+		let mut actions_on_world = vec![];
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
 		let mut changes_of_chunk = vec![];
 		for chunk_coords in chunk_coords_list.into_iter() {
@@ -224,6 +225,7 @@ impl ChunkGrid {
 				&self.entities_map,
 				&mut next_entities_map,
 				self,
+				&mut actions_on_world,
 				block_type_table,
 				dt,
 				&mut changes_of_chunk,
@@ -233,6 +235,10 @@ impl ChunkGrid {
 		}
 
 		std::mem::swap(&mut self.entities_map, &mut next_entities_map);
+
+		for action_on_world in actions_on_world.into_iter() {
+			self.apply_actions_on_world(action_on_world, save, id_generator);
+		}
 
 		// The entities that got out of their chunks are now put in their new chunks.
 		for change_of_chunk in changes_of_chunk.into_iter() {
@@ -261,6 +267,40 @@ impl ChunkGrid {
 			};
 			aligned_box.overlaps(&chunk_max_entity_reach_box)
 		})
+	}
+
+	fn apply_actions_on_world(
+		&mut self,
+		action_on_world: ActionOnWorld,
+		save: Option<&Arc<Save>>,
+		id_generator: &IdGenerator,
+	) {
+		match action_on_world {
+			ActionOnWorld::PlaceBlockWithoutLoss { block, coords } => {
+				if self
+					.get_block(coords)
+					.is_some_and(|replaced_block| replaced_block.type_id == BlockTypeTable::AIR_ID)
+				{
+					// The placed block replaces air,
+					// it can be placed without any non-air block being lost.
+					self.set_block_and_request_updates_to_meshes(coords, block);
+				} else {
+					// If we place the block to be placed, it would replace a non-air block that
+					// would be lost, which we do not want to happen.
+					// So instead the placed block will be placed in the form of a block entity
+					// that will manage to place itself elsewhere on air.
+					self.add_entity(
+						Entity::new_block(
+							id_generator,
+							block,
+							coords.map(|x| x as f32),
+							cgmath::vec3(0.0, 0.0, 0.0),
+						),
+						save,
+					)
+				}
+			},
+		}
 	}
 
 	pub(crate) fn iter_entities_in_chunk(
@@ -402,4 +442,10 @@ impl ChunkGrid {
 			self.unload_chunk(chunk_coords, save, only_save_modified_chunks, part_tables);
 		}
 	}
+}
+
+/// An action to be performed on the world can be reptresented as such when it must be pending
+/// for some time before being applied.
+pub(crate) enum ActionOnWorld {
+	PlaceBlockWithoutLoss { block: Block, coords: BlockCoords },
 }

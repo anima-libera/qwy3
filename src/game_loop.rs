@@ -368,14 +368,8 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 								),
 								game.save.as_ref(),
 							);
-						} else if game.playing_mode == PlayingMode::Free {
+						} else if game.playing_mode == PlayingMode::Free && false {
 							for _ in 0..10 {
-								//let block = Block::from(
-								//	game
-								//		.block_type_table
-								//		.generated_test_id(rand::thread_rng().gen_range(0..10)),
-								//);
-
 								let mut motion = game.camera_direction.to_vec3();
 								let perturbation = loop {
 									let perturbation = cgmath::vec3(
@@ -389,14 +383,40 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 								};
 								motion = motion * 0.8 + perturbation * 0.1;
 
-								//game.chunk_grid.add_entity(
-								//	Entity::new_block(block, game.player_phys.aligned_box().pos, motion),
-								//	game.save.as_ref(),
-								//);
-
 								game.chunk_grid.add_entity(
 									Entity::new_test_ball(
 										&game.id_generator,
+										game.player_phys.aligned_box().pos,
+										motion,
+									),
+									game.save.as_ref(),
+								);
+							}
+						} else if game.playing_mode == PlayingMode::Free {
+							for _ in 0..10 {
+								let block = Block::from(
+									game
+										.block_type_table
+										.generated_test_id(rand::thread_rng().gen_range(0..10)),
+								);
+
+								let mut motion = game.camera_direction.to_vec3();
+								//let perturbation = loop {
+								//	let perturbation = cgmath::vec3(
+								//		rand::thread_rng().gen_range(-1.0..1.0),
+								//		rand::thread_rng().gen_range(-1.0..1.0),
+								//		rand::thread_rng().gen_range(-1.0..1.0),
+								//	);
+								//	if perturbation.magnitude() <= 1.0 {
+								//		break perturbation;
+								//	}
+								//};
+								//motion = motion * 0.8 + perturbation * 0.1;
+
+								game.chunk_grid.add_entity(
+									Entity::new_block(
+										&game.id_generator,
+										block,
 										game.player_phys.aligned_box().pos,
 										motion,
 									),

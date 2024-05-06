@@ -16,7 +16,7 @@ use smallvec::SmallVec;
 use crate::{
 	block_types::BlockTypeTable,
 	chunk_blocks::Block,
-	chunks::ChunkGrid,
+	chunks::{ActionOnWorld, ChunkGrid},
 	coords::{
 		iter_3d_cube_center_radius, AlignedBox, AngularDirection, ChunkCoords, ChunkCoordsSpan,
 		ChunkDimensions,
@@ -178,6 +178,7 @@ impl Entity {
 		&self,
 		entities_for_next_step: &mut Vec<Entity>,
 		chunk_grid: &ChunkGrid,
+		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		part_manipulation: &mut ForPartManipulation,
@@ -228,8 +229,7 @@ impl Entity {
 							} else {
 								unreachable!()
 							};
-							println!("TODO: be able to place blocks (via a command queue?)");
-							//chunk_grid.set_block_and_request_updates_to_meshes(coords, block);
+							actions_on_world.push(ActionOnWorld::PlaceBlockWithoutLoss { block, coords });
 							delete_self = true;
 						}
 					}
@@ -538,6 +538,7 @@ impl ChunkEntities {
 		entities_map: &FxHashMap<ChunkCoords, ChunkEntities>,
 		next_entities_map: &mut FxHashMap<ChunkCoords, ChunkEntities>,
 		chunk_grid: &ChunkGrid,
+		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
 		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
@@ -549,6 +550,7 @@ impl ChunkEntities {
 			entity.apply_one_physics_step(
 				&mut entities_for_next_step,
 				chunk_grid,
+				actions_on_world,
 				block_type_table,
 				dt,
 				part_manipulation,
