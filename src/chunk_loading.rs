@@ -10,7 +10,7 @@ use crate::{
 	coords::{iter_3d_cube_center_radius, ChunkCoords, ChunkDimensions, OrientedAxis},
 	entities::{ChunkEntities, IdGenerator},
 	saves::Save,
-	tasks::CurrentWorkerTasks,
+	tasks::WorkerTasksManager,
 	threadpool::ThreadPool,
 	world_gen::WorldGenerator,
 };
@@ -48,7 +48,7 @@ impl LoadingManager {
 	pub(crate) fn handle_loading(
 		&mut self,
 		chunk_grid: &mut ChunkGrid,
-		worker_tasks: &mut CurrentWorkerTasks,
+		worker_tasks: &mut WorkerTasksManager,
 		pool: &mut ThreadPool,
 		player_chunk_coords: ChunkCoords,
 		world_generator: &Arc<dyn WorldGenerator + Sync + Send>,
@@ -60,9 +60,8 @@ impl LoadingManager {
 			return;
 		}
 
-		let workers_dedicated_to_meshing = 1;
-		let available_workers_to_load = (pool.number_of_workers() - workers_dedicated_to_meshing)
-			.saturating_sub(worker_tasks.tasks.len());
+		let available_workers_to_load =
+			worker_tasks.how_many_loading_compatible_workers_available(pool);
 		if available_workers_to_load == 0 {
 			return;
 		}

@@ -36,7 +36,7 @@ use crate::{
 		default_skybox_painter, default_skybox_painter_3, generate_skybox_cubemap_faces_images,
 		SkyboxFaces,
 	},
-	tasks::{CurrentWorkerTasks, WorkerTask},
+	tasks::{WorkerTask, WorkerTasksManager},
 	threadpool,
 	widgets::Widget,
 	world_gen::{WhichWorldGenerator, WorldGenerator},
@@ -152,7 +152,7 @@ pub(crate) struct Game {
 	pub(crate) player_health: Option<u32>,
 	pub(crate) id_generator: Arc<IdGenerator>,
 
-	pub(crate) worker_tasks: CurrentWorkerTasks,
+	pub(crate) worker_tasks: WorkerTasksManager,
 	pub(crate) pool: threadpool::ThreadPool,
 
 	pub(crate) time_beginning: std::time::Instant,
@@ -492,12 +492,14 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 
 	let enable_world_generation = true;
 
-	let mut worker_tasks = CurrentWorkerTasks { tasks: vec![] };
+	let number_of_workers_that_cannot_do_loading = if number_of_threads == 1 { 0 } else { 1 };
+	let mut worker_tasks =
+		WorkerTasksManager { current_tasks: vec![], number_of_workers_that_cannot_do_loading };
 	let pool = threadpool::ThreadPool::new(number_of_threads as usize);
 
 	if need_generation_of_the_complete_atlas {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		worker_tasks.tasks.push(WorkerTask::GenerateAtlas(receiver));
+		worker_tasks.current_tasks.push(WorkerTask::GenerateAtlas(receiver));
 		pool.enqueue_task(Box::new(move || {
 			let atlas = Atlas::new_slow_complete(world_gen_seed);
 			let _ = sender.send(atlas);
@@ -507,7 +509,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 	let face_counter = need_generation_of_the_better_skybox.then(|| {
 		let (sender, receiver) = std::sync::mpsc::channel();
 		let face_counter = Arc::new(AtomicI32::new(0));
-		worker_tasks.tasks.push(WorkerTask::PaintNewSkybox(
+		worker_tasks.current_tasks.push(WorkerTask::PaintNewSkybox(
 			receiver,
 			Arc::clone(&face_counter),
 		));

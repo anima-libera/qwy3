@@ -23,11 +23,27 @@ pub(crate) enum WorkerTask {
 	GenerateAtlas(std::sync::mpsc::Receiver<Atlas>),
 }
 
-pub(crate) struct CurrentWorkerTasks {
-	pub(crate) tasks: Vec<WorkerTask>,
+pub(crate) struct WorkerTasksManager {
+	pub(crate) current_tasks: Vec<WorkerTask>,
+	/// If we let the workers pickup any kind of task anytime, then we will have a clogging problem.
+	/// When the game starts or when the player moves fast, there is suddenly a large number of
+	/// chunk loading tasks that can be started, and they do not wait on anything so it could
+	/// just fill up the workers with loading tasks, leaving no room for meshing (which can be
+	/// urgent if requested by the player's chunk for example, and that should be done on newly
+	/// loaded chunks without having to wait for all the loadable chunks to be loaded first).
+	/// This field keeps that number of available workers from doing chunk loading tasks,
+	/// so that everything else (especially meshing tasks) always have some room to run (or at
+	/// least that room is not taken by loading tasks).
+	/// Note: This only influences methods that give number of available threads for such and such
+	/// tasks, we can still ignore them and saturate the workers with loading tasks if we want.
+	pub(crate) number_of_workers_that_cannot_do_loading: usize,
 }
 
-impl CurrentWorkerTasks {
+impl WorkerTasksManager {
+	fn how_many_workers_available(&self, pool: &mut ThreadPool) -> usize {
+		pool.number_of_workers() - self.current_tasks.len()
+	}
+
 	pub(crate) fn run_chunk_meshing_task(
 		&mut self,
 		pool: &mut ThreadPool,
@@ -36,7 +52,7 @@ impl CurrentWorkerTasks {
 		device: Arc<wgpu::Device>,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		self.tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
+		self.current_tasks.push(WorkerTask::MeshChunk(chunk_coords, receiver));
 		pool.enqueue_task(Box::new(move || {
 			let vertices = data_for_chunk_meshing.generate_mesh_vertices();
 			let non_empty_mesh = !vertices.is_empty();
@@ -46,10 +62,17 @@ impl CurrentWorkerTasks {
 	}
 
 	pub(crate) fn is_being_meshed(&self, chunk_coords: ChunkCoords) -> bool {
-		self.tasks.iter().any(|worker_task| match worker_task {
+		self.current_tasks.iter().any(|worker_task| match worker_task {
 			WorkerTask::MeshChunk(chunk_coords_uwu, ..) => *chunk_coords_uwu == chunk_coords,
 			_ => false,
 		})
+	}
+
+	pub(crate) fn how_many_meshing_compatible_workers_available(
+		&self,
+		pool: &mut ThreadPool,
+	) -> usize {
+		self.how_many_workers_available(pool)
 	}
 
 	pub(crate) fn run_chunk_loading_task(
@@ -60,7 +83,7 @@ impl CurrentWorkerTasks {
 		id_generator: Arc<IdGenerator>,
 	) {
 		let (sender, receiver) = std::sync::mpsc::channel();
-		self.tasks.push(WorkerTask::LoadChunkBlocksAndEntities(
+		self.current_tasks.push(WorkerTask::LoadChunkBlocksAndEntities(
 			chunk_coords,
 			receiver,
 		));
@@ -133,11 +156,20 @@ impl CurrentWorkerTasks {
 	}
 
 	pub(crate) fn is_being_loaded(&self, chunk_coords: ChunkCoords) -> bool {
-		self.tasks.iter().any(|worker_task| match worker_task {
+		self.current_tasks.iter().any(|worker_task| match worker_task {
 			WorkerTask::LoadChunkBlocksAndEntities(chunk_coords_uwu, ..) => {
 				*chunk_coords_uwu == chunk_coords
 			},
 			_ => false,
 		})
+	}
+
+	pub(crate) fn how_many_loading_compatible_workers_available(
+		&self,
+		pool: &mut ThreadPool,
+	) -> usize {
+		self
+			.how_many_workers_available(pool)
+			.saturating_sub(self.number_of_workers_that_cannot_do_loading)
 	}
 }

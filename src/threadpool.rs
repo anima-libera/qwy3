@@ -11,7 +11,7 @@ enum OrderToManager {
 	/// or as soon as a worker becomes available.
 	Task(Task),
 	/// The manager will ask all workers to end, and then follow them to where
-	/// dead threads go, hopefully a beautiful and peaceful place.
+	/// dead threads go, now at peace.
 	_End(Arc<Barrier>),
 }
 
@@ -19,6 +19,8 @@ pub(crate) struct ThreadPool {
 	order_sender_to_manager: mpsc::Sender<OrderToManager>,
 	number_of_workers: usize,
 }
+
+// TODO: Handle worker thread panics better than just leaveing them dead.
 
 impl ThreadPool {
 	/// Creates a pool of worker threads ready to work for us. We can send tasks for them to run,
@@ -30,13 +32,6 @@ impl ThreadPool {
 	/// Sending tasks to the thread pool enqueues them, and first sent tasks are given to workers
 	/// as soon as possible (immediately or when workers become available after completing previous
 	/// tasks). It works!
-	///
-	/// TODO: Maybe add a way to make sure that some workers are kept available for some kinds of
-	/// tasks, for example we want remeshing of chunks where the player places a block to be
-	/// completed as soon as possible, but generation of stuff could be taking all the workers
-	/// and a ot of place ahead in the pending task queue, so we would want the high priority
-	/// remeshing tasks to skip the whole queue and maybe even not wait for a worker to finish
-	/// by being handled by dedicated workers.
 	pub(crate) fn new(number_of_workers: usize) -> ThreadPool {
 		// The threadpool owner can order the manager around via this channel.
 		let (order_sender_to_manager, manager_order_receiver) = mpsc::channel::<OrderToManager>();

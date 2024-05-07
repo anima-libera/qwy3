@@ -641,7 +641,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 		}
 
 		// Recieve task results from workers.
-		game.worker_tasks.tasks.retain_mut(|worker_task| {
+		game.worker_tasks.current_tasks.retain_mut(|worker_task| {
 			let is_not_done_yet = match worker_task {
 				WorkerTask::LoadChunkBlocksAndEntities(chunk_coords, receiver) => {
 					let chunk_coords_and_result_opt = receiver.try_recv().ok().map(

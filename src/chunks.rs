@@ -18,7 +18,7 @@ use crate::{
 	entity_parts::PartTables,
 	font::Font,
 	saves::Save,
-	tasks::CurrentWorkerTasks,
+	tasks::WorkerTasksManager,
 	threadpool::ThreadPool,
 };
 
@@ -87,7 +87,7 @@ impl ChunkGrid {
 
 	pub(crate) fn run_some_required_remeshing_tasks(
 		&mut self,
-		worker_tasks: &mut CurrentWorkerTasks,
+		worker_tasks: &mut WorkerTasksManager,
 		pool: &mut ThreadPool,
 		block_type_table: &Arc<BlockTypeTable>,
 		font: &Arc<Font>,
@@ -95,7 +95,9 @@ impl ChunkGrid {
 	) {
 		let mut remeshing_request_handled = vec![];
 		for chunk_coords in self.remeshing_required_set.iter().copied() {
-			if worker_tasks.tasks.len() >= pool.number_of_workers() {
+			let meshing_workers_available =
+				worker_tasks.how_many_meshing_compatible_workers_available(pool);
+			if meshing_workers_available == 0 {
 				break;
 			}
 
