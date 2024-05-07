@@ -313,7 +313,7 @@ impl Entity {
 								if displacement.is_zero() {
 									displacement = cgmath::vec3(0.0, 0.0, 1.0);
 								} else {
-									displacement = displacement.normalize();
+									displacement = displacement.normalize() / 2.0;
 								}
 								let distance = phys.aligned_box().pos.distance(other_aligned_box.pos);
 								let overlap_factor = if distance.is_zero() {

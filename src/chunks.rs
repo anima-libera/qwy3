@@ -212,6 +212,9 @@ impl ChunkGrid {
 		save: Option<&Arc<Save>>,
 		id_generator: &IdGenerator,
 	) {
+		// TODO: Instead of creating a new map for each physics step,
+		// we should reuse the old one (that already has plenty of space allocated
+		// in a way that is similar to what we will need in the next step)!
 		let mut next_entities_map: FxHashMap<ChunkCoords, ChunkEntities> = HashMap::default();
 		let mut actions_on_world = vec![];
 		let chunk_coords_list: Vec<_> = self.entities_map.keys().copied().collect();
