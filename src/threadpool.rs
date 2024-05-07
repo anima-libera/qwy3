@@ -99,12 +99,23 @@ impl ThreadPool {
 					match order {
 						Ok(OrderToManager::Task(task)) => {
 							let worker_asking_for_more =
-								manager_receiver_of_worker_asking_for_more.recv().unwrap();
+								match manager_receiver_of_worker_asking_for_more.recv() {
+									Ok(order) => order,
+									Err(_) => {
+										// Ah, there is no more worker?
+										// For some reason, this case is triggered when closing
+										// the game if there was only 1 worker thread.
+										// Terminating seem reasonable here.
+										return;
+									},
+								};
 							order_sender_to_worker_array[worker_asking_for_more]
 								.send(OrderToWorker::Task(task))
 								.unwrap();
 						},
 						Err(_) => {
+							// The main thread is no more there to send us orders,
+							// so we can terminate the pool.
 							for worker_asking_for_more in manager_receiver_of_worker_asking_for_more.iter()
 							{
 								order_sender_to_worker_array[worker_asking_for_more]

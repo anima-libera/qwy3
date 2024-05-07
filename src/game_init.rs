@@ -492,6 +492,22 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 
 	let enable_world_generation = true;
 
+	let number_of_threads = if number_of_threads == 0 {
+		println!(
+			"Warning: Asked for 0 threads, but the game is built for multithreading \
+			and will not work without at least 1 worker thread. \
+			Thus there will actually be 1 thread."
+		);
+		1
+	} else {
+		number_of_threads
+	};
+	if number_of_threads == 1 {
+		println!(
+			"Note: The experience with only 1 thread is bad, maybe try at least 4 \
+			using `-t 4` or `--threads 4`."
+		);
+	}
 	let number_of_workers_that_cannot_do_loading = if number_of_threads == 1 { 0 } else { 1 };
 	let mut worker_tasks =
 		WorkerTasksManager { current_tasks: vec![], number_of_workers_that_cannot_do_loading };

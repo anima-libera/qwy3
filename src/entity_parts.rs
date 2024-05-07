@@ -222,7 +222,7 @@ impl<T: PartKind> PartTable<T> {
 				self.cpu_to_gpu_update_required_for_instances = true;
 				self.cpu_to_gpu_update_required_for_buffer_length_change = true;
 				index
-				// TODO: This does not even require unsafe to make it faster.
+				// TODO: This does not even require to leave safe Rust to make it faster.
 				// Actually, what really needs manual resizing is the wgpu buffer, not the rust vec.
 				// We could decide that the wgpu buffer has the size of the allocator and
 				// let the vec manage its size independently. That would require to make the allocator
