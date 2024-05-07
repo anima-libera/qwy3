@@ -496,6 +496,10 @@ impl ChunkEntities {
 			self.coords_span.chunk_coords,
 			other.coords_span.chunk_coords
 		);
+		if self.count_entities() < other.count_entities() {
+			// We make sure that `other` has the smaller vec, that will require moving fewer entities.
+			std::mem::swap(self, &mut other);
+		}
 		self.savable.entities.append(&mut other.savable.entities);
 	}
 	pub(crate) fn merged(mut self, other: ChunkEntities) -> ChunkEntities {

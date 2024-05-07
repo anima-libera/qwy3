@@ -9,6 +9,7 @@
 - Ray casting by player to target a block is neither correct nor performant, do it right.
 - Use `RenderPassDescriptor::timestamp_writes` to query timestamps for renderpass beginning and end and display renderpass performances for each renderpass.
 - Look into the `crossbeam` crate to see if it can help with better multithreading architecture than our homemade thread pool.
+- Add options to run benchmarks (on the user hardware) to optimize for some settings like the number of worker threads or the chunk size. These should run with graphics on and sample the setting space at random, measure the time it takes to have meshed all the chunks for one same seed. Once all the setting space have been sample for one same seed, start again with an other seed, and go on until the user stops the benchmark.
 
 ## Noise
 
