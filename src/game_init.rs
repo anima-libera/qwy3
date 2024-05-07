@@ -492,6 +492,45 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 
 	let enable_world_generation = true;
 
+	let number_of_threads = number_of_threads.unwrap_or_else(|| {
+		// `std::thread::available_parallelism` returns the number of virtual cores on my system,
+		// and it probably hits close enough most of the time.
+		let number_of_threads_auto = std::thread::available_parallelism().ok().map(|threads| {
+			let threads = threads.get();
+			// Let's not take every single virtual core with the worker threads alone.
+			// There are other threads too (threadpool manager, main thread, and at some point
+			// there may be others) and maybe the user and the system want to breathe a little
+			// and have other important stuff running.
+			let left_to_user_and_system = (threads as f32 * 0.1).ceil() as usize + 1;
+			// Less than 4 threads provides a kinda bad experience, probably worse than
+			// with 4 threads even on hardware that has 4 or fewer virtual cores.
+			// TODO: Make sure of that.
+			(threads - left_to_user_and_system).max(4) as u32
+		});
+		number_of_threads_auto.unwrap_or_else(|| {
+			// If we have no hint about the hardware, what would be a good default?
+			// TODO: Is this a good default? I have no idea how to tell.
+			// This is probably not very important anyway, `available_parallelism` seems to
+			// cover many cases and has fallbacks and all.
+			let number_of_threads_auto_no_hint = 9;
+			println!(
+				"Warning: Hint about hardware capabilities coult not get obtained, \
+				so the number of working threads cannot be chosen in a way that makes sense. \
+				Thus there will be {number_of_threads_auto_no_hint} threads, but it may be way \
+				too low or way too high depending on the number of virtual cores (\"threads\") \
+				of the hardware."
+			);
+			println!(
+				"Note: To make sure the game uses a sane number of working threads, that number \
+				can be manually specified using `-t N` or `--threads N` with N being replaced by \
+				the desired number of worker threads, which is recommended to be almost the number \
+				of virtual cores of the hardware (a little bit below, leaving 2-5 virtucal cores \
+				for the others) but should be at least 4, trying out different values to find a good \
+				one is best."
+			);
+			number_of_threads_auto_no_hint
+		})
+	});
 	let number_of_threads = if number_of_threads == 0 {
 		println!(
 			"Warning: Asked for 0 threads, but the game is built for multithreading \
@@ -505,7 +544,8 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 	if number_of_threads == 1 {
 		println!(
 			"Note: The experience with only 1 thread is bad, maybe try at least 4 \
-			using `-t 4` or `--threads 4`."
+			using `-t 4` or `--threads 4`, or let the game decide in regards to the hardware \
+			by not specifying any number of threads."
 		);
 	}
 	let number_of_workers_that_cannot_do_loading = if number_of_threads == 1 { 0 } else { 1 };

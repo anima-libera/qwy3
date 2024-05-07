@@ -5,9 +5,9 @@ use crate::{game_init::PlayingMode, world_gen::WhichWorldGenerator};
 #[derive(Parser)]
 #[command(color = clap::ColorChoice::Auto)]
 pub(crate) struct CommandLineSettings {
-	/// Number of worker threads in the threadpool.
-	#[arg(long = "threads", short = 't', default_value_t = 12, value_name = "N")]
-	pub(crate) number_of_threads: u32,
+	/// Manually set the number of worker threads.
+	#[arg(long = "threads", short = 't', value_name = "N")]
+	pub(crate) number_of_threads: Option<u32>,
 
 	/// Does the game should close itself after one frame?
 	#[arg(long = "close")]

@@ -445,6 +445,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 				game.interface.widget_tree_root.find_label_content(WidgetLabel::GeneralDebugInfo)
 			{
 				let fps = 1.0 / dt.as_secs_f32();
+				let worker_threads = game.pool.number_of_workers();
 				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
 				let block_count = chunk_count * game.cd.number_of_blocks_in_a_chunk();
 				let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
@@ -464,15 +465,16 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 				let settings = font::TextRenderingSettings::with_scale(3.0);
 				let text = format!(
 					"fps: {fps:.1}\n\
-								 chunks loaded: {chunk_count}\n\
-								 blocks loaded: {block_count}\n\
-								 chunks meshed: {chunk_meshed_count}\n\
-								 entities: {entity_count}\n\
-								 chunk with entities: {chunk_entity_count}\n\
-								 player coords: {player_block_coords_str}\n\
-								 seed: {seed}\n\
-								 world time: {world_time:.0}s\n\
-								 {random_message}"
+					worker threads: {worker_threads}\n\
+					chunks loaded: {chunk_count}\n\
+					blocks loaded: {block_count}\n\
+					chunks meshed: {chunk_meshed_count}\n\
+					entities: {entity_count}\n\
+					chunk with entities: {chunk_entity_count}\n\
+					player coords: {player_block_coords_str}\n\
+					seed: {seed}\n\
+					world time: {world_time:.0}s\n\
+					{random_message}"
 				);
 				*general_debug_info_widget = Widget::new_simple_text(text, settings);
 			}
@@ -804,6 +806,8 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			game.player_phys.impose_displacement(walking_vector * dt.as_secs_f32());
 		}
 
+		// Entities physics.
+		// TODO: Multithread these, it is ready for multithreading now!
 		game.chunk_grid.apply_one_physics_step(
 			&game.block_type_table,
 			dt,

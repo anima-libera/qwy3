@@ -21,6 +21,7 @@ pub(crate) struct ThreadPool {
 }
 
 // TODO: Handle worker thread panics better than just leaveing them dead.
+// We could also update `number_of_workers` and even restore them.
 
 impl ThreadPool {
 	/// Creates a pool of worker threads ready to work for us. We can send tasks for them to run,
