@@ -3,7 +3,7 @@ use std::{mem::size_of, sync::Arc};
 use crate::{
 	camera::{CameraOrthographicSettings, Matrix4x4Pod},
 	chunks::ChunkGrid,
-	entity_parts::{DataForPartTableRendering, PartTables},
+	entity_parts::{DataForPartTableRendering, PartTablesForRendering},
 	game_init::WhichCameraToUse,
 	rendering_init::{BindingThingy, RenderPipelinesAndBindGroups},
 	simple_meshes::{SimpleLineMesh, SimpleTextureMesh},
@@ -37,7 +37,7 @@ pub(crate) struct DataForRendering<'a> {
 	pub(crate) cursor_mesh: &'a SimpleLineMesh,
 	pub(crate) interface_simple_texture_mesh: &'a SimpleTextureMesh,
 	pub(crate) interface_simple_line_mesh: &'a SimpleLineMesh,
-	pub(crate) part_tables: &'a PartTables,
+	pub(crate) part_tables: &'a PartTablesForRendering,
 }
 
 impl<'a> DataForRendering<'a> {
@@ -83,7 +83,7 @@ impl<'a> DataForRendering<'a> {
 			// Entity parts textured.
 			render_pass.set_pipeline(&self.rendering.part_textured_shadow_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.part_textured_shadow_bind_group, &[]);
-			for part_table_for_rendering in self.part_tables.tables_for_rendering_textured() {
+			for part_table_for_rendering in self.part_tables.textured.iter() {
 				let DataForPartTableRendering {
 					mesh_vertices_count,
 					mesh_vertex_buffer,
@@ -92,13 +92,13 @@ impl<'a> DataForRendering<'a> {
 				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
+				render_pass.draw(0..*mesh_vertices_count, 0..*instances_count);
 			}
 
 			// Entity parts colored.
 			render_pass.set_pipeline(&self.rendering.part_colored_shadow_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.part_colored_shadow_bind_group, &[]);
-			for part_table_for_rendering in self.part_tables.tables_for_rendering_colored() {
+			for part_table_for_rendering in self.part_tables.colored.iter() {
 				let DataForPartTableRendering {
 					mesh_vertices_count,
 					mesh_vertex_buffer,
@@ -107,7 +107,7 @@ impl<'a> DataForRendering<'a> {
 				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
+				render_pass.draw(0..*mesh_vertices_count, 0..*instances_count);
 			}
 		}
 
@@ -158,7 +158,7 @@ impl<'a> DataForRendering<'a> {
 			// Entity parts textured.
 			render_pass.set_pipeline(&self.rendering.part_textured_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.part_textured_bind_group, &[]);
-			for part_table_for_rendering in self.part_tables.tables_for_rendering_textured() {
+			for part_table_for_rendering in self.part_tables.textured.iter() {
 				let DataForPartTableRendering {
 					mesh_vertices_count,
 					mesh_vertex_buffer,
@@ -167,13 +167,13 @@ impl<'a> DataForRendering<'a> {
 				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
+				render_pass.draw(0..*mesh_vertices_count, 0..*instances_count);
 			}
 
 			// Entity parts colored.
 			render_pass.set_pipeline(&self.rendering.part_colored_render_pipeline);
 			render_pass.set_bind_group(0, &self.rendering.part_colored_bind_group, &[]);
-			for part_table_for_rendering in self.part_tables.tables_for_rendering_colored() {
+			for part_table_for_rendering in self.part_tables.colored.iter() {
 				let DataForPartTableRendering {
 					mesh_vertices_count,
 					mesh_vertex_buffer,
@@ -182,7 +182,7 @@ impl<'a> DataForRendering<'a> {
 				} = part_table_for_rendering;
 				render_pass.set_vertex_buffer(0, mesh_vertex_buffer.slice(..));
 				render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
-				render_pass.draw(0..mesh_vertices_count, 0..instances_count);
+				render_pass.draw(0..*mesh_vertices_count, 0..*instances_count);
 			}
 
 			if self.enable_display_phys_box {

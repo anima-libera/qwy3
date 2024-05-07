@@ -1052,7 +1052,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			cursor_mesh: &game.cursor_mesh,
 			interface_simple_texture_mesh: &interface_simple_texture_mesh,
 			interface_simple_line_mesh: &interface_simple_line_mesh,
-			part_tables: &game.part_tables,
+			part_tables: &game.part_tables.part_tables_for_rendering(),
 		};
 		data_for_rendering.render();
 

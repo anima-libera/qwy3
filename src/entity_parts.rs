@@ -124,9 +124,14 @@ pub(crate) struct PartTables {
 	pub(crate) textured_cubes: PartTable<TexturedCubePartKind>,
 	pub(crate) colored_cubes: PartTable<ColoredCubePartKind>,
 	pub(crate) colored_icosahedron: PartTable<ColoredIcosahedronPartKind>,
-	// NOTE: Added tables should also be added to the output of
-	// `PartTables::tables_for_rendering_textured` or `PartTables::tables_for_rendering_colored`.
-	// They should also be handled in `PartTables::cup_to_gpu_update_if_required`.
+	// NOTE: Added tables should also be handled in `PartTables::part_tables_for_rendering` and
+	// in `PartTables::cup_to_gpu_update_if_required`.
+}
+
+/// Shared portion of the `PartTables` that is enough to render them.
+pub(crate) struct PartTablesForRendering {
+	pub(crate) textured: [DataForPartTableRendering; 1],
+	pub(crate) colored: [DataForPartTableRendering; 2],
 }
 
 impl PartTables {
@@ -148,23 +153,15 @@ impl PartTables {
 		self.colored_icosahedron.cup_to_gpu_update_if_required(device, queue);
 	}
 
-	/// Returns an array of what is needed to render the parts of a table,
-	/// for all the tables of textured parts.
-	/// The rendering can just iterate over this output,
-	/// no change is needed on the rendering part even when new part tables are added.
-	pub(crate) fn tables_for_rendering_textured(&self) -> [DataForPartTableRendering; 1] {
-		[self.textured_cubes.get_data_for_rendering()]
-	}
-
-	/// Returns an array of what is needed to render the parts of a table,
-	/// for all the tables of colored parts.
-	/// The rendering can just iterate over this output,
-	/// no change is needed on the rendering part even when new part tables are added.
-	pub(crate) fn tables_for_rendering_colored(&self) -> [DataForPartTableRendering; 2] {
-		[
-			self.colored_cubes.get_data_for_rendering(),
-			self.colored_icosahedron.get_data_for_rendering(),
-		]
+	/// Returns what is needed to render the part tables, in a shared way.
+	pub(crate) fn part_tables_for_rendering(&self) -> PartTablesForRendering {
+		PartTablesForRendering {
+			textured: [self.textured_cubes.get_data_for_rendering()],
+			colored: [
+				self.colored_cubes.get_data_for_rendering(),
+				self.colored_icosahedron.get_data_for_rendering(),
+			],
+		}
 	}
 }
 
@@ -190,7 +187,7 @@ pub(crate) struct PartTable<T: PartKind> {
 	/// to the GPU.
 	instance_table: Vec<T::Instance>,
 	/// The GPU-side buffer that is given the data from `instance_table`.
-	instance_table_buffer: wgpu::Buffer,
+	instance_table_buffer: Arc<wgpu::Buffer>,
 	/// The allocator that manages the allocation and freeing of the instances.
 	instance_table_allocator: TableAllocator,
 	/// If an instance is modified, then the new data must be sent to the GPU.
@@ -253,12 +250,13 @@ impl<T: PartKind> PartTable<T> {
 			self.cpu_to_gpu_update_required_for_buffer_length_change = false;
 			self.cpu_to_gpu_update_required_for_instances = false;
 			let name = self.name;
-			self.instance_table_buffer =
-				device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			self.instance_table_buffer = Arc::new(device.create_buffer_init(
+				&wgpu::util::BufferInitDescriptor {
 					label: Some(&format!("{name} Instance Buffer")),
 					contents: bytemuck::cast_slice(&self.instance_table),
 					usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-				});
+				},
+			));
 		} else if self.cpu_to_gpu_update_required_for_instances {
 			self.cpu_to_gpu_update_required_for_instances = false;
 			queue.write_buffer(
@@ -272,9 +270,9 @@ impl<T: PartKind> PartTable<T> {
 	fn get_data_for_rendering(&self) -> DataForPartTableRendering {
 		DataForPartTableRendering {
 			mesh_vertices_count: self.mesh.vertex_count,
-			mesh_vertex_buffer: &self.mesh.buffer,
+			mesh_vertex_buffer: Arc::clone(&self.mesh.buffer),
 			instances_count: self.instance_table.len() as u32,
-			instance_buffer: &self.instance_table_buffer,
+			instance_buffer: Arc::clone(&self.instance_table_buffer),
 		}
 	}
 }
@@ -282,17 +280,17 @@ impl<T: PartKind> PartTable<T> {
 /// Just what is needed to render the instances of a part table.
 /// Note that this type is the same no matter the PartInstance type parameter
 /// of the part table it comes from.
-pub(crate) struct DataForPartTableRendering<'a> {
+pub(crate) struct DataForPartTableRendering {
 	pub(crate) mesh_vertices_count: u32,
-	pub(crate) mesh_vertex_buffer: &'a wgpu::Buffer,
+	pub(crate) mesh_vertex_buffer: Arc<wgpu::Buffer>,
 	pub(crate) instances_count: u32,
-	pub(crate) instance_buffer: &'a wgpu::Buffer,
+	pub(crate) instance_buffer: Arc<wgpu::Buffer>,
 }
 
 /// A mesh of a model. Its data is all on the GPU side.
 struct Mesh {
 	vertex_count: u32,
-	buffer: wgpu::Buffer,
+	buffer: Arc<wgpu::Buffer>,
 }
 
 /// The table in which are stored the texture mappings and the colorings of the instances.
@@ -502,11 +500,13 @@ pub(crate) mod textured_cube {
 		PartTable {
 			mesh: cube_mesh(device, name),
 			instance_table: vec![],
-			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some(&format!("{name} Instance Buffer")),
-				contents: &[],
-				usage: wgpu::BufferUsages::VERTEX,
-			}),
+			instance_table_buffer: Arc::new(device.create_buffer_init(
+				&wgpu::util::BufferInitDescriptor {
+					label: Some(&format!("{name} Instance Buffer")),
+					contents: &[],
+					usage: wgpu::BufferUsages::VERTEX,
+				},
+			)),
 			instance_table_allocator: TableAllocator::new(0, 200),
 			cpu_to_gpu_update_required_for_instances: false,
 			cpu_to_gpu_update_required_for_buffer_length_change: false,
@@ -602,11 +602,13 @@ pub(crate) mod textured_cube {
 			}
 		}
 
-		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some(&format!("{name} Vertex Buffer")),
-			contents: bytemuck::cast_slice(&vertices),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+		let buffer = Arc::new(
+			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Vertex Buffer")),
+				contents: bytemuck::cast_slice(&vertices),
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+		);
 
 		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
@@ -705,11 +707,13 @@ pub(crate) mod colored_cube {
 		PartTable {
 			mesh: cube_mesh(device, name),
 			instance_table: vec![],
-			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some(&format!("{name} Instance Buffer")),
-				contents: &[],
-				usage: wgpu::BufferUsages::VERTEX,
-			}),
+			instance_table_buffer: Arc::new(device.create_buffer_init(
+				&wgpu::util::BufferInitDescriptor {
+					label: Some(&format!("{name} Instance Buffer")),
+					contents: &[],
+					usage: wgpu::BufferUsages::VERTEX,
+				},
+			)),
 			instance_table_allocator: TableAllocator::new(0, 200),
 			cpu_to_gpu_update_required_for_instances: false,
 			cpu_to_gpu_update_required_for_buffer_length_change: false,
@@ -805,11 +809,13 @@ pub(crate) mod colored_cube {
 			}
 		}
 
-		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some(&format!("{name} Vertex Buffer")),
-			contents: bytemuck::cast_slice(&vertices),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+		let buffer = Arc::new(
+			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Vertex Buffer")),
+				contents: bytemuck::cast_slice(&vertices),
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+		);
 
 		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
@@ -855,11 +861,13 @@ pub(crate) mod colored_icosahedron {
 		PartTable {
 			mesh: icosahedron_mesh(device, name),
 			instance_table: vec![],
-			instance_table_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-				label: Some(&format!("{name} Instance Buffer")),
-				contents: &[],
-				usage: wgpu::BufferUsages::VERTEX,
-			}),
+			instance_table_buffer: Arc::new(device.create_buffer_init(
+				&wgpu::util::BufferInitDescriptor {
+					label: Some(&format!("{name} Instance Buffer")),
+					contents: &[],
+					usage: wgpu::BufferUsages::VERTEX,
+				},
+			)),
 			instance_table_allocator: TableAllocator::new(0, 200),
 			cpu_to_gpu_update_required_for_instances: false,
 			cpu_to_gpu_update_required_for_buffer_length_change: false,
@@ -1007,11 +1015,13 @@ pub(crate) mod colored_icosahedron {
 				vertices.push(PartVertexPod { position: position.into(), normal: normal.into() });
 			}
 		}
-		let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-			label: Some(&format!("{name} Vertex Buffer")),
-			contents: bytemuck::cast_slice(&vertices),
-			usage: wgpu::BufferUsages::VERTEX,
-		});
+		let buffer = Arc::new(
+			device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+				label: Some(&format!("{name} Vertex Buffer")),
+				contents: bytemuck::cast_slice(&vertices),
+				usage: wgpu::BufferUsages::VERTEX,
+			}),
+		);
 		Mesh { vertex_count: vertices.len() as u32, buffer }
 	}
 
