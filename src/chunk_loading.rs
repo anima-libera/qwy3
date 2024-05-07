@@ -97,7 +97,7 @@ impl LoadingManager {
 		});
 
 		if !self.front_too_far.is_empty() {
-			for _ in 0..3 {
+			for _ in 0..10 {
 				// Just checking a few per frame at random should be enough.
 				if self.front_too_far.is_empty() {
 					break;
