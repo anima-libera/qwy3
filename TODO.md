@@ -102,8 +102,9 @@
   - Procedurally generated anatomy.
   - Procedurally generated abilities.
   - Procedurally generated goals.
-- Make it so that the entities are managed by an other thread (so that the framerate is not going down due to the CPU-side handling of entities). That would also allow to make the entities be handled with a smaller frequency, independant from the framerate. That would require some interpolation between entity handling steps.
-  - Maybe do so with double buffering of the entities?
+- Make the number of threads on which entities run on adaptative to their performance (that should be an opt-out setting).
+- Make sure that the number of threads the entities want to run on are not taken by loading, kind of like how meshing prevents loading from taking one thread, but adaptative.
+- When entity performance gets bad, run far chunks physics less frequently (like physics LOD).
 - Subdivide entity chunks when a chunk holds many entities (into 8, 27, etc. sub chunks) to reduce the number of iterations on potentially colliding pairs of entities.
 
 ## Sound
