@@ -759,15 +759,25 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			is_not_done_yet
 		});
 
-		if game.chunk_grid_shareable.is_exclusively_owned_or_can_be() {
+		if game.chunk_grid_shareable.is_or_can_become_exclusively_owned() {
+			// If necessary, apply the results of tasks on the world and pending operations.
+			// We now have write access to the `ChunkGrid` inside until we share it again.
 			game
 				.chunk_grid_shareable
 				.make_sure_is_owned_by_applying_pending(game.save.as_ref(), &game.id_generator);
 
 			if let Some(part_tables) = Arc::get_mut(&mut game.part_tables) {
+				// The part tables were also shared to the same tasks as the world was,
+				// and here we are sure that we also have exclusive ownership of them,
+				// so we can update their new state to the GPU buffer,
 				part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
+				// And we will keep (here in this thread) the current state of
+				// `part_tables_for_rendering` (as we are sure that they correspond to what
+				// is on the GPU now since we just synced it).
 				game.part_tables_for_rendering = game.part_tables.part_tables_for_rendering();
 			}
+
+			// Now is the time to do some work on the chunk grid that require write access.
 
 			// Request meshing for chunks that can be meshed or should be re-meshed.
 			game.chunk_grid_shareable.perform_now_or_dont(|chunk_grid| {
@@ -865,6 +875,9 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 		}
 
 		// Entities physics.
+		// The `dt` used by entity physics is not the `dt` of the framerate, but the `dt`
+		// of the entity physics iteration rate. If the entity physics take too long
+		// then they can miss frames and their working `dt` becomes different from framerate `dt`.
 		let entities_physics_dt = game
 			.last_entity_physics_start
 			.map(|last_entity_physics_start| {
@@ -889,6 +902,15 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			&game.id_generator,
 		) {
 			game.last_entity_physics_start = Some(std::time::Instant::now());
+		} else {
+			// TODO: Do something about this.
+			// We get here when the entity physics misses a frame.
+			// When it happens once in a while it is not a problem (not even noticeable),
+			// but when it starts to happen more frequently the entities get laggy
+			// (not slower, just less smooth) and it becomes noticeable.
+			// We could do all of:
+			// - adjusting the number of tasks used by entity physics, and
+			// - focus on entities close to the player, reducing the frequency of entities too far.
 		}
 
 		game.queue.write_buffer(

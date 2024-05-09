@@ -630,6 +630,8 @@ pub(crate) struct EntitiesPhysicsStepResult {
 	pub(crate) actions_on_world: Vec<ActionOnWorld>,
 }
 
+/// When entity physics tasks are done, they are not all done at the same time,
+/// so here is a type that can collects the results as they arrive.
 pub(crate) struct EntitiesPhysicsStepCollector {
 	number_of_tasks_not_yet_completed: u32,
 	/// The `ChunkEntities` that were not run and that are to be transfered from the old map
@@ -654,6 +656,7 @@ impl EntitiesPhysicsStepCollector {
 		}
 	}
 
+	/// When an entity physics task is done, its results are added to the collector in here.
 	pub(crate) fn collect_a_task_result(&mut self, mut task_result: EntitiesPhysicsStepResult) {
 		for (chunk_coords, chunk_entities) in task_result.next_entities_map.into_iter() {
 			match self.next_entities_map.entry(chunk_coords) {
@@ -674,6 +677,7 @@ impl EntitiesPhysicsStepCollector {
 		self.actions_on_world.push(action_on_world);
 	}
 
+	/// Do we have collected all the results and can now apply them to the world?
 	pub(crate) fn is_complete(&self) -> bool {
 		self.number_of_tasks_not_yet_completed == 0
 	}

@@ -505,8 +505,9 @@ impl ChunkGrid {
 	}
 }
 
-/// An action to be performed on the world can be reptresented as such when it must be pending
-/// for some time before being applied.
+/// When the world is shared, it is read-only, so actions that are to be performed on it
+/// must wait until we have write access to it again. To let these actions wait, we represent
+/// them as this (`ActionOnWorld`), store them away, then apply them when possible.
 pub(crate) enum ActionOnWorld {
 	PlaceBlockWithoutLoss {
 		block: Block,
@@ -535,9 +536,20 @@ pub(crate) enum ActionOnWorld {
 /// - Shared: grants read access and allows to store modifications for later.
 ///
 /// The modifications stored while in shared state can be applied as soon as the main thread
-/// becomes the single owner of the ChunkGrid again.
+/// becomes the single owner of the ChunkGrid again. To make the state exclusively owned again,
+/// we must
 pub(crate) struct ChunkGridShareable {
+	/// Here it is, the world!
+	/// When not shared, we can have write access via `Arc::get_mut`.
 	chunk_grid: Arc<ChunkGrid>,
+	/// When entity physics tasks are done, their results are collected here,
+	/// and only when they are all done can we apply them to the now exclusively owned world.
+	///
+	/// Also, when the world is shared, actions that write to it cannot be performed,
+	/// and they are instead stored in there.
+	///
+	/// This is `None` when the world is exclusively owned (because we apply the actions directly)
+	/// and is `Some` when the world is shared.
 	entities_step_collector: Option<EntitiesPhysicsStepCollector>,
 }
 
@@ -557,16 +569,29 @@ impl ChunkGridShareable {
 		if let Some(entities_step_collector) = self.entities_step_collector.as_mut() {
 			entities_step_collector.collect_a_task_result(entities_step_result);
 		} else {
-			panic!("Adding an entities step result when we are in shared state should not happen");
+			panic!(
+				"Adding an `EntitiesPhysicsStepResult` when we are in exclusively owned state \
+				should not happen, because there shouldn't have been any entity physics task \
+				running while we are not in shared state"
+			);
 		}
 	}
 
 	fn is_exclusively_owned(&self) -> bool {
 		if self.entities_step_collector.is_none() {
+			// `Arc::strong_count` is not to be used in code that relies on its result
+			// because it could change from an other thread between the check and the consequence
+			// that relied on it. However, here it is just an additional healthy check.
+			// When `entities_step_collector` is `None` then it means that we exclusively own
+			// the world and thus should never get 2 or more strong references to it here.
+			// There could be a shared weak Arc that gets updated between here and some code
+			// that relies on having exclusive ownership, this does not pretend to catch
+			// all possible bugs (and it doesn't need to!), this would just catch most.
 			assert_eq!(
 				Arc::strong_count(&self.chunk_grid),
 				1,
-				"We shoud be the only owner here"
+				"We shoud be the only owner here, \
+				there is not enough room for two strong `Arc`s in this town"
 			);
 			true
 		} else {
@@ -582,14 +607,31 @@ impl ChunkGridShareable {
 		}
 	}
 
-	pub(crate) fn is_exclusively_owned_or_can_be(&self) -> bool {
-		self.entities_step_collector.is_none()
-			|| self
-				.entities_step_collector
-				.as_ref()
-				.is_some_and(|entities_step_collector| entities_step_collector.is_complete())
+	fn can_become_exclusively_owned(&self) -> bool {
+		if self
+			.entities_step_collector
+			.as_ref()
+			.is_some_and(|entities_step_collector| entities_step_collector.is_complete())
+		{
+			// See also `is_exclusively_owned`.
+			// This is a healthy debugging check that is relevant for the same reasons.
+			assert_eq!(
+				Arc::strong_count(&self.chunk_grid),
+				1,
+				"We shoud be the only owner here because all tasks that shared us are done"
+			);
+			true
+		} else {
+			false
+		}
 	}
 
+	pub(crate) fn is_or_can_become_exclusively_owned(&self) -> bool {
+		self.is_exclusively_owned() || self.can_become_exclusively_owned()
+	}
+
+	/// If we `can_become_exclusively_owned`, then we do it and become exclusively owned for sure.
+	/// After that and before the next sharing, we have write access to the `ChunkGrid`.
 	pub(crate) fn make_sure_is_owned_by_applying_pending(
 		&mut self,
 		save: Option<&Arc<Save>>,
@@ -597,11 +639,8 @@ impl ChunkGridShareable {
 	) {
 		if self.is_exclusively_owned() {
 			// Already owned, nothing to do.
-		} else if self
-			.entities_step_collector
-			.as_ref()
-			.is_some_and(|entities_step_collector| entities_step_collector.is_complete())
-		{
+		} else if self.can_become_exclusively_owned() {
+			// Let's apply the pending changes and make our exclusive ownership official.
 			if let Some(chunk_grid) = Arc::get_mut(&mut self.chunk_grid) {
 				chunk_grid.apply_completed_entities_step(
 					self.entities_step_collector.take().unwrap(),
@@ -611,9 +650,17 @@ impl ChunkGridShareable {
 			} else {
 				panic!("We collected all the entities step results, there should be no more `Arc`s");
 			}
+		} else {
+			panic!("We cannot apply the pending operations, some are still running");
 		}
 	}
 
+	/// If we were exclusively owning the world, then now we share it with entity physics tasks.
+	/// After that and before the next moment where we can and do apply the results,
+	/// we only have read access to the `ChunkGrid`, but we can still record operations that will
+	/// be pending now and applied later when we exclusively own the world again.
+	///
+	/// Returns whether or not that could be done.
 	pub(crate) fn if_owned_then_share_to_run_entities_tasks(
 		&mut self,
 		worker_tasks: &mut WorkerTasksManager,
@@ -640,6 +687,9 @@ impl ChunkGridShareable {
 		}
 	}
 
+	/// Given an operation that requires write access to the `ChunkGrid`, we either
+	/// perform it now (if we have write access), or else record it (and it will be7
+	/// applied later when we have write access again).
 	pub(crate) fn perform_now_or_later(
 		&mut self,
 		action_on_world: ActionOnWorld,

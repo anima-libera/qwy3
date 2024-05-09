@@ -57,7 +57,7 @@ Advice:
 - Multiple world generators, some use a cool and fast structure generation engine.
 - Skybox.
 - Fog effect (blocks in the distance fading in the skybox).
-- Multithreading.
+- Multithreading (generation, loading, meshing, *even the entities run in threads*(!), etc.).
 - Command bar (the command language has basically nothing in it yet but the command bar is there).
 - Shadows via cascading shadow mapping.
 - Configurable controls for most controls.
