@@ -167,3 +167,4 @@
 - Reduce the length of `game_loop.rs` and the `StateUsedInEventLoop::about_to_wait` method.
 - More info in the README, like control bindings syntax, default controls, command line arguments, etc.
 - Find a better name? Idk.. Probably not tho, I like it that way ^^
+- Write somewhere that the assets in the assert directory were made by me and are covered by the license of this project.

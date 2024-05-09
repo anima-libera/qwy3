@@ -760,7 +760,7 @@ pub(crate) fn init_fog_stuff(device: Arc<wgpu::Device>) -> FogStuff {
 const TEXTURING_AND_COLORING_ARRAY_LENGTH: usize = 10000;
 
 pub(crate) fn init_texturing_and_coloring_array_thingy(
-	device: Arc<wgpu::Device>,
+	device: &Arc<wgpu::Device>,
 ) -> BindingThingy<wgpu::Buffer> {
 	let texturing_and_coloring_array_buffer =
 		device.create_buffer_init(&wgpu::util::BufferInitDescriptor {

@@ -20,9 +20,9 @@
 //! The buffer of the actual texturing/coloring data is `texturing_and_coloring_array_thingy`.
 
 use std::{
-	collections::{hash_map::Entry, HashMap},
+	collections::HashMap,
 	marker::PhantomData,
-	sync::Arc,
+	sync::{Arc, Mutex, RwLock},
 };
 
 use bytemuck::Zeroable;
@@ -112,7 +112,6 @@ impl<T: PartKind> PartHandler<T> {
 	pub(crate) fn delete(&self, part_table: &mut PartTable<T>) {
 		if let PartHandler::Allocated { index, .. } = self {
 			part_table.delete_instance(*index as usize);
-			part_table.cpu_to_gpu_update_required_for_instances = true;
 		}
 	}
 }
@@ -121,9 +120,9 @@ impl<T: PartKind> PartHandler<T> {
 /// One part table holds a model mesh and all its instances.
 /// All these tables are gathered in here.
 pub(crate) struct PartTables {
-	pub(crate) textured_cubes: PartTable<TexturedCubePartKind>,
-	pub(crate) colored_cubes: PartTable<ColoredCubePartKind>,
-	pub(crate) colored_icosahedron: PartTable<ColoredIcosahedronPartKind>,
+	pub(crate) textured_cubes: Mutex<PartTable<TexturedCubePartKind>>,
+	pub(crate) colored_cubes: Mutex<PartTable<ColoredCubePartKind>>,
+	pub(crate) colored_icosahedron: Mutex<PartTable<ColoredIcosahedronPartKind>>,
 	// NOTE: Added tables should also be handled in `PartTables::part_tables_for_rendering` and
 	// in `PartTables::cup_to_gpu_update_if_required`.
 }
@@ -137,9 +136,11 @@ pub(crate) struct PartTablesForRendering {
 impl PartTables {
 	pub(crate) fn new(device: &wgpu::Device) -> PartTables {
 		PartTables {
-			textured_cubes: textured_cube::textured_cube_part_table(device),
-			colored_cubes: colored_cube::colored_cube_part_table(device),
-			colored_icosahedron: colored_icosahedron::colored_icosahedron_part_table(device),
+			textured_cubes: Mutex::new(textured_cube::textured_cube_part_table(device)),
+			colored_cubes: Mutex::new(colored_cube::colored_cube_part_table(device)),
+			colored_icosahedron: Mutex::new(colored_icosahedron::colored_icosahedron_part_table(
+				device,
+			)),
 		}
 	}
 
@@ -148,18 +149,18 @@ impl PartTables {
 		device: &wgpu::Device,
 		queue: &wgpu::Queue,
 	) {
-		self.textured_cubes.cup_to_gpu_update_if_required(device, queue);
-		self.colored_cubes.cup_to_gpu_update_if_required(device, queue);
-		self.colored_icosahedron.cup_to_gpu_update_if_required(device, queue);
+		self.textured_cubes.lock().unwrap().cup_to_gpu_update_if_required(device, queue);
+		self.colored_cubes.lock().unwrap().cup_to_gpu_update_if_required(device, queue);
+		self.colored_icosahedron.lock().unwrap().cup_to_gpu_update_if_required(device, queue);
 	}
 
 	/// Returns what is needed to render the part tables, in a shared way.
 	pub(crate) fn part_tables_for_rendering(&self) -> PartTablesForRendering {
 		PartTablesForRendering {
-			textured: [self.textured_cubes.get_data_for_rendering()],
+			textured: [self.textured_cubes.lock().unwrap().get_data_for_rendering()],
 			colored: [
-				self.colored_cubes.get_data_for_rendering(),
-				self.colored_icosahedron.get_data_for_rendering(),
+				self.colored_cubes.lock().unwrap().get_data_for_rendering(),
+				self.colored_icosahedron.lock().unwrap().get_data_for_rendering(),
 			],
 		}
 	}
@@ -306,6 +307,10 @@ pub(crate) struct TextureMappingAndColoringTable {
 	next_offset: u32,
 }
 
+pub(crate) struct TextureMappingAndColoringTableRwLock(
+	pub(crate) RwLock<TextureMappingAndColoringTable>,
+);
+
 #[derive(Hash, PartialEq, Eq)]
 enum WhichTextureMappingOrColoring {
 	BlockTextureMapping(BlockTypeId),
@@ -336,112 +341,131 @@ impl TextureMappingAndColoringTable {
 			next_offset: 0,
 		}
 	}
+}
 
+impl TextureMappingAndColoringTableRwLock {
 	/// Get an offset in the array of texture mappings, specifically for a textured cube part,
 	/// and with the textures of a block. The resulting offset may be given to an instance of
 	/// the textured cube model. If the requested texture mapping is not in the table, it is added.
 	/// Returns `None` if given a `block_type_id` that does not correspond to a solid block.
 	pub(crate) fn get_offset_of_block(
-		&mut self,
+		&self,
 		block_type_id: BlockTypeId,
 		block_type_table: &Arc<BlockTypeTable>,
 		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> Option<CubeTextureMappingOffset> {
-		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::BlockTextureMapping(
-			block_type_id,
-		));
-		match entry {
-			Entry::Occupied(occupied) => Some(CubeTextureMappingOffset(*occupied.get())),
-			Entry::Vacant(vacant) => {
-				let texture_coords_on_atlas = match block_type_table.get(block_type_id)? {
-					BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
-					_ => return None,
-				};
-				let mappings = textured_cube::texture_mappings_for_cube(texture_coords_on_atlas);
-				let data = bytemuck::cast_slice(&mappings);
-				let data_offset = self.next_offset_in_buffer_in_bytes;
-				queue.write_buffer(
-					&texturing_and_coloring_array_thingy.resource,
-					data_offset as u64,
-					data,
-				);
-				self.next_offset_in_buffer_in_bytes += data.len() as u32;
-				let offset = self.next_offset;
-				let length_of_the_mapping_for_one_vertex = 2;
-				self.next_offset += mappings.len() as u32 * length_of_the_mapping_for_one_vertex;
-				vacant.insert(offset);
-				Some(CubeTextureMappingOffset(offset))
-			},
+		let which_mapping = WhichTextureMappingOrColoring::BlockTextureMapping(block_type_id);
+		{
+			let read = self.0.read().unwrap();
+			let offset = read.map_to_offset.get(&which_mapping);
+			if let Some(offset) = offset {
+				return Some(CubeTextureMappingOffset(*offset));
+			}
 		}
+		// Not found, we have to write it in.
+		let texture_coords_on_atlas = match block_type_table.get(block_type_id)? {
+			BlockType::Solid { texture_coords_on_atlas } => *texture_coords_on_atlas,
+			_ => return None,
+		};
+		let mappings = textured_cube::texture_mappings_for_cube(texture_coords_on_atlas);
+		let data = bytemuck::cast_slice(&mappings);
+		let (data_offset, offset) = {
+			let mut write = self.0.write().unwrap();
+			let data_offset = write.next_offset_in_buffer_in_bytes;
+			write.next_offset_in_buffer_in_bytes += data.len() as u32;
+			let offset = write.next_offset;
+			let length_of_the_mapping_for_one_vertex = 2;
+			write.next_offset += mappings.len() as u32 * length_of_the_mapping_for_one_vertex;
+			write.map_to_offset.insert(which_mapping, offset);
+			(data_offset, offset)
+		};
+		queue.write_buffer(
+			&texturing_and_coloring_array_thingy.resource,
+			data_offset as u64,
+			data,
+		);
+		Some(CubeTextureMappingOffset(offset))
 	}
 
 	/// Get an offset in the array of colorings, specifically for a colored cube part.
 	/// The resulting offset may be given to an instance of the colored cube model.
 	/// If the requested coloring is not in the table, it is added.
 	pub(crate) fn get_offset_of_cube_coloring_uni(
-		&mut self,
+		&self,
 		color: [u8; 3],
 		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> CubeColoringOffset {
-		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::CubeColoringUni(color));
-		match entry {
-			Entry::Occupied(occupied) => CubeColoringOffset(*occupied.get()),
-			Entry::Vacant(vacant) => {
-				let coloring = colored_cube::unicolor_for_cube(cgmath::vec3(
-					color[0] as f32 / 255.0,
-					color[1] as f32 / 255.0,
-					color[2] as f32 / 255.0,
-				));
-				let data = bytemuck::cast_slice(&coloring);
-				let data_offset = self.next_offset_in_buffer_in_bytes;
-				queue.write_buffer(
-					&texturing_and_coloring_array_thingy.resource,
-					data_offset as u64,
-					data,
-				);
-				self.next_offset_in_buffer_in_bytes += data.len() as u32;
-				let offset = self.next_offset;
-				let length_of_the_coloring_for_one_vertex = 3;
-				self.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
-				vacant.insert(offset);
-				CubeColoringOffset(offset)
-			},
+		let which_mapping = WhichTextureMappingOrColoring::CubeColoringUni(color);
+		{
+			let read = self.0.read().unwrap();
+			let offset = read.map_to_offset.get(&which_mapping);
+			if let Some(offset) = offset {
+				return CubeColoringOffset(*offset);
+			}
 		}
+		// Not found, we have to write it in.
+		let coloring = colored_cube::unicolor_for_cube(cgmath::vec3(
+			color[0] as f32 / 255.0,
+			color[1] as f32 / 255.0,
+			color[2] as f32 / 255.0,
+		));
+		let data = bytemuck::cast_slice(&coloring);
+		let (data_offset, offset) = {
+			let mut write = self.0.write().unwrap();
+			let data_offset = write.next_offset_in_buffer_in_bytes;
+			write.next_offset_in_buffer_in_bytes += data.len() as u32;
+			let offset = write.next_offset;
+			let length_of_the_coloring_for_one_vertex = 3;
+			write.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
+			write.map_to_offset.insert(which_mapping, offset);
+			(data_offset, offset)
+		};
+		queue.write_buffer(
+			&texturing_and_coloring_array_thingy.resource,
+			data_offset as u64,
+			data,
+		);
+		CubeColoringOffset(offset)
 	}
 
 	/// Get an offset in the array of colorings, specifically for a colored icosahedron part.
 	/// The resulting offset may be given to an instance of the colored icosahedron model.
 	/// If the requested coloring is not in the table, it is added.
 	pub(crate) fn get_offset_of_icosahedron_coloring(
-		&mut self,
+		&self,
 		which_coloring: WhichIcosahedronColoring,
 		texturing_and_coloring_array_thingy: &BindingThingy<wgpu::Buffer>,
 		queue: &wgpu::Queue,
 	) -> IcosahedrongColoringOffset {
-		let entry = self.map_to_offset.entry(WhichTextureMappingOrColoring::IcosahedronColoring(
-			which_coloring,
-		));
-		match entry {
-			Entry::Occupied(occupied) => IcosahedrongColoringOffset(*occupied.get()),
-			Entry::Vacant(vacant) => {
-				let coloring = colored_icosahedron::coloring_for_icosahedron();
-				let data = bytemuck::cast_slice(&coloring);
-				let data_offset = self.next_offset_in_buffer_in_bytes;
-				queue.write_buffer(
-					&texturing_and_coloring_array_thingy.resource,
-					data_offset as u64,
-					data,
-				);
-				self.next_offset_in_buffer_in_bytes += data.len() as u32;
-				let offset = self.next_offset;
-				let length_of_the_coloring_for_one_vertex = 3;
-				self.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
-				vacant.insert(offset);
-				IcosahedrongColoringOffset(offset)
-			},
+		let which_mapping = WhichTextureMappingOrColoring::IcosahedronColoring(which_coloring);
+		{
+			let read = self.0.read().unwrap();
+			let offset = read.map_to_offset.get(&which_mapping);
+			if let Some(offset) = offset {
+				return IcosahedrongColoringOffset(*offset);
+			}
 		}
+		// Not found, we have to write it in.
+		let coloring = colored_icosahedron::coloring_for_icosahedron();
+		let data = bytemuck::cast_slice(&coloring);
+		let (data_offset, offset) = {
+			let mut write = self.0.write().unwrap();
+			let data_offset = write.next_offset_in_buffer_in_bytes;
+			write.next_offset_in_buffer_in_bytes += data.len() as u32;
+			let offset = write.next_offset;
+			let length_of_the_coloring_for_one_vertex = 3;
+			write.next_offset += coloring.len() as u32 * length_of_the_coloring_for_one_vertex;
+			write.map_to_offset.insert(which_mapping, offset);
+			(data_offset, offset)
+		};
+		queue.write_buffer(
+			&texturing_and_coloring_array_thingy.resource,
+			data_offset as u64,
+			data,
+		);
+		IcosahedrongColoringOffset(offset)
 	}
 }
 

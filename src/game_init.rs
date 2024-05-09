@@ -2,7 +2,7 @@ use std::{
 	collections::HashMap,
 	f32::consts::TAU,
 	io::{Read, Write},
-	sync::{atomic::AtomicI32, Arc},
+	sync::{atomic::AtomicI32, Arc, RwLock},
 	time::Duration,
 };
 
@@ -12,12 +12,15 @@ use crate::{
 	camera::{CameraOrthographicSettings, CameraPerspectiveSettings},
 	chunk_blocks::Block,
 	chunk_loading::LoadingManager,
-	chunks::ChunkGrid,
+	chunks::{ChunkGrid, ChunkGridShareable},
 	cmdline,
 	commands::{self, Action, Control, ControlEvent},
 	coords::{AlignedBox, AngularDirection, ChunkCoords, ChunkDimensions, OrientedFaceCoords},
 	entities::{IdGenerator, IdGeneratorState},
-	entity_parts::{PartTables, TextureMappingAndColoringTable},
+	entity_parts::{
+		PartTables, PartTablesForRendering, TextureMappingAndColoringTable,
+		TextureMappingAndColoringTableRwLock,
+	},
 	font::{self, Font},
 	interface::Interface,
 	lang,
@@ -70,7 +73,11 @@ pub(crate) fn save_savable_state(game: &Game) {
 		world_gen_seed: game.world_gen_seed,
 		which_world_generator: game.which_world_generator,
 		only_save_modified_chunks: game.only_save_modified_chunks,
-		set_of_already_generated_chunks: game.chunk_grid.set_of_already_generated_chunks().clone(),
+		set_of_already_generated_chunks: game
+			.chunk_grid_shareable
+			.get()
+			.set_of_already_generated_chunks()
+			.clone(),
 		player_pos: game.player_phys.aligned_box().pos.into(),
 		player_angular_direction: game.camera_direction.into(),
 		world_time: game.world_time,
@@ -95,7 +102,7 @@ pub(crate) struct Game {
 	pub(crate) window: Arc<winit::window::Window>,
 	pub(crate) window_surface: wgpu::Surface<'static>,
 	pub(crate) device: Arc<wgpu::Device>,
-	pub(crate) queue: wgpu::Queue,
+	pub(crate) queue: Arc<wgpu::Queue>,
 	pub(crate) window_surface_config: wgpu::SurfaceConfiguration,
 	pub(crate) aspect_ratio_thingy: BindingThingy<wgpu::Buffer>,
 	pub(crate) z_buffer_view: wgpu::TextureView,
@@ -113,7 +120,7 @@ pub(crate) struct Game {
 	pub(crate) player_phys: AlignedPhysBox,
 	pub(crate) player_jump_manager: PlayerJumpManager,
 	pub(crate) cd: ChunkDimensions,
-	pub(crate) chunk_grid: ChunkGrid,
+	pub(crate) chunk_grid_shareable: ChunkGridShareable,
 	pub(crate) loading_manager: LoadingManager,
 	pub(crate) controls_to_trigger: Vec<ControlEvent>,
 	pub(crate) control_bindings: HashMap<Control, Action>,
@@ -143,9 +150,10 @@ pub(crate) struct Game {
 	pub(crate) only_save_modified_chunks: bool,
 	pub(crate) max_fps: Option<i32>,
 	pub(crate) no_vsync: bool,
-	pub(crate) part_tables: PartTables,
-	pub(crate) texturing_and_coloring_array_thingy: BindingThingy<wgpu::Buffer>,
-	pub(crate) texture_mapping_table: TextureMappingAndColoringTable,
+	pub(crate) part_tables: Arc<PartTables>,
+	pub(crate) part_tables_for_rendering: PartTablesForRendering,
+	pub(crate) texturing_and_coloring_array_thingy: Arc<BindingThingy<wgpu::Buffer>>,
+	pub(crate) texture_mapping_table: Arc<TextureMappingAndColoringTableRwLock>,
 	pub(crate) player_held_block: Option<Block>,
 	pub(crate) world_time: Duration,
 	pub(crate) playing_mode: PlayingMode,
@@ -278,6 +286,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 	})
 	.unwrap();
 	let device = Arc::new(device);
+	let queue = Arc::new(queue);
 
 	let surface_capabilities = window_surface.get_capabilities(&adapter);
 	let surface_format = surface_capabilities
@@ -485,7 +494,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		// TODO: Avoid cloning here.
 		state.set_of_already_generated_chunks.clone()
 	});
-	let chunk_grid = ChunkGrid::new(cd, already_generated_set);
+	let chunk_grid_shareable = ChunkGridShareable::new(ChunkGrid::new(cd, already_generated_set));
 
 	let margin_before_unloading = 60.0;
 	let loading_manager = LoadingManager::new(loading_distance, margin_before_unloading);
@@ -578,11 +587,14 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		face_counter
 	});
 
-	let part_tables = PartTables::new(&device);
+	let part_tables = Arc::new(PartTables::new(&device));
+	let part_tables_for_rendering = part_tables.part_tables_for_rendering();
 
 	let texturing_and_coloring_array_thingy =
-		init_texturing_and_coloring_array_thingy(Arc::clone(&device));
-	let texture_mapping_table = TextureMappingAndColoringTable::new();
+		Arc::new(init_texturing_and_coloring_array_thingy(&device));
+	let texture_mapping_table = Arc::new(TextureMappingAndColoringTableRwLock(RwLock::new(
+		TextureMappingAndColoringTable::new(),
+	)));
 
 	let rendering = rendering_init::init_rendering_stuff(
 		Arc::clone(&device),
@@ -711,7 +723,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		player_phys,
 		player_jump_manager,
 		cd,
-		chunk_grid,
+		chunk_grid_shareable,
 		loading_manager,
 		controls_to_trigger,
 		control_bindings,
@@ -742,6 +754,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		max_fps,
 		no_vsync,
 		part_tables,
+		part_tables_for_rendering,
 		texturing_and_coloring_array_thingy,
 		texture_mapping_table,
 		player_held_block,

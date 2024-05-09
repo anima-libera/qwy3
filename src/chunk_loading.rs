@@ -5,10 +5,10 @@ use rand::Rng;
 
 use crate::{
 	block_types::BlockTypeTable,
-	chunk_blocks::{ChunkBlocks, ChunkCullingInfo, FaceCullingInfo},
+	chunk_blocks::{ChunkCullingInfo, FaceCullingInfo},
 	chunks::ChunkGrid,
-	coords::{iter_3d_cube_center_radius, ChunkCoords, ChunkDimensions, OrientedAxis},
-	entities::{ChunkEntities, IdGenerator},
+	coords::{ChunkCoords, ChunkDimensions, OrientedAxis},
+	entities::IdGenerator,
 	saves::Save,
 	tasks::WorkerTasksManager,
 	threadpool::ThreadPool,
@@ -165,22 +165,8 @@ impl LoadingManager {
 	pub(crate) fn handle_chunk_loading_results(
 		&mut self,
 		chunk_coords: ChunkCoords,
-		chunk_blocks: ChunkBlocks,
 		chunk_culling_info: ChunkCullingInfo,
-		chunk_entities: Option<ChunkEntities>,
-		chunk_grid: &mut ChunkGrid,
 	) {
-		chunk_grid.add_chunk_loading_results(
-			chunk_coords,
-			chunk_blocks,
-			chunk_culling_info.clone(),
-			chunk_entities,
-		);
-
-		for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-			chunk_grid.require_remeshing(neighbor_chunk_coords);
-		}
-
 		// Propagate the front.
 		// The whole point of having a front is that it does not propagate through fully opaque
 		// chunk faces and it propagates with lower priority through fully empty chunk faces.

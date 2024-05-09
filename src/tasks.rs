@@ -1,12 +1,19 @@
-use std::sync::{atomic::AtomicI32, Arc};
+use std::{
+	collections::HashMap,
+	sync::{atomic::AtomicI32, Arc},
+};
+
+use fxhash::FxHashMap;
 
 use crate::{
 	atlas::Atlas,
+	block_types::BlockTypeTable,
 	chunk_blocks::{ChunkBlocks, ChunkCullingInfo},
 	chunk_loading::DataForChunkLoading,
 	chunk_meshing::{ChunkMesh, DataForChunkMeshing},
-	coords::{ChunkCoords, ChunkCoordsSpan},
-	entities::{ChunkEntities, IdGenerator},
+	chunks::ChunkGrid,
+	coords::{ChunkCoords, ChunkCoordsSpan, ChunkDimensions},
+	entities::{ChunkEntities, EntitiesPhysicsStepResult, ForPartManipulation, IdGenerator},
 	skybox::SkyboxFaces,
 	threadpool::ThreadPool,
 };
@@ -18,6 +25,7 @@ pub(crate) enum WorkerTask {
 		std::sync::mpsc::Receiver<(ChunkBlocks, ChunkCullingInfo, Option<ChunkEntities>)>,
 	),
 	MeshChunk(ChunkCoords, std::sync::mpsc::Receiver<Option<ChunkMesh>>),
+	PhysicsStepOnSomeEntities(std::sync::mpsc::Receiver<EntitiesPhysicsStepResult>),
 	/// The counter at the end is the number of faces already finished.
 	PaintNewSkybox(std::sync::mpsc::Receiver<SkyboxFaces>, Arc<AtomicI32>),
 	GenerateAtlas(std::sync::mpsc::Receiver<Atlas>),
@@ -171,5 +179,44 @@ impl WorkerTasksManager {
 		self
 			.how_many_workers_available(pool)
 			.saturating_sub(self.number_of_workers_that_cannot_do_loading)
+	}
+
+	#[allow(clippy::too_many_arguments)]
+	pub(crate) fn run_physics_step_on_some_entities(
+		&mut self,
+		pool: &mut ThreadPool,
+		chunk_coords_list: Vec<ChunkCoords>,
+		cd: ChunkDimensions,
+		chunk_grid: &Arc<ChunkGrid>,
+		block_type_table: &Arc<BlockTypeTable>,
+		dt: std::time::Duration,
+		part_manipulation: ForPartManipulation,
+		id_generator: &Arc<IdGenerator>,
+	) {
+		let (sender, receiver) = std::sync::mpsc::channel();
+		self.current_tasks.push(WorkerTask::PhysicsStepOnSomeEntities(receiver));
+		let chunk_grid = Arc::clone(chunk_grid);
+		let block_type_table = Arc::clone(block_type_table);
+		let id_generator = Arc::clone(id_generator);
+		pool.enqueue_task(Box::new(move || {
+			let mut next_entities_map: FxHashMap<ChunkCoords, ChunkEntities> = HashMap::default();
+			let mut actions_on_world = vec![];
+			for chunk_coords in chunk_coords_list.into_iter() {
+				ChunkEntities::apply_one_physics_step(
+					chunk_coords,
+					cd,
+					&mut next_entities_map,
+					&chunk_grid,
+					&mut actions_on_world,
+					&block_type_table,
+					dt,
+					&part_manipulation,
+					&id_generator,
+				);
+			}
+			let entities_physics_step_result =
+				EntitiesPhysicsStepResult { next_entities_map, actions_on_world };
+			let _ = sender.send(entities_physics_step_result);
+		}));
 	}
 }

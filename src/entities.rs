@@ -25,7 +25,7 @@ use crate::{
 		colored_cube::{ColoredCubePartKind, PartColoredCubeInstanceData},
 		colored_icosahedron::{ColoredIcosahedronPartKind, PartColoredIcosahedronInstanceData},
 		textured_cube::{PartTexturedCubeInstanceData, TexturedCubePartKind},
-		PartHandler, PartInstance, PartTables, TextureMappingAndColoringTable,
+		PartHandler, PartInstance, PartTables, TextureMappingAndColoringTableRwLock,
 		WhichIcosahedronColoring,
 	},
 	physics::AlignedPhysBox,
@@ -181,7 +181,7 @@ impl Entity {
 		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-		part_manipulation: &mut ForPartManipulation,
+		part_manipulation: &ForPartManipulation,
 		id_generator: &IdGenerator,
 	) {
 		match self.typed {
@@ -236,21 +236,24 @@ impl Entity {
 				// Manage the part.
 				let pos = next_block.pos();
 				if let EntityTyped::Block { block, part, .. } = &mut next_block.typed {
-					part.ensure_is_allocated(&mut part_manipulation.part_tables.textured_cubes, || {
-						let texture_mapping_offset = part_manipulation
-							.texture_mapping_and_coloring_table
-							.get_offset_of_block(
-								block.type_id,
-								block_type_table,
-								part_manipulation.texturing_and_coloring_array_thingy,
-								part_manipulation.queue,
-							)
-							.unwrap();
-						PartTexturedCubeInstanceData::new(pos, texture_mapping_offset).into_pod()
-					});
+					part.ensure_is_allocated(
+						&mut part_manipulation.part_tables.textured_cubes.lock().unwrap(),
+						|| {
+							let texture_mapping_offset = part_manipulation
+								.texture_mapping_and_coloring_table
+								.get_offset_of_block(
+									block.type_id,
+									block_type_table,
+									&part_manipulation.texturing_and_coloring_array_thingy,
+									&part_manipulation.queue,
+								)
+								.unwrap();
+							PartTexturedCubeInstanceData::new(pos, texture_mapping_offset).into_pod()
+						},
+					);
 
 					part.modify_instance(
-						&mut part_manipulation.part_tables.textured_cubes,
+						&mut part_manipulation.part_tables.textured_cubes.lock().unwrap(),
 						|instance| {
 							instance
 								.set_model_matrix(&cgmath::Matrix4::<f32>::from_translation(pos.to_vec()));
@@ -259,7 +262,7 @@ impl Entity {
 				}
 
 				if delete_self {
-					next_block.handle_unloading_or_deletion(part_manipulation.part_tables);
+					next_block.handle_unloading_or_deletion(&part_manipulation.part_tables);
 				} else {
 					entities_for_next_step.push(next_block);
 				}
@@ -373,20 +376,20 @@ impl Entity {
 				} = &mut next_ball.typed
 				{
 					ball_part.ensure_is_allocated(
-						&mut part_manipulation.part_tables.colored_icosahedron,
+						&mut part_manipulation.part_tables.colored_icosahedron.lock().unwrap(),
 						|| {
 							let coloring_offset = part_manipulation
 								.texture_mapping_and_coloring_table
 								.get_offset_of_icosahedron_coloring(
 									WhichIcosahedronColoring::Test,
-									part_manipulation.texturing_and_coloring_array_thingy,
-									part_manipulation.queue,
+									&part_manipulation.texturing_and_coloring_array_thingy,
+									&part_manipulation.queue,
 								);
 							PartColoredIcosahedronInstanceData::new(pos, coloring_offset).into_pod()
 						},
 					);
 					ball_part.modify_instance(
-						&mut part_manipulation.part_tables.colored_icosahedron,
+						&mut part_manipulation.part_tables.colored_icosahedron.lock().unwrap(),
 						|instance| {
 							instance.set_model_matrix(
 								&(cgmath::Matrix4::<f32>::from_translation(pos.to_vec())
@@ -406,20 +409,20 @@ impl Entity {
 						let left_or_right_offset =
 							leftward_direction * 0.1 * (left_or_right as f32 * 2.0 - 1.0);
 						part.ensure_is_allocated(
-							&mut part_manipulation.part_tables.colored_cubes,
+							&mut part_manipulation.part_tables.colored_cubes.lock().unwrap(),
 							|| {
 								let coloring_offset = part_manipulation
 									.texture_mapping_and_coloring_table
 									.get_offset_of_cube_coloring_uni(
 										[20, 20, 50],
-										part_manipulation.texturing_and_coloring_array_thingy,
-										part_manipulation.queue,
+										&part_manipulation.texturing_and_coloring_array_thingy,
+										&part_manipulation.queue,
 									);
 								PartColoredCubeInstanceData::new(pos, coloring_offset).into_pod()
 							},
 						);
 						part.modify_instance(
-							&mut part_manipulation.part_tables.colored_cubes,
+							&mut part_manipulation.part_tables.colored_cubes.lock().unwrap(),
 							|instance| {
 								instance.set_model_matrix(
 									&(cgmath::Matrix4::<f32>::from_translation(
@@ -444,29 +447,31 @@ impl Entity {
 	///
 	/// The entity parts should be deleted here (or they will "leak" and remain
 	/// visible and unmoving where they are until the game is closed).
-	fn handle_unloading_or_deletion(&self, part_tables: &mut PartTables) {
+	fn handle_unloading_or_deletion(&self, part_tables: &PartTables) {
 		match &self.typed {
 			EntityTyped::Block { part, .. } => {
-				part.delete(&mut part_tables.textured_cubes);
+				part.delete(&mut part_tables.textured_cubes.lock().unwrap());
 			},
 			EntityTyped::TestBall { ball_part, left_eye_part, right_eye_part, .. } => {
-				ball_part.delete(&mut part_tables.colored_icosahedron);
-				left_eye_part.delete(&mut part_tables.colored_cubes);
-				right_eye_part.delete(&mut part_tables.colored_cubes);
+				ball_part.delete(&mut part_tables.colored_icosahedron.lock().unwrap());
+				left_eye_part.delete(&mut part_tables.colored_cubes.lock().unwrap());
+				right_eye_part.delete(&mut part_tables.colored_cubes.lock().unwrap());
 			},
 		}
 	}
 }
 
 /// All that is needed for entities to be able to manipulate their parts.
-pub(crate) struct ForPartManipulation<'a> {
-	pub(crate) part_tables: &'a mut PartTables,
-	pub(crate) texture_mapping_and_coloring_table: &'a mut TextureMappingAndColoringTable,
-	pub(crate) texturing_and_coloring_array_thingy: &'a BindingThingy<wgpu::Buffer>,
-	pub(crate) queue: &'a wgpu::Queue,
+pub(crate) struct ForPartManipulation {
+	// TODO: Mutex many smaller parts instead to allow for more concurrency.
+	pub(crate) part_tables: Arc<PartTables>,
+	pub(crate) texture_mapping_and_coloring_table: Arc<TextureMappingAndColoringTableRwLock>,
+	pub(crate) texturing_and_coloring_array_thingy: Arc<BindingThingy<wgpu::Buffer>>,
+	pub(crate) queue: Arc<wgpu::Queue>,
 }
 
 /// The entities of a chunk.
+#[derive(Clone)]
 pub(crate) struct ChunkEntities {
 	pub(crate) coords_span: ChunkCoordsSpan,
 	savable: ChunkEntitiesSavable,
@@ -498,7 +503,7 @@ impl ChunkEntities {
 		);
 		if self.count_entities() < other.count_entities() {
 			// We make sure that `other` has the smaller vec, that will require moving fewer entities.
-			std::mem::swap(self, &mut other);
+			std::mem::swap(&mut self.savable.entities, &mut other.savable.entities);
 		}
 		self.savable.entities.append(&mut other.savable.entities);
 	}
@@ -536,19 +541,18 @@ impl ChunkEntities {
 
 	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn apply_one_physics_step(
-		chunk_span: ChunkCoordsSpan,
-		entities_map: &FxHashMap<ChunkCoords, ChunkEntities>,
+		chunk_coords: ChunkCoords,
+		cd: ChunkDimensions,
 		next_entities_map: &mut FxHashMap<ChunkCoords, ChunkEntities>,
 		chunk_grid: &ChunkGrid,
 		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
 		dt: std::time::Duration,
-		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
-		part_manipulation: &mut ForPartManipulation,
+		part_manipulation: &ForPartManipulation,
 		id_generator: &IdGenerator,
 	) {
 		let mut entities_for_next_step = vec![];
-		for entity in entities_map.get(&chunk_span.chunk_coords).unwrap().savable.entities.iter() {
+		for entity in chunk_grid.get_chunk_entities(chunk_coords).unwrap().savable.entities.iter() {
 			entity.apply_one_physics_step(
 				&mut entities_for_next_step,
 				chunk_grid,
@@ -559,43 +563,20 @@ impl ChunkEntities {
 				id_generator,
 			);
 		}
-		next_entities_map
-			.entry(chunk_span.chunk_coords)
-			.or_insert(ChunkEntities::new_empty(chunk_span))
-			.recieve_entities_for_next_step(entities_for_next_step, changes_of_chunk);
-		if let Entry::Occupied(occupied) = next_entities_map.entry(chunk_span.chunk_coords) {
-			if occupied.get().count_entities() == 0 {
-				// The chunk is devoid of entities, it doesn't need a `ChunkEntities` anymore.
-				occupied.remove();
-			}
-		}
-	}
-
-	fn recieve_entities_for_next_step(
-		&mut self,
-		entities_for_next_step: Vec<Entity>,
-		changes_of_chunk: &mut Vec<ChunkEntitiesPhysicsStepChangeOfChunk>,
-	) {
-		// Using `extract_if` would be ideal here, however it is not stable yet at the time, see
-		// https://github.com/rust-lang/rust/issues/43244 for `extract_if` stabilization status.
-		// TODO: Wait faster for the stabilization of `extract_if` and then use it.
-		for entity in entities_for_next_step.into_iter() {
-			let entity_chunk_coords = entity.chunk_coords(self.coords_span.cd);
-			if entity_chunk_coords != self.coords_span.chunk_coords {
-				// The entity moved out of this chunk and is sent away into transit
-				// in order to be transfered to its new chunk.
-				changes_of_chunk.push(ChunkEntitiesPhysicsStepChangeOfChunk {
-					new_chunk: entity_chunk_coords,
-					entity,
-				});
-			} else {
-				self.add_entity(entity);
-			}
+		for entity in entities_for_next_step {
+			let chunk_coords = entity.chunk_coords(cd);
+			next_entities_map
+				.entry(chunk_coords)
+				.or_insert(ChunkEntities::new_empty(ChunkCoordsSpan {
+					cd,
+					chunk_coords,
+				}))
+				.add_entity(entity);
 		}
 	}
 
 	/// Tells the entities that they are being unloaded.
-	pub(crate) fn handle_unloading(self, part_tables: &mut PartTables) {
+	pub(crate) fn handle_unloading(self, part_tables: &PartTables) {
 		for entity in self.savable.entities.into_iter() {
 			entity.handle_unloading_or_deletion(part_tables);
 		}
@@ -638,14 +619,71 @@ impl ChunkEntities {
 	}
 }
 
-/// Entity in transit to a new chunk.
-///
-/// If an entity moves out of its chunk during its physics step, then it must be transfered
-/// to its new chunk. This transfer is done in two steps: first the entity is taken out of the
-/// chunk it exited and is put in a `ChunkEntitiesPhysicsStepChangeOfChunk`, alongside the coords
-/// of its new chunk. Then, after all the entites have had their physics step, the entities in
-/// transit are placed in their new chunk.
-pub(crate) struct ChunkEntitiesPhysicsStepChangeOfChunk {
-	pub(crate) entity: Entity,
-	pub(crate) new_chunk: ChunkCoords,
+pub(crate) struct EntitiesPhysicsStepResult {
+	pub(crate) next_entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
+	pub(crate) actions_on_world: Vec<ActionOnWorld>,
+}
+
+pub(crate) struct EntitiesPhysicsStepCollector {
+	number_of_tasks_not_yet_completed: u32,
+	/// The `ChunkEntities` that were not run and that are to be transfered from the old map
+	/// to the next so that we do not lose the entities in them.
+	chunk_entities_to_preserve: Vec<ChunkCoords>,
+	next_entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
+	actions_on_world: Vec<ActionOnWorld>,
+}
+
+impl EntitiesPhysicsStepCollector {
+	pub(crate) fn new(
+		number_of_tasks_not_yet_completed: u32,
+		chunk_entities_to_preserve: Vec<ChunkCoords>,
+		next_entities_map: FxHashMap<ChunkCoords, ChunkEntities>,
+		actions_on_world: Vec<ActionOnWorld>,
+	) -> EntitiesPhysicsStepCollector {
+		EntitiesPhysicsStepCollector {
+			number_of_tasks_not_yet_completed,
+			chunk_entities_to_preserve,
+			next_entities_map,
+			actions_on_world,
+		}
+	}
+
+	pub(crate) fn collect_a_task_result(&mut self, mut task_result: EntitiesPhysicsStepResult) {
+		for (chunk_coords, chunk_entities) in task_result.next_entities_map.into_iter() {
+			match self.next_entities_map.entry(chunk_coords) {
+				Entry::Vacant(vacant) => {
+					vacant.insert(chunk_entities);
+				},
+				Entry::Occupied(mut occupied) => {
+					occupied.get_mut().merge_to(chunk_entities);
+				},
+			}
+		}
+		self.actions_on_world.append(&mut task_result.actions_on_world);
+		assert!(self.number_of_tasks_not_yet_completed >= 1);
+		self.number_of_tasks_not_yet_completed -= 1;
+	}
+
+	pub(crate) fn add_an_action_on_world(&mut self, action_on_world: ActionOnWorld) {
+		self.actions_on_world.push(action_on_world);
+	}
+
+	pub(crate) fn is_complete(&self) -> bool {
+		self.number_of_tasks_not_yet_completed == 0
+	}
+
+	pub(crate) fn into_complete_result(
+		self,
+	) -> (
+		FxHashMap<ChunkCoords, ChunkEntities>,
+		Vec<ActionOnWorld>,
+		Vec<ChunkCoords>,
+	) {
+		assert_eq!(self.number_of_tasks_not_yet_completed, 0);
+		(
+			self.next_entities_map,
+			self.actions_on_world,
+			self.chunk_entities_to_preserve,
+		)
+	}
 }

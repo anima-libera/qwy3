@@ -1,9 +1,10 @@
-use std::f32::consts::TAU;
+use std::{f32::consts::TAU, sync::Arc};
 
 use crate::{
 	atlas::RectInAtlas,
 	camera::{aspect_ratio, CameraSettings},
 	chunk_blocks::{Block, BlockData},
+	chunks::ActionOnWorld,
 	commands::{Action, Control, ControlEvent},
 	coords::{
 		iter_3d_cube_center_radius, AlignedBox, AxisOrientation, BlockCoords, ChunkCoordsSpan,
@@ -254,6 +255,8 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 						dbg!(player_bottom);
 					},
 					(Action::PlaceOrRemoveBlockUnderPlayer, true) => {
+						todo!("fix with an `ActionOnWorld`");
+						/*
 						if game.playing_mode == PlayingMode::Free {
 							let player_bottom = game.player_phys.aligned_box().pos
 								- cgmath::Vector3::<f32>::unit_z()
@@ -272,6 +275,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 								);
 							}
 						}
+						*/
 					},
 					(Action::PlaceBlockAtTarget, true) => {
 						if let Some(targeted_face) = game.targeted_face.as_ref() {
@@ -282,9 +286,13 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 								})
 							});
 							if let Some(block_to_place) = block_to_place {
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									targeted_face.exterior_coords(),
-									block_to_place,
+								game.chunk_grid_shareable.perform_now_or_later(
+									ActionOnWorld::PlaceBlockAndMaybeLoseWhatWasThereBefore {
+										block: block_to_place,
+										coords: targeted_face.exterior_coords(),
+									},
+									game.save.as_ref(),
+									&game.id_generator,
 								);
 							}
 						}
@@ -293,32 +301,42 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 						if let Some(targeted_face) = game.targeted_face.as_ref() {
 							let block_to_place_back = game.player_held_block.take();
 							if let Some(block_to_place_back) = block_to_place_back {
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									targeted_face.exterior_coords(),
-									block_to_place_back,
+								game.chunk_grid_shareable.perform_now_or_later(
+									ActionOnWorld::PlaceBlockAndMaybeLoseWhatWasThereBefore {
+										block: block_to_place_back,
+										coords: targeted_face.exterior_coords(),
+									},
+									game.save.as_ref(),
+									&game.id_generator,
 								);
 							} else {
 								let broken_block = game
-									.chunk_grid
+									.chunk_grid_shareable
+									.get()
 									.get_block(targeted_face.interior_coords)
 									.unwrap()
 									.as_owned_block();
-								game.chunk_grid.set_block_and_request_updates_to_meshes(
-									targeted_face.interior_coords,
-									game.block_type_table.air_id().into(),
+								game.chunk_grid_shareable.perform_now_or_later(
+									ActionOnWorld::PlaceBlockAndMaybeLoseWhatWasThereBefore {
+										block: game.block_type_table.air_id().into(),
+										coords: targeted_face.interior_coords,
+									},
+									game.save.as_ref(),
+									&game.id_generator,
 								);
 								game.player_held_block = Some(broken_block);
 							}
 						} else if let Some(block_to_throw) = game.player_held_block.take() {
 							let motion = game.camera_direction.to_vec3() * 0.5;
-							game.chunk_grid.add_entity(
-								Entity::new_block(
+							game.chunk_grid_shareable.perform_now_or_later(
+								ActionOnWorld::AddEntity(Entity::new_block(
 									&game.id_generator,
 									block_to_throw,
 									game.player_phys.aligned_box().pos,
 									motion,
-								),
+								)),
 								game.save.as_ref(),
+								&game.id_generator,
 							);
 						}
 					},
@@ -358,14 +376,15 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 					(Action::ThrowBlock, true) => {
 						if let Some(block_to_throw) = game.player_held_block.take() {
 							let motion = game.camera_direction.to_vec3() * 0.5;
-							game.chunk_grid.add_entity(
-								Entity::new_block(
+							game.chunk_grid_shareable.perform_now_or_later(
+								ActionOnWorld::AddEntity(Entity::new_block(
 									&game.id_generator,
 									block_to_throw,
 									game.player_phys.aligned_box().pos,
 									motion,
-								),
+								)),
 								game.save.as_ref(),
+								&game.id_generator,
 							);
 						} else if game.playing_mode == PlayingMode::Free {
 							if true {
@@ -383,13 +402,14 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 									};
 									motion = motion * 0.8 + perturbation * 0.1;
 
-									game.chunk_grid.add_entity(
-										Entity::new_test_ball(
+									game.chunk_grid_shareable.perform_now_or_later(
+										ActionOnWorld::AddEntity(Entity::new_test_ball(
 											&game.id_generator,
 											game.player_phys.aligned_box().pos,
 											motion,
-										),
+										)),
 										game.save.as_ref(),
+										&game.id_generator,
 									);
 								}
 							} else {
@@ -413,14 +433,15 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 									};
 									motion = motion * 0.8 + perturbation * 0.1;
 
-									game.chunk_grid.add_entity(
-										Entity::new_block(
+									game.chunk_grid_shareable.perform_now_or_later(
+										ActionOnWorld::AddEntity(Entity::new_block(
 											&game.id_generator,
 											block,
 											game.player_phys.aligned_box().pos,
 											motion,
-										),
+										)),
 										game.save.as_ref(),
+										&game.id_generator,
 									);
 								}
 							}
@@ -446,9 +467,10 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			{
 				let fps = 1.0 / dt.as_secs_f32();
 				let worker_threads = game.pool.number_of_workers();
-				let chunk_count = game.chunk_grid.count_chunks_that_have_blocks();
+				let chunk_count = game.chunk_grid_shareable.get().count_chunks_that_have_blocks();
 				let block_count = chunk_count * game.cd.number_of_blocks_in_a_chunk();
-				let chunk_meshed_count = game.chunk_grid.count_chunks_that_have_meshes();
+				let chunk_meshed_count =
+					game.chunk_grid_shareable.get().count_chunks_that_have_meshes();
 				let player_block_coords = (game.player_phys.aligned_box().pos
 					- cgmath::Vector3::<f32>::unit_z()
 						* (game.player_phys.aligned_box().dims.z / 2.0 + 0.1))
@@ -458,7 +480,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 					format!("{x},{y},{z}")
 				};
 				let (entity_count, chunk_entity_count) =
-					game.chunk_grid.count_entities_and_chunks_that_have_entities();
+					game.chunk_grid_shareable.get().count_entities_and_chunks_that_have_entities();
 				let seed = game.world_gen_seed;
 				let world_time = game.world_time.as_secs_f32();
 				let random_message = game.random_message;
@@ -660,12 +682,19 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 					if let Some((chunk_coords, chunk_blocks, chunk_culling_info, chunk_entities)) =
 						chunk_coords_and_result_opt
 					{
-						game.loading_manager.handle_chunk_loading_results(
-							chunk_coords,
-							chunk_blocks,
-							chunk_culling_info,
-							chunk_entities,
-							&mut game.chunk_grid,
+						game
+							.loading_manager
+							.handle_chunk_loading_results(chunk_coords, chunk_culling_info.clone());
+
+						game.chunk_grid_shareable.perform_now_or_later(
+							ActionOnWorld::AddChunkLoadingResults {
+								chunk_coords,
+								chunk_blocks,
+								chunk_culling_info,
+								chunk_entities,
+							},
+							game.save.as_ref(),
+							&game.id_generator,
 						);
 					}
 					is_not_done_yet
@@ -675,7 +704,19 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 						receiver.try_recv().ok().map(|chunk_mesh| (*chunk_coords, chunk_mesh));
 					let is_not_done_yet = chunk_coords_and_result_opt.is_none();
 					if let Some((chunk_coords, chunk_mesh)) = chunk_coords_and_result_opt {
-						game.chunk_grid.add_chunk_meshing_results(chunk_coords, chunk_mesh);
+						game.chunk_grid_shareable.perform_now_or_later(
+							ActionOnWorld::AddChunkMeshingResults { chunk_coords, chunk_mesh },
+							game.save.as_ref(),
+							&game.id_generator,
+						);
+					}
+					is_not_done_yet
+				},
+				WorkerTask::PhysicsStepOnSomeEntities(receiver) => {
+					let entities_step_result_opt = receiver.try_recv().ok();
+					let is_not_done_yet = entities_step_result_opt.is_none();
+					if let Some(entities_step_result) = entities_step_result_opt {
+						game.chunk_grid_shareable.add_entities_step_result(entities_step_result);
 					}
 					is_not_done_yet
 				},
@@ -718,17 +759,58 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			is_not_done_yet
 		});
 
-		// Request meshing for chunks that can be meshed or should be re-meshed.
-		game.chunk_grid.run_some_required_remeshing_tasks(
-			&mut game.worker_tasks,
-			&mut game.pool,
-			&game.block_type_table,
-			&game.font,
-			&game.device,
-		);
+		if game.chunk_grid_shareable.is_exclusively_owned_or_can_be() {
+			game
+				.chunk_grid_shareable
+				.make_sure_is_owned_by_applying_pending(game.save.as_ref(), &game.id_generator);
+
+			if let Some(part_tables) = Arc::get_mut(&mut game.part_tables) {
+				part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
+				game.part_tables_for_rendering = game.part_tables.part_tables_for_rendering();
+			}
+
+			// Request meshing for chunks that can be meshed or should be re-meshed.
+			game.chunk_grid_shareable.perform_now_or_dont(|chunk_grid| {
+				chunk_grid.run_some_required_remeshing_tasks(
+					&mut game.worker_tasks,
+					&mut game.pool,
+					&game.block_type_table,
+					&game.font,
+					&game.device,
+				)
+			});
+
+			// Request generation of chunk blocks for not-generated not-being-generated close chunks.
+			let player_chunk = game.player_chunk();
+			game.chunk_grid_shareable.perform_now_or_dont(|chunk_grid| {
+				game.loading_manager.handle_loading(
+					chunk_grid,
+					&mut game.worker_tasks,
+					&mut game.pool,
+					player_chunk,
+					&game.world_generator,
+					&game.block_type_table,
+					game.save.as_ref(),
+					&game.id_generator,
+				)
+			});
+
+			// Unload chunks that are a bit too far.
+			let unloading_distance =
+				game.loading_manager.loading_distance + game.loading_manager.margin_before_unloading;
+			game.chunk_grid_shareable.perform_now_or_dont(|chunk_grid| {
+				chunk_grid.unload_chunks_too_far(
+					player_chunk,
+					unloading_distance,
+					game.save.as_ref(),
+					game.only_save_modified_chunks,
+					&game.part_tables,
+				)
+			});
+		}
 
 		// Handle fog adjustment.
-		// Current fog fix,
+		// Current fog fix (the fox has max radius and is not adjusting its radius),
 		// works fine when the loading of chunks is finished or almost finished.
 		let sqrt_3 = 3.0_f32.sqrt();
 		let distance = game.loading_manager.loading_distance - game.cd.edge as f32 * sqrt_3 / 2.0;
@@ -743,30 +825,6 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 				}]),
 			);
 		}
-
-		// Request generation of chunk blocks for not-generated not-being-generated close chunks.
-		let player_chunk = game.player_chunk();
-		game.loading_manager.handle_loading(
-			&mut game.chunk_grid,
-			&mut game.worker_tasks,
-			&mut game.pool,
-			player_chunk,
-			&game.world_generator,
-			&game.block_type_table,
-			game.save.as_ref(),
-			&game.id_generator,
-		);
-
-		// Unload chunks that are a bit too far.
-		let unloading_distance =
-			game.loading_manager.loading_distance + game.loading_manager.margin_before_unloading;
-		game.chunk_grid.unload_chunks_too_far(
-			game.player_chunk(),
-			unloading_distance,
-			game.save.as_ref(),
-			game.only_save_modified_chunks,
-			&mut game.part_tables,
-		);
 
 		// Walking.
 		let walking_vector = {
@@ -796,7 +854,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 		if game.enable_player_physics {
 			game.player_phys.apply_one_physics_step(
 				walking_vector,
-				&game.chunk_grid,
+				game.chunk_grid_shareable.get(),
 				&game.block_type_table,
 				dt,
 				true,
@@ -807,17 +865,37 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 		}
 
 		// Entities physics.
+		/*
 		// TODO: Multithread these, it is ready for multithreading now!
 		game.chunk_grid.apply_one_physics_step(
 			&game.block_type_table,
 			dt,
 			&mut ForPartManipulation {
-				part_tables: &mut game.part_tables,
-				texture_mapping_and_coloring_table: &mut game.texture_mapping_table,
-				texturing_and_coloring_array_thingy: &game.texturing_and_coloring_array_thingy,
-				queue: &game.queue,
+				part_tables: Arc::clone(&game.part_tables),
+				texture_mapping_and_coloring_table: Arc::clone(&game.texture_mapping_table),
+				texturing_and_coloring_array_thingy: Arc::clone(
+					&game.texturing_and_coloring_array_thingy,
+				),
+				queue: Arc::clone(&game.queue),
 			},
 			game.save.as_ref(),
+			&game.id_generator,
+		);
+		*/
+		//game.chunk_grid_shareable.
+		game.chunk_grid_shareable.if_owned_then_share_to_run_entities_tasks(
+			&mut game.worker_tasks,
+			&mut game.pool,
+			&game.block_type_table,
+			dt,
+			ForPartManipulation {
+				part_tables: Arc::clone(&game.part_tables),
+				texture_mapping_and_coloring_table: Arc::clone(&game.texture_mapping_table),
+				texturing_and_coloring_array_thingy: Arc::clone(
+					&game.texturing_and_coloring_array_thingy,
+				),
+				queue: Arc::clone(&game.queue),
+			},
 			&game.id_generator,
 		);
 
@@ -837,7 +915,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 
 		let mut entities_box_meshes = vec![];
 		if game.enable_display_entity_boxes {
-			for entity in game.chunk_grid.iter_entities() {
+			for entity in game.chunk_grid_shareable.get().iter_entities() {
 				if let Some(aligned_box) = entity.aligned_box() {
 					entities_box_meshes
 						.push(SimpleLineMesh::from_aligned_box(&game.device, &aligned_box));
@@ -859,7 +937,8 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			}
 			let position_int = position.map(|x| x.round() as i32);
 			if game
-				.chunk_grid
+				.chunk_grid_shareable
+				.get()
 				.get_block(position_int)
 				.is_some_and(|block| !game.block_type_table.get(block.type_id).unwrap().is_air())
 			{
@@ -905,10 +984,11 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 
 		let mut chunk_box_meshes = vec![];
 		if game.enable_display_not_surrounded_chunks_as_boxes {
-			for chunk_coords in game.chunk_grid.iter_loaded_chunk_coords() {
+			for chunk_coords in game.chunk_grid_shareable.get().iter_loaded_chunk_coords() {
 				let is_surrounded = 'is_surrounded: {
 					for neighbor_chunk_coords in iter_3d_cube_center_radius(chunk_coords, 2) {
-						let blocks_was_generated = game.chunk_grid.is_loaded(neighbor_chunk_coords);
+						let blocks_was_generated =
+							game.chunk_grid_shareable.get().is_loaded(neighbor_chunk_coords);
 						if !blocks_was_generated {
 							break 'is_surrounded false;
 						}
@@ -930,7 +1010,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 
 		let mut chunk_with_entities_box_meshes = vec![];
 		if game.enable_display_chunks_with_entities_as_boxes {
-			for chunk_coords in game.chunk_grid.iter_chunk_with_entities_coords() {
+			for chunk_coords in game.chunk_grid_shareable.get().iter_chunk_with_entities_coords() {
 				let coords_span = ChunkCoordsSpan { cd: game.cd, chunk_coords };
 				let inf = coords_span.block_coords_inf().map(|x| x as f32);
 				let dims = coords_span.cd.dimensions().map(|x| x as f32 - 1.0);
@@ -1023,8 +1103,6 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			interface_meshes_vertices.simple_line_vertices,
 		);
 
-		game.part_tables.cup_to_gpu_update_if_required(&game.device, &game.queue);
-
 		let data_for_rendering = rendering::DataForRendering {
 			device: &game.device,
 			queue: &game.queue,
@@ -1036,7 +1114,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			sun_camera_matrices_thingy: &game.sun_camera_matrices_thingy,
 			sun_camera_single_matrix_thingy: &game.sun_camera_single_matrix_thingy,
 			shadow_map_cascade_view_thingies: &game.shadow_map_cascade_view_thingies,
-			chunk_grid: &game.chunk_grid,
+			chunk_grid: game.chunk_grid_shareable.get(),
 			z_buffer_view: &game.z_buffer_view,
 			selected_camera: game.selected_camera,
 			enable_display_phys_box: game.enable_display_phys_box,
@@ -1052,7 +1130,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 			cursor_mesh: &game.cursor_mesh,
 			interface_simple_texture_mesh: &interface_simple_texture_mesh,
 			interface_simple_line_mesh: &interface_simple_line_mesh,
-			part_tables: &game.part_tables.part_tables_for_rendering(),
+			part_tables: &game.part_tables_for_rendering,
 		};
 		data_for_rendering.render();
 
@@ -1078,11 +1156,13 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 
 		if game.save.is_some() {
 			save_savable_state(game);
-			game.chunk_grid.unload_all_chunks(
-				game.save.as_ref(),
-				game.only_save_modified_chunks,
-				&mut game.part_tables,
-			);
+			game.chunk_grid_shareable.perform_now_or_block_until_possible(|chunk_grid| {
+				chunk_grid.unload_all_chunks(
+					game.save.as_ref(),
+					game.only_save_modified_chunks,
+					&game.part_tables,
+				)
+			});
 		}
 
 		//game.window.set_visible(false);
