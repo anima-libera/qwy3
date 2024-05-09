@@ -1,4 +1,4 @@
-use std::{f32::consts::TAU, sync::Arc};
+use std::{f32::consts::TAU, sync::Arc, time::Duration};
 
 use crate::{
 	atlas::RectInAtlas,
@@ -388,7 +388,7 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 							);
 						} else if game.playing_mode == PlayingMode::Free {
 							if true {
-								for _ in 0..10 {
+								for _ in 0..30 {
 									let mut motion = game.camera_direction.to_vec3();
 									let perturbation = loop {
 										let perturbation = cgmath::vec3(
@@ -865,29 +865,19 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 		}
 
 		// Entities physics.
-		/*
-		// TODO: Multithread these, it is ready for multithreading now!
-		game.chunk_grid.apply_one_physics_step(
-			&game.block_type_table,
-			dt,
-			&mut ForPartManipulation {
-				part_tables: Arc::clone(&game.part_tables),
-				texture_mapping_and_coloring_table: Arc::clone(&game.texture_mapping_table),
-				texturing_and_coloring_array_thingy: Arc::clone(
-					&game.texturing_and_coloring_array_thingy,
-				),
-				queue: Arc::clone(&game.queue),
-			},
-			game.save.as_ref(),
-			&game.id_generator,
-		);
-		*/
-		//game.chunk_grid_shareable.
-		game.chunk_grid_shareable.if_owned_then_share_to_run_entities_tasks(
+		let entities_physics_dt = game
+			.last_entity_physics_start
+			.map(|last_entity_physics_start| {
+				last_entity_physics_start
+					.elapsed()
+					.clamp(Duration::from_secs_f32(0.0), Duration::from_secs_f32(1.0))
+			})
+			.unwrap_or(Duration::from_secs_f32(0.01));
+		if game.chunk_grid_shareable.if_owned_then_share_to_run_entities_tasks(
 			&mut game.worker_tasks,
 			&mut game.pool,
 			&game.block_type_table,
-			dt,
+			entities_physics_dt,
 			ForPartManipulation {
 				part_tables: Arc::clone(&game.part_tables),
 				texture_mapping_and_coloring_table: Arc::clone(&game.texture_mapping_table),
@@ -897,7 +887,9 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 				queue: Arc::clone(&game.queue),
 			},
 			&game.id_generator,
-		);
+		) {
+			game.last_entity_physics_start = Some(std::time::Instant::now());
+		}
 
 		game.queue.write_buffer(
 			&game.fog_center_position_thingy.resource,

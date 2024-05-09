@@ -189,7 +189,7 @@ impl WorkerTasksManager {
 		cd: ChunkDimensions,
 		chunk_grid: &Arc<ChunkGrid>,
 		block_type_table: &Arc<BlockTypeTable>,
-		dt: std::time::Duration,
+		entity_physics_dt: std::time::Duration,
 		part_manipulation: ForPartManipulation,
 		id_generator: &Arc<IdGenerator>,
 	) {
@@ -209,7 +209,7 @@ impl WorkerTasksManager {
 					&chunk_grid,
 					&mut actions_on_world,
 					&block_type_table,
-					dt,
+					entity_physics_dt,
 					&part_manipulation,
 					&id_generator,
 				);

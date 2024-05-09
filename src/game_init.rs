@@ -159,6 +159,7 @@ pub(crate) struct Game {
 	pub(crate) playing_mode: PlayingMode,
 	pub(crate) player_health: Option<u32>,
 	pub(crate) id_generator: Arc<IdGenerator>,
+	pub(crate) last_entity_physics_start: Option<std::time::Instant>,
 
 	pub(crate) worker_tasks: WorkerTasksManager,
 	pub(crate) pool: threadpool::ThreadPool,
@@ -441,6 +442,8 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 	let player_held_block = saved_state.as_ref().and_then(|state| state.player_held_block.clone());
 
 	let player_health = (playing_mode == PlayingMode::Play).then_some(5);
+
+	let last_entity_physics_start = None;
 
 	let sun_position_in_sky = AngularDirection::from_angles(TAU / 16.0, TAU / 8.0);
 	let sun_light_direction_thingy = init_sun_light_direction_thingy(Arc::clone(&device));
@@ -762,6 +765,7 @@ pub(crate) fn init_game(event_loop: &winit::event_loop::ActiveEventLoop) -> Game
 		playing_mode,
 		player_health,
 		id_generator,
+		last_entity_physics_start,
 
 		worker_tasks,
 		pool,

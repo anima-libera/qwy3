@@ -215,7 +215,7 @@ impl ChunkGrid {
 		worker_tasks: &mut WorkerTasksManager,
 		pool: &mut ThreadPool,
 		block_type_table: &Arc<BlockTypeTable>,
-		dt: std::time::Duration,
+		entity_physics_dt: std::time::Duration,
 		part_manipulation: ForPartManipulation,
 		id_generator: &Arc<IdGenerator>,
 	) -> EntitiesPhysicsStepCollector {
@@ -237,7 +237,7 @@ impl ChunkGrid {
 			self_arc.cd,
 			self_arc,
 			block_type_table,
-			dt,
+			entity_physics_dt,
 			part_manipulation,
 			id_generator,
 		);
@@ -612,21 +612,24 @@ impl ChunkGridShareable {
 		worker_tasks: &mut WorkerTasksManager,
 		pool: &mut ThreadPool,
 		block_type_table: &Arc<BlockTypeTable>,
-		dt: std::time::Duration,
+		entity_physics_dt: std::time::Duration,
 		part_manipulation: ForPartManipulation,
 		id_generator: &Arc<IdGenerator>,
-	) {
+	) -> bool {
 		if self.is_exclusively_owned() {
 			let entities_step_collector = ChunkGrid::run_entities_tasks(
 				&self.chunk_grid,
 				worker_tasks,
 				pool,
 				block_type_table,
-				dt,
+				entity_physics_dt,
 				part_manipulation,
 				id_generator,
 			);
 			self.entities_step_collector = Some(entities_step_collector);
+			true
+		} else {
+			false
 		}
 	}
 

@@ -180,7 +180,7 @@ impl Entity {
 		chunk_grid: &ChunkGrid,
 		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
-		dt: std::time::Duration,
+		entity_physics_dt: std::time::Duration,
 		part_manipulation: &ForPartManipulation,
 		id_generator: &IdGenerator,
 	) {
@@ -193,7 +193,7 @@ impl Entity {
 						cgmath::vec3(0.0, 0.0, 0.0),
 						chunk_grid,
 						block_type_table,
-						dt,
+						entity_physics_dt,
 						true,
 					);
 
@@ -331,10 +331,16 @@ impl Entity {
 					}
 
 					let last_pos = phys.aligned_box().pos;
-					phys.apply_one_physics_step(walking, chunk_grid, block_type_table, dt, true);
+					phys.apply_one_physics_step(
+						walking,
+						chunk_grid,
+						block_type_table,
+						entity_physics_dt,
+						true,
+					);
 
 					// Just to see if it worked, it sometimes throw a leaf block.
-					let test_leaf_throwing_probability = 0.01 * dt.as_secs_f64();
+					let test_leaf_throwing_probability = 0.01 * entity_physics_dt.as_secs_f64();
 					if test_leaf_throwing_probability <= 1.0
 						&& rand::thread_rng().gen_bool(test_leaf_throwing_probability)
 					{
@@ -463,7 +469,6 @@ impl Entity {
 
 /// All that is needed for entities to be able to manipulate their parts.
 pub(crate) struct ForPartManipulation {
-	// TODO: Mutex many smaller parts instead to allow for more concurrency.
 	pub(crate) part_tables: Arc<PartTables>,
 	pub(crate) texture_mapping_and_coloring_table: Arc<TextureMappingAndColoringTableRwLock>,
 	pub(crate) texturing_and_coloring_array_thingy: Arc<BindingThingy<wgpu::Buffer>>,
@@ -547,7 +552,7 @@ impl ChunkEntities {
 		chunk_grid: &ChunkGrid,
 		actions_on_world: &mut Vec<ActionOnWorld>,
 		block_type_table: &Arc<BlockTypeTable>,
-		dt: std::time::Duration,
+		entity_physics_dt: std::time::Duration,
 		part_manipulation: &ForPartManipulation,
 		id_generator: &IdGenerator,
 	) {
@@ -558,7 +563,7 @@ impl ChunkEntities {
 				chunk_grid,
 				actions_on_world,
 				block_type_table,
-				dt,
+				entity_physics_dt,
 				part_manipulation,
 				id_generator,
 			);
