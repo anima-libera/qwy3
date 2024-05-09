@@ -219,31 +219,38 @@ impl ChunkGrid {
 		part_manipulation: ForPartManipulation,
 		id_generator: &Arc<IdGenerator>,
 	) -> EntitiesPhysicsStepCollector {
-		let mut chunk_entities_to_run = vec![];
+		let number_of_tasks = 3;
+
+		let mut chunk_entities_to_run_for_each_task = vec![];
+		for _task_i in 0..number_of_tasks {
+			chunk_entities_to_run_for_each_task.push(vec![]);
+		}
 		let mut chunk_entities_to_preserve = vec![];
+		let mut which_task_to_give_chunk = 0;
 		for chunk_coords in self_arc.entities_map.keys().copied() {
 			if self_arc.is_loaded(chunk_coords) {
-				chunk_entities_to_run.push(chunk_coords);
+				chunk_entities_to_run_for_each_task[which_task_to_give_chunk].push(chunk_coords);
+				which_task_to_give_chunk = (which_task_to_give_chunk + 1) % number_of_tasks;
 			} else {
 				chunk_entities_to_preserve.push(chunk_coords);
 			}
 		}
 
-		let number_of_tasks = 1;
-
-		worker_tasks.run_physics_step_on_some_entities(
-			pool,
-			chunk_entities_to_run,
-			self_arc.cd,
-			self_arc,
-			block_type_table,
-			entity_physics_dt,
-			part_manipulation,
-			id_generator,
-		);
+		for chunk_entities_to_run in chunk_entities_to_run_for_each_task.into_iter() {
+			worker_tasks.run_physics_step_on_some_entities(
+				pool,
+				chunk_entities_to_run,
+				self_arc.cd,
+				self_arc,
+				block_type_table,
+				entity_physics_dt,
+				part_manipulation.clone(),
+				id_generator,
+			);
+		}
 
 		EntitiesPhysicsStepCollector::new(
-			number_of_tasks,
+			number_of_tasks as u32,
 			chunk_entities_to_preserve,
 			HashMap::default(),
 			vec![],

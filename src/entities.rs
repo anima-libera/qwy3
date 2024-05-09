@@ -468,6 +468,7 @@ impl Entity {
 }
 
 /// All that is needed for entities to be able to manipulate their parts.
+#[derive(Clone)]
 pub(crate) struct ForPartManipulation {
 	pub(crate) part_tables: Arc<PartTables>,
 	pub(crate) texture_mapping_and_coloring_table: Arc<TextureMappingAndColoringTableRwLock>,
