@@ -117,6 +117,7 @@
 ## Sound
 
 - Get some sound going!
+  - Consider using https://crates.io/crates/kira 
   - Play a sound effect.
   - Make it so that sounds comming from farer have lower volume (inverse square distance law?).
 
