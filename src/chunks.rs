@@ -1,7 +1,6 @@
 use std::{
 	collections::{hash_map::Entry, HashMap, HashSet},
 	sync::Arc,
-	time::Duration,
 };
 
 use cgmath::{EuclideanSpace, MetricSpace};
@@ -444,15 +443,14 @@ impl ChunkGrid {
 		self.already_generated_set.insert(chunk_coords);
 	}
 
-	fn unload_chunk(
-		&mut self,
+	fn save_chunk(
+		&self,
 		chunk_coords: ChunkCoords,
 		save: Option<&Arc<Save>>,
 		only_save_modified_chunks: bool,
-		part_tables: &PartTables,
 	) {
-		let chunk_blocks = self.blocks_map.remove(&chunk_coords);
-		let chunk_entities = self.entities_map.remove(&chunk_coords);
+		let chunk_blocks = self.blocks_map.get(&chunk_coords);
+		let chunk_entities = self.entities_map.get(&chunk_coords);
 		if let Some(save) = save {
 			if let Some(chunk_blocks) = chunk_blocks {
 				if !only_save_modified_chunks || chunk_blocks.was_modified_since_generation() {
@@ -463,6 +461,24 @@ impl ChunkGrid {
 				chunk_entities.save(save);
 			}
 		}
+	}
+
+	pub(crate) fn save_all_chunks(&self, save: Option<&Arc<Save>>, only_save_modified_chunks: bool) {
+		for chunk_coords in self.blocks_map.keys().copied() {
+			self.save_chunk(chunk_coords, save, only_save_modified_chunks);
+		}
+	}
+
+	fn unload_chunk(
+		&mut self,
+		chunk_coords: ChunkCoords,
+		save: Option<&Arc<Save>>,
+		only_save_modified_chunks: bool,
+		part_tables: &PartTables,
+	) {
+		self.save_chunk(chunk_coords, save, only_save_modified_chunks);
+		self.blocks_map.remove(&chunk_coords);
+		let chunk_entities = self.entities_map.remove(&chunk_coords);
 		if let Some(chunk_entities) = chunk_entities {
 			chunk_entities.handle_unloading(part_tables);
 		}
@@ -492,7 +508,7 @@ impl ChunkGrid {
 		}
 	}
 
-	pub(crate) fn unload_all_chunks(
+	pub(crate) fn _unload_all_chunks(
 		&mut self,
 		save: Option<&Arc<Save>>,
 		only_save_modified_chunks: bool,
@@ -710,21 +726,6 @@ impl ChunkGridShareable {
 		if let Some(chunk_grid) = self.get_mut_if_exclusively_owned() {
 			// We exclusively own the `chunk_grid`, let's perform.
 			f(chunk_grid);
-		}
-	}
-
-	pub(crate) fn perform_now_or_block_until_possible(&mut self, f: impl FnOnce(&mut ChunkGrid)) {
-		loop {
-			if let Some(chunk_grid) = self.get_mut_if_exclusively_owned() {
-				// We exclusively own the `chunk_grid`, let's perform.
-				f(chunk_grid);
-				break;
-			} else {
-				// Wait a bit before trying again.
-				// Not too much (hopefully) to not wait too much time or miss the chance,
-				// not too little (hopefully) to spinlock.
-				std::thread::sleep(Duration::from_secs_f32((1.0 / 144.0) / 40.0));
-			}
 		}
 	}
 }

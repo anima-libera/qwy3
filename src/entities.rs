@@ -582,8 +582,8 @@ impl ChunkEntities {
 	}
 
 	/// Tells the entities that they are being unloaded.
-	pub(crate) fn handle_unloading(self, part_tables: &PartTables) {
-		for entity in self.savable.entities.into_iter() {
+	pub(crate) fn handle_unloading(&self, part_tables: &PartTables) {
+		for entity in self.savable.entities.iter() {
 			entity.handle_unloading_or_deletion(part_tables);
 		}
 	}

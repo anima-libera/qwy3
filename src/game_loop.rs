@@ -1170,13 +1170,10 @@ impl winit::application::ApplicationHandler for StateUsedInEventLoop {
 
 		if game.save.is_some() {
 			save_savable_state(game);
-			game.chunk_grid_shareable.perform_now_or_block_until_possible(|chunk_grid| {
-				chunk_grid.unload_all_chunks(
-					game.save.as_ref(),
-					game.only_save_modified_chunks,
-					&game.part_tables,
-				)
-			});
+			game
+				.chunk_grid_shareable
+				.get()
+				.save_all_chunks(game.save.as_ref(), game.only_save_modified_chunks);
 		}
 
 		//game.window.set_visible(false);
