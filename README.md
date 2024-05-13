@@ -70,4 +70,5 @@ The syntax is intuitive, key names are letters, numbers, or `up`, `down`, `left`
 
 ### License
 
-All the code and assets is this repository are under the [Apache-2.0 license](https://www.apache.org/licenses/LICENSE-2.0) unless specified otherwise. It is a very permissive license similar to the MIT license but with more wordy words and lettery letters that sort-of say "dont't sue me with patents and stuff".
+Copyright 2024 Jeanne DEMOUSSEL
+All rights reserved.
