@@ -71,4 +71,5 @@ The syntax is intuitive, key names are letters, numbers, or `up`, `down`, `left`
 ### License
 
 Copyright 2024 Jeanne DEMOUSSEL
+
 All rights reserved.
