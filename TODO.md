@@ -175,6 +175,7 @@
 
 ## Other
 
+- Allow to record inputs in a file and then replay these inputs, as requested by #2.
 - Profile (maybe with https://github.com/killercup/cargo-flamegraph or something else).
 - Profile but with https://github.com/plasma-umass/coz maybe?
 - Reduce the length of `game_loop.rs` and the `StateUsedInEventLoop::about_to_wait` method.
