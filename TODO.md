@@ -176,6 +176,7 @@
 ## Modding support
 
 - Have mods be wasm modules, loaded and executed by https://crates.io/crates/wasmtime (it compiles into machine code jit or ahead of time!).
+- I don't know wasm, look into https://github.com/bytecodealliance/wit-bindgen as well.
 - Provide an API to allow mods to interact with lots of aspects of the game.
 
 ## Other
