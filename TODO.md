@@ -173,6 +173,11 @@
   - Make an opt-in cargo feature that removes entirely all traces of graphic-related code, that could allow for lighter builds that can only run a server and maybe tests.
 - Allow the client to generate a few chunks that the server sent and said that they were not modified, so that it (the client) can compare the blocks. If it matches exactly on some number of non-trivial chunks, then the client can consider its generator to really be the same as the server's (for blocks only, the server should always remain in charge of the entities) and generate its chunk blocks for chunks that the server tells it where not modified. If the client tells the server so, then the server can just tell the client that this and that chunks were not modified, which saves traffic (because the server doesn't have to send all these non-modified chunk blocks to that client).
 
+## Modding support
+
+- Have mods be wasm modules, loaded and executed by https://crates.io/crates/wasmtime (it compiles into machine code jit or ahead of time!).
+- Provide an API to allow mods to interact with lots of aspects of the game.
+
 ## Other
 
 - Allow to record inputs in a file and then replay these inputs, as requested by [#2](https://github.com/anima-libera/qwy3/issues/2).
