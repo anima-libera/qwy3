@@ -5,6 +5,8 @@
 
 <p align="center">
 Wanna-be Minecraft-like in Rust using <a href="url">Wgpu</a>, very early stage.
+
+Progress is now being done in a private repository, safer for a project that is intended to be paid for at some point.
 </p>
 
 <p align="center"><img src="./pics/pic-06.png" width="95%" alt="Screenshot of the ball animals"/></>
